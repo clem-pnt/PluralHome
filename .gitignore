@@ -1,0 +1,8 @@
+node_modules/
+target/
+dist/
+*.log
+.env*
+apps/desktop/src/paraglide/
+packaging/out/
+apps/desktop/src-tauri/gen/

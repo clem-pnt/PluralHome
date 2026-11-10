@@ -1,0 +1,37 @@
+/* Palette « Aquarelle ». Toute couleur de l'interface passe par ces jetons. */
+:root {
+  color-scheme: light dark;
+
+  --paper: light-dark(#f6f3ee, #161d1f);
+  --surface: light-dark(#fdfbf7, #1f282b);
+  --surface-sunken: light-dark(#efebe4, #12181a);
+  --ink: light-dark(#2e3a3f, #e6ebe8);
+  --ink-muted: light-dark(#5f6b70, #a3aeab);
+  --line: light-dark(#2e3a3f1f, #e6ebe81f);
+  --line-strong: light-dark(#2e3a3f3d, #e6ebe83d);
+
+  --accent: light-dark(#4f8583, #7fb3b0);
+  --accent-ink: light-dark(#ffffff, #10191a);
+  --accent-soft: light-dark(#4f858317, #7fb3b01f);
+  --rose: light-dark(#d29a94, #e0aba5);
+  --sand: light-dark(#e3cfa8, #d8c296);
+  --danger: light-dark(#a8473d, #e0857a);
+
+  --font-display: "Fraunces Variable", ui-serif, Georgia, serif;
+  --font-body: "Atkinson Hyperlegible Next Variable", system-ui, sans-serif;
+
+  --radius-s: 6px;
+  --radius-m: 10px;
+  --radius-l: 16px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --shadow-1: 0 1px 2px light-dark(#2e3a3f14, #0006);
+  --shadow-2: 0 12px 32px -12px light-dark(#2e3a3f40, #000a);
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --focus: 0 0 0 2px var(--paper), 0 0 0 4px var(--accent);
+}

@@ -1,0 +1,31 @@
+[package]
+name = "ph-core"
+description = "Domaine et stockage chiffré de PluralHome"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+specta = { version = "=2.0.0-rc.26", features = ["derive", "uuid"], optional = true }
+argon2 = "0.6.0"
+chacha20poly1305 = "0.11.0"
+getrandom = "0.4.3"
+hex = { version = "0.4.3", features = ["serde"] }
+rusqlite = { version = "0.41.1", features = ["bundled-sqlcipher-vendored-openssl"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+thiserror = "2.0.21"
+time = { version = "0.3.55", features = ["serde", "formatting"] }
+tracing = "0.1.44"
+uuid = { version = "1.29.2", features = ["v7", "serde"] }
+zeroize = "1.9.1"
+
+[dev-dependencies]
+tempfile = "3.27.0"
+
+[features]
+specta = ["dep:specta"]

@@ -1,0 +1,12 @@
+{
+  "name": "pluralhome",
+  "private": true,
+  "packageManager": "pnpm@12.18.0",
+  "scripts": {
+    "dev": "pnpm --filter @pluralhome/desktop tauri dev",
+    "build": "pnpm --filter @pluralhome/desktop tauri build",
+    "check": "pnpm -r check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace",
+    "fmt": "biome format --write . && cargo fmt --all"
+  },
+  "devDependencies": {}
+}
