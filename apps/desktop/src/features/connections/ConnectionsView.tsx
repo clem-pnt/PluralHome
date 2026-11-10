@@ -4,7 +4,7 @@ import { Dialog, DialogTrigger, Form, Heading, Modal, ModalOverlay } from "react
 import { keys, queryClient } from "../../app/query";
 import { codeMessage, errorMessage } from "../../i18n/errors";
 import { formatWhen } from "../../i18n/format";
-import { api } from "../../ipc";
+import { AppError, api } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
 import { Avatar } from "../../ui/Avatar";
 import { Button } from "../../ui/Button";
@@ -37,7 +37,10 @@ function AccountPanel() {
   const login = useMutation({ mutationFn: api.account.login, onSuccess: setAccount });
   const refresh = useMutation({ mutationFn: api.account.refresh, onSuccess: setAccount });
   const logout = useMutation({ mutationFn: api.account.logout, onSuccess: () => setAccount(null) });
-  const failure = [login, refresh, logout].find((x) => x.isError);
+  // Une annulation voulue n'est pas une erreur à afficher.
+  const failure = [login, refresh, logout].find(
+    (x) => x.isError && !(x.error instanceof AppError && x.error.code === "remote_cancelled"),
+  );
   const a = account.data;
 
   return (
