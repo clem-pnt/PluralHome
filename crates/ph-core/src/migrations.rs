@@ -71,6 +71,20 @@ const MIGRATIONS: &[&str] = &[
         pk_id     TEXT PRIMARY KEY NOT NULL,
         timestamp INTEGER NOT NULL
     ) STRICT, WITHOUT ROWID;",
+    // 5 — limites alignées sur PluralKit (100 caractères), pour ne jamais tronquer
+    // un nom reçu puis le renvoyer amputé. SQLite impose de reconstruire la table.
+    "CREATE TABLE member_v5 (
+        id          BLOB PRIMARY KEY NOT NULL CHECK (length(id) = 16),
+        name        TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 100),
+        pronouns    TEXT CHECK (pronouns IS NULL OR length(pronouns) <= 100),
+        color       TEXT NOT NULL CHECK (color GLOB '#[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]'),
+        created_at  INTEGER NOT NULL,
+        archived_at INTEGER
+    ) STRICT;
+    INSERT INTO member_v5 SELECT id, name, pronouns, color, created_at, archived_at FROM member;
+    DROP TABLE member;
+    ALTER TABLE member_v5 RENAME TO member;
+    CREATE INDEX member_active ON member (archived_at, name);",
 ];
 
 pub fn run(conn: &mut Connection) -> Result<()> {
@@ -79,6 +93,27 @@ pub fn run(conn: &mut Connection) -> Result<()> {
     if current > MIGRATIONS.len() {
         return Err(CoreError::FutureSchema);
     }
+    if current == MIGRATIONS.len() {
+        return Ok(());
+    }
+    // Les reconstructions de table exigent de suspendre les clés étrangères
+    // (impossible dans une transaction) ; on vérifie leur cohérence ensuite.
+    conn.pragma_update(None, "foreign_keys", false)?;
+    let result = apply(conn, current);
+    conn.pragma_update(None, "foreign_keys", true)?;
+    result?;
+    let broken = conn
+        .prepare("PRAGMA foreign_key_check")?
+        .query([])?
+        .next()?
+        .is_some();
+    if broken {
+        return Err(CoreError::Invalid("schema"));
+    }
+    Ok(())
+}
+
+fn apply(conn: &mut Connection, current: usize) -> Result<()> {
     for (i, sql) in MIGRATIONS.iter().enumerate().skip(current) {
         let tx = conn.transaction()?;
         tx.execute_batch(sql)?;
@@ -124,6 +159,51 @@ mod tests {
         // Idempotent.
         run(&mut conn).unwrap();
         assert_eq!(version(&conn), i64::try_from(MIGRATIONS.len()).unwrap());
+    }
+
+    #[test]
+    fn member_rebuild_keeps_references() {
+        // Repartir d'une base en version 4 avec des données liées au membre.
+        let mut conn4 = Connection::open_in_memory().unwrap();
+        for sql in &MIGRATIONS[..4] {
+            conn4.execute_batch(sql).unwrap();
+        }
+        conn4.pragma_update(None, "user_version", 4).unwrap();
+        let id = [9u8; 16];
+        conn4.execute("INSERT INTO member (id, name, color, created_at) VALUES (?1, 'Mila', '#4f8583', 0)", [id]).unwrap();
+        conn4
+            .execute(
+                "INSERT INTO front_session (id, member_id, started_at) VALUES (?1, ?2, 0)",
+                [[1u8; 16], id],
+            )
+            .unwrap();
+        conn4
+            .execute(
+                "INSERT INTO message (id, author_id, body, created_at) VALUES (?1, ?2, 'salut', 0)",
+                [[2u8; 16], id],
+            )
+            .unwrap();
+        conn4.pragma_update(None, "foreign_keys", true).unwrap();
+
+        run(&mut conn4).unwrap();
+        let long = "n".repeat(100);
+        conn4
+            .execute("UPDATE member SET name = ?1", [&long])
+            .unwrap();
+        let fronts: i64 = conn4
+            .query_row(
+                "SELECT count(*) FROM front_session WHERE member_id = ?1",
+                [id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(fronts, 1);
+        // Les clés étrangères pointent toujours vers la nouvelle table.
+        conn4.execute("DELETE FROM member", []).unwrap();
+        let fronts: i64 = conn4
+            .query_row("SELECT count(*) FROM front_session", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(fronts, 0, "ON DELETE CASCADE toujours actif");
     }
 
     #[test]

@@ -17,4 +17,5 @@ mod time;
 pub mod vault;
 
 pub use error::{CoreError, Result};
+pub use rusqlite;
 pub use vault::{Vault, VaultStatus};

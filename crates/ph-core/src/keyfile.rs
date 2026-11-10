@@ -37,19 +37,19 @@ impl KdfParams {
         p_cost: 1,
     };
     /// Plancher accepté à la lecture : protège contre un fichier forgé
-    /// avec des paramètres dérisoires.
-    const FLOOR: Self = Self {
+    /// avec des paramètres dérisoires. Sert aussi aux tests (rapide).
+    pub const MINIMUM: Self = Self {
         m_cost: 19 * 1024,
         t_cost: 2,
         p_cost: 1,
     };
 
     #[cfg(test)]
-    pub const TEST: Self = Self::FLOOR;
+    pub const TEST: Self = Self::MINIMUM;
 
     fn is_acceptable(self) -> bool {
-        self.m_cost >= Self::FLOOR.m_cost
-            && self.t_cost >= Self::FLOOR.t_cost
+        self.m_cost >= Self::MINIMUM.m_cost
+            && self.t_cost >= Self::MINIMUM.t_cost
             && (1..=16).contains(&self.p_cost)
     }
 }

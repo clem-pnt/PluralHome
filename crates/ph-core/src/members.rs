@@ -4,6 +4,10 @@ use uuid::Uuid;
 
 use crate::{CoreError, Result};
 
+/// Mêmes limites que PluralKit, pour que la synchro ne tronque jamais rien.
+pub const MAX_NAME: usize = 100;
+pub const MAX_PRONOUNS: usize = 100;
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
@@ -29,14 +33,17 @@ pub struct NewMember {
 impl NewMember {
     pub(crate) fn validated(self) -> Result<Self> {
         let name = self.name.trim().to_owned();
-        if !(1..=64).contains(&name.chars().count()) {
+        if !(1..=MAX_NAME).contains(&name.chars().count()) {
             return Err(CoreError::Invalid("name"));
         }
         let pronouns = self
             .pronouns
             .map(|p| p.trim().to_owned())
             .filter(|p| !p.is_empty());
-        if pronouns.as_ref().is_some_and(|p| p.chars().count() > 32) {
+        if pronouns
+            .as_ref()
+            .is_some_and(|p| p.chars().count() > MAX_PRONOUNS)
+        {
             return Err(CoreError::Invalid("pronouns"));
         }
         let color = self.color.to_ascii_lowercase();
