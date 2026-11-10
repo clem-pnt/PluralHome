@@ -13,6 +13,7 @@ pub mod members;
 pub mod messages;
 mod migrations;
 pub mod outbox;
+pub mod safety;
 mod time;
 pub mod vault;
 

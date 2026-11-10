@@ -4,6 +4,7 @@ import { Button } from "react-aria-components";
 import { BackupView } from "../features/backup/BackupView";
 import { ConnectionsView } from "../features/connections/ConnectionsView";
 import { FrontView } from "../features/front/FrontView";
+import { GroundingView } from "../features/grounding/GroundingView";
 import { MembersView } from "../features/members/MembersView";
 import { MessagesView } from "../features/messages/MessagesView";
 import { m } from "../paraglide/messages.js";
@@ -14,6 +15,7 @@ const VIEWS = {
   front: { label: m.nav_front, Component: FrontView },
   messages: { label: m.nav_messages, Component: MessagesView },
   members: { label: m.nav_members, Component: MembersView },
+  grounding: { label: m.nav_grounding, Component: GroundingView },
   backup: { label: m.nav_backup, Component: BackupView },
   connections: { label: m.nav_connections, Component: ConnectionsView },
 } as const;

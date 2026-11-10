@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use ph_core::front::{self, FrontChange, FrontSession};
 use ph_core::members::{self, Member, NewMember};
 use ph_core::messages::{self, CatchUp, Message, NewMessage};
+use ph_core::safety::{self, SafetyPlan};
 use ph_core::{CoreError, Vault, VaultStatus};
 use serde::Serialize;
 use tauri::State;
@@ -248,6 +249,18 @@ pub async fn messages_mark_read(
     .await
 }
 
+#[tauri::command]
+#[specta::specta]
+pub async fn safety_get(state: State<'_, AppState>) -> IpcResult<SafetyPlan> {
+    blocking(&state, |v| safety::get(v.conn()?)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn safety_set(state: State<'_, AppState>, plan: SafetyPlan) -> IpcResult<SafetyPlan> {
+    blocking(&state, move |v| safety::set(v.conn()?, plan)).await
+}
+
 /// Les chemins viennent des boîtes de dialogue natives ; on impose l'extension
 /// pour éviter d'écraser par erreur un fichier qui n'est pas une sauvegarde.
 fn backup_path(path: String) -> IpcResult<PathBuf> {
@@ -304,6 +317,8 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         messages_mark_read,
         backup_export,
         backup_restore,
+        safety_get,
+        safety_set,
         remote::account_get,
         remote::account_login,
         remote::account_login_cancel,

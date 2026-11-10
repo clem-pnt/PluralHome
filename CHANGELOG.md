@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0 — Ancrage et plan de crise
+
+- Écran « Ancrage » : respiration au carré guidée, exercice 5-4-3-2-1, repères « ici et maintenant » (date, heure, phrases d'orientation).
+- Accessible depuis l'écran de déverrouillage, sans la phrase secrète : rien n'y lit les données du coffre.
+- Numéros d'aide gratuits (3114, 15, 112, 114), visibles même coffre verrouillé.
+- Plan de crise personnel, chiffré dans le coffre : signes d'alerte, ce qui aide, raisons de tenir, personnes à joindre.
+
 ## 0.5.0 — Connexions
 
 - Compte Aragonite facultatif : connexion par le navigateur (OAuth 2 + PKCE), affichage du compte Discord rattaché. Aucune donnée du coffre n'est envoyée.

@@ -27,6 +27,8 @@ export const commands = {
 	messagesMarkRead: (memberId: string, ids: string[]) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("messages_mark_read", { memberId, ids })),
 	backupExport: (path: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("backup_export", { path })),
 	backupRestore: (path: string, passphrase: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("backup_restore", { path, passphrase })),
+	safetyGet: () => typedError<SafetyPlan_Serialize, IpcError_Serialize>(__TAURI_INVOKE("safety_get")),
+	safetySet: (plan: SafetyPlan_Deserialize) => typedError<SafetyPlan_Serialize, IpcError_Serialize>(__TAURI_INVOKE("safety_set", { plan })),
 	accountGet: () => typedError<Account_Serialize | null, IpcError_Serialize>(__TAURI_INVOKE("account_get")),
 	/**  Ouvre le navigateur sur la page de connexion et attend son retour (5 min au plus). */
 	accountLogin: () => typedError<Account_Serialize, IpcError_Serialize>(__TAURI_INVOKE("account_login")),
@@ -79,6 +81,18 @@ export type CatchUp_Serialize = {
 	fronts: FrontSession_Serialize[],
 	/**  Messages qui le concernent et qu'il n'a pas encore lus. */
 	unread: Message_Serialize[],
+};
+
+export type Contact = Contact_Serialize | Contact_Deserialize;
+
+export type Contact_Deserialize = {
+	name?: string,
+	phone?: string | null,
+};
+
+export type Contact_Serialize = {
+	name: string,
+	phone: string | null,
 };
 
 export type DiscordIdentity = {
@@ -208,6 +222,30 @@ export type PkSystem_Serialize = {
 	id: string,
 	uuid: string,
 	name: string | null,
+};
+
+export type SafetyPlan = SafetyPlan_Serialize | SafetyPlan_Deserialize;
+
+export type SafetyPlan_Deserialize = {
+	/**  Ce qui montre que ça ne va pas. */
+	warningSigns?: string[],
+	/**  Ce qui aide à traverser le moment. */
+	coping?: string[],
+	/**  Raisons de tenir. */
+	reasons?: string[],
+	/**  Personnes à joindre. */
+	contacts?: Contact_Deserialize[],
+};
+
+export type SafetyPlan_Serialize = {
+	/**  Ce qui montre que ça ne va pas. */
+	warningSigns: string[],
+	/**  Ce qui aide à traverser le moment. */
+	coping: string[],
+	/**  Raisons de tenir. */
+	reasons: string[],
+	/**  Personnes à joindre. */
+	contacts: Contact_Serialize[],
 };
 
 export type Status = Status_Serialize | Status_Deserialize;

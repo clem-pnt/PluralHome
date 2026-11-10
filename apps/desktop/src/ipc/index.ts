@@ -3,12 +3,14 @@ import { commands, type IpcError_Serialize } from "./bindings";
 export type {
   Account_Serialize as Account,
   CatchUp_Serialize as CatchUp,
+  Contact_Serialize as Contact,
   FrontChange,
   FrontSession_Serialize as FrontSession,
   Member_Serialize as Member,
   Message_Serialize as Message,
   NewMember_Serialize as NewMember,
   PkSystem_Serialize as PkSystem,
+  SafetyPlan_Serialize as SafetyPlan,
   Status_Serialize as PkStatus,
   VaultStatus,
 } from "./bindings";
@@ -67,6 +69,10 @@ export const api = {
     change: (change: Parameters<typeof commands.frontChange>[0]) =>
       unwrap(commands.frontChange(change)),
     history: (from: number, to: number) => unwrap(commands.frontHistory(from, to)),
+  },
+  safety: {
+    get: () => unwrap(commands.safetyGet()),
+    set: (plan: Parameters<typeof commands.safetySet>[0]) => unwrap(commands.safetySet(plan)),
   },
   backup: {
     export: (path: string) => unwrap(commands.backupExport(path)),

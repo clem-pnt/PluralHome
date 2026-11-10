@@ -16,4 +16,5 @@ export const keys = {
   catchUp: (memberId: string) => ["catch-up", memberId] as const,
   account: ["account"] as const,
   pkStatus: ["pluralkit", "status"] as const,
+  safetyPlan: ["safety-plan"] as const,
 };

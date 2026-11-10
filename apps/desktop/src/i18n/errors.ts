@@ -27,6 +27,13 @@ export function errorMessage(e: unknown): string {
   if (e instanceof AppError && e.code === "invalid" && e.field === "backup") {
     return m.error_invalid_backup();
   }
+  if (e instanceof AppError && e.code === "invalid") {
+    if (e.field === "phone") return m.error_invalid_phone();
+    if (e.field === "contacts") return m.error_invalid_contacts();
+    if (e.field === "warningSigns" || e.field === "coping" || e.field === "reasons") {
+      return m.error_invalid_plan();
+    }
+  }
   if (e instanceof AppError) return (byCode[e.code] ?? m.error_generic)();
   console.error(e);
   return m.error_generic();

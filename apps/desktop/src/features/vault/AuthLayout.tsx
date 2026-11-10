@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { m } from "../../paraglide/messages.js";
 import { Logo } from "../../ui/Logo";
+import { GroundingDialog } from "../grounding/GroundingDialog";
 
 export function AuthLayout({
   title,
@@ -21,6 +22,7 @@ export function AuthLayout({
         </header>
         {children}
       </div>
+      <GroundingDialog />
       <p className="auth__foot">{m.app_tagline()}</p>
     </div>
   );
