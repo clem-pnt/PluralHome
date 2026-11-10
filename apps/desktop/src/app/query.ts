@@ -12,4 +12,6 @@ export const keys = {
   members: ["members"] as const,
   frontCurrent: ["front", "current"] as const,
   frontHistory: (day: number) => ["front", "history", day] as const,
+  messages: ["messages"] as const,
+  catchUp: (memberId: string) => ["catch-up", memberId] as const,
 };

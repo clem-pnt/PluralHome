@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0 — Pont contre l'amnésie
+
+- Messagerie interne : messages adressés à un membre ou à tout le système, épinglage, suppression avec confirmation.
+- « Bon retour » : au retour au front, chaque membre voit qui est passé depuis son dernier passage, combien de temps, et les messages laissés pour lui.
+- « J'ai lu » range le tout jusqu'au prochain passage.
+
 ## 0.2.0 — Suivi du front
 
 - Écran « Au front » : qui est là maintenant et depuis quand.

@@ -1,9 +1,11 @@
 import { commands, type IpcError_Serialize } from "./bindings";
 
 export type {
+  CatchUp_Serialize as CatchUp,
   FrontChange,
   FrontSession_Serialize as FrontSession,
   Member_Serialize as Member,
+  Message_Serialize as Message,
   NewMember_Serialize as NewMember,
   VaultStatus,
 } from "./bindings";
@@ -46,5 +48,14 @@ export const api = {
     change: (change: Parameters<typeof commands.frontChange>[0]) =>
       unwrap(commands.frontChange(change)),
     history: (from: number, to: number) => unwrap(commands.frontHistory(from, to)),
+  },
+  messages: {
+    list: (before: string | null, limit: number) => unwrap(commands.messagesList(before, limit)),
+    post: (input: Parameters<typeof commands.messagesPost>[0]) =>
+      unwrap(commands.messagesPost(input)),
+    setPinned: (id: string, pinned: boolean) => unwrap(commands.messagesSetPinned(id, pinned)),
+    remove: (id: string) => unwrap(commands.messagesDelete(id)),
+    catchUp: (memberId: string) => unwrap(commands.catchUp(memberId)),
+    markRead: (memberId: string, ids: string[]) => unwrap(commands.messagesMarkRead(memberId, ids)),
   },
 };

@@ -12,6 +12,7 @@ export function useFrontChange() {
     onSuccess: (current) => {
       queryClient.setQueryData(keys.frontCurrent, current);
       void queryClient.invalidateQueries({ queryKey: ["front", "history"] });
+      void queryClient.invalidateQueries({ queryKey: ["catch-up"] });
     },
   });
 }

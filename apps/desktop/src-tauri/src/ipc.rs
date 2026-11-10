@@ -5,9 +5,11 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use ph_core::front::{self, FrontChange, FrontSession};
 use ph_core::members::{self, Member, NewMember};
+use ph_core::messages::{self, CatchUp, Message, NewMessage};
 use ph_core::{CoreError, Vault, VaultStatus};
 use serde::Serialize;
 use tauri::State;
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -153,6 +155,57 @@ pub async fn front_history(
     blocking(&state, move |v| front::history(v.conn()?, from, to)).await
 }
 
+#[tauri::command]
+#[specta::specta]
+pub async fn messages_list(
+    state: State<'_, AppState>,
+    before: Option<Uuid>,
+    limit: u32,
+) -> IpcResult<Vec<Message>> {
+    blocking(&state, move |v| messages::list(v.conn()?, before, limit)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn messages_post(state: State<'_, AppState>, input: NewMessage) -> IpcResult<Message> {
+    blocking(&state, move |v| messages::post(v.conn()?, &input)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn messages_set_pinned(
+    state: State<'_, AppState>,
+    id: Uuid,
+    pinned: bool,
+) -> IpcResult<()> {
+    blocking(&state, move |v| messages::set_pinned(v.conn()?, id, pinned)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn messages_delete(state: State<'_, AppState>, id: Uuid) -> IpcResult<()> {
+    blocking(&state, move |v| messages::delete(v.conn()?, id)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn catch_up(state: State<'_, AppState>, member_id: Uuid) -> IpcResult<CatchUp> {
+    blocking(&state, move |v| messages::catch_up(v.conn()?, member_id)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn messages_mark_read(
+    state: State<'_, AppState>,
+    member_id: Uuid,
+    ids: Vec<Uuid>,
+) -> IpcResult<()> {
+    blocking(&state, move |v| {
+        messages::mark_read(v.conn_mut()?, member_id, &ids)
+    })
+    .await
+}
+
 pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
     tauri_specta::Builder::<tauri::Wry>::new().commands(tauri_specta::collect_commands![
         vault_status,
@@ -164,5 +217,11 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         front_current,
         front_change,
         front_history,
+        messages_list,
+        messages_post,
+        messages_set_pinned,
+        messages_delete,
+        catch_up,
+        messages_mark_read,
     ])
 }

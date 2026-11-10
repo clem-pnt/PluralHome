@@ -33,7 +33,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Front (types, lint, build)
         working-directory: apps/desktop
-        run: pnpm exec tsc --noEmit && pnpm exec biome ci . && pnpm build
+        run: pnpm i18n && pnpm exec tsc --noEmit && pnpm exec biome ci . && pnpm build
       - name: Rust (format, clippy, tests)
         run: |
           cargo fmt --all --check

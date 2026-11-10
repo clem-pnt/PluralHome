@@ -8,6 +8,7 @@ pub mod error;
 pub mod front;
 pub mod keyfile;
 pub mod members;
+pub mod messages;
 mod migrations;
 mod time;
 pub mod vault;

@@ -372,4 +372,93 @@
     background: var(--accent);
     border-radius: 1px;
   }
+
+  .composer {
+    gap: var(--space-4);
+  }
+  .composer__route {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3);
+  }
+  .composer__actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+
+  .messages {
+    display: grid;
+    gap: var(--space-2);
+  }
+  .message {
+    display: flex;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-l);
+  }
+  .message[data-pinned] {
+    border-color: color-mix(in oklab, var(--accent) 45%, transparent);
+  }
+  .message__content {
+    display: grid;
+    gap: var(--space-1);
+    min-inline-size: 0;
+    flex: 1;
+  }
+  .message__meta {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .message__body {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .message__actions {
+    display: flex;
+    gap: var(--space-2);
+    margin-block-start: var(--space-2);
+  }
+  .message__actions .btn {
+    block-size: 30px;
+    padding-inline: var(--space-3);
+    font-size: 13px;
+  }
+  .catchup .message {
+    background: var(--paper);
+  }
+
+  .catchup {
+    border-inline-start: 4px solid var(--member);
+  }
+  .catchup__fronts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .catchup__subtitle {
+    font-size: 15px;
+    font-family: var(--font-body);
+    font-weight: 600;
+    letter-spacing: 0;
+  }
+
+  @media (hover: hover) {
+    .message__actions {
+      opacity: 0;
+      transition: opacity 140ms var(--ease);
+    }
+    .message:hover .message__actions,
+    .message:focus-within .message__actions {
+      opacity: 1;
+    }
+  }
 }

@@ -1,14 +1,15 @@
 {
   "name": "@pluralhome/desktop",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "tauri": "tauri",
-    "check": "tsc --noEmit && biome check .",
-    "bindings": "cargo test -p pluralhome --lib export_bindings"
+    "check": "pnpm i18n && tsc --noEmit && biome check .",
+    "bindings": "cargo test -p pluralhome --lib export_bindings",
+    "i18n": "paraglide-js compile --silent --strategy localStorage preferredLanguage baseLocale"
   },
   "dependencies": {
     "@fontsource-variable/atkinson-hyperlegible-next": "^5.3.0",

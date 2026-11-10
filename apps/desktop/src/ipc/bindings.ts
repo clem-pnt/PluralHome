@@ -16,9 +16,40 @@ export const commands = {
 	frontChange: (change: FrontChange) => typedError<FrontSession_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("front_change", { change })),
 	/**  Bornes en millisecondes Unix, `[from, to)`. */
 	frontHistory: (from: number | null, to: number | null) => typedError<FrontSession_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("front_history", { from, to })),
+	messagesList: (before: string | null, limit: number) => typedError<Message_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("messages_list", { before, limit })),
+	messagesPost: (input: NewMessage_Deserialize) => typedError<Message_Serialize, IpcError_Serialize>(__TAURI_INVOKE("messages_post", { input })),
+	messagesSetPinned: (id: string, pinned: boolean) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("messages_set_pinned", { id, pinned })),
+	messagesDelete: (id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("messages_delete", { id })),
+	catchUp: (memberId: string) => typedError<CatchUp_Serialize, IpcError_Serialize>(__TAURI_INVOKE("catch_up", { memberId })),
+	messagesMarkRead: (memberId: string, ids: string[]) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("messages_mark_read", { memberId, ids })),
 };
 
 /* Types */
+/**  Ce qu'un membre a manqué depuis son dernier passage au front. */
+export type CatchUp = CatchUp_Serialize | CatchUp_Deserialize;
+
+/**  Ce qu'un membre a manqué depuis son dernier passage au front. */
+export type CatchUp_Deserialize = {
+	memberId: string,
+	/**  Fin du dernier passage terminé ; `None` si c'est le premier. */
+	lastSeen?: number | null,
+	/**  Passages des autres depuis `last_seen`. */
+	fronts: FrontSession_Deserialize[],
+	/**  Messages qui le concernent et qu'il n'a pas encore lus. */
+	unread: Message_Deserialize[],
+};
+
+/**  Ce qu'un membre a manqué depuis son dernier passage au front. */
+export type CatchUp_Serialize = {
+	memberId: string,
+	/**  Fin du dernier passage terminé ; `None` si c'est le premier. */
+	lastSeen: number | null,
+	/**  Passages des autres depuis `last_seen`. */
+	fronts: FrontSession_Serialize[],
+	/**  Messages qui le concernent et qu'il n'a pas encore lus. */
+	unread: Message_Serialize[],
+};
+
 /**  Nouvel état du front. Liste vide et `blurry = false` : plus personne au front. */
 export type FrontChange = {
 	members: string[],
@@ -78,6 +109,28 @@ export type Member_Serialize = {
 	createdAt: number | null,
 };
 
+export type Message = Message_Serialize | Message_Deserialize;
+
+export type Message_Deserialize = {
+	id: string,
+	authorId?: string | null,
+	/**  `None` : pour tout le système. */
+	recipientId?: string | null,
+	body: string,
+	pinned: boolean,
+	createdAt: number | null,
+};
+
+export type Message_Serialize = {
+	id: string,
+	authorId: string | null,
+	/**  `None` : pour tout le système. */
+	recipientId: string | null,
+	body: string,
+	pinned: boolean,
+	createdAt: number | null,
+};
+
 export type NewMember = NewMember_Serialize | NewMember_Deserialize;
 
 export type NewMember_Deserialize = {
@@ -90,6 +143,20 @@ export type NewMember_Serialize = {
 	name: string,
 	pronouns: string | null,
 	color: string,
+};
+
+export type NewMessage = NewMessage_Serialize | NewMessage_Deserialize;
+
+export type NewMessage_Deserialize = {
+	authorId?: string | null,
+	recipientId?: string | null,
+	body: string,
+};
+
+export type NewMessage_Serialize = {
+	authorId: string | null,
+	recipientId: string | null,
+	body: string,
 };
 
 export type VaultStatus = "uninitialized" | "locked" | "unlocked";

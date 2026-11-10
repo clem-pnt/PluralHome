@@ -5,6 +5,7 @@ import { m } from "../../paraglide/messages.js";
 import { Avatar } from "../../ui/Avatar";
 import { Button } from "../../ui/Button";
 import { useMembers } from "../members/useMembers";
+import { CatchUpPanel } from "../messages/CatchUpPanel";
 import { FrontDialog } from "./FrontDialog";
 import { Timeline } from "./Timeline";
 import { useFrontChange, useFrontCurrent } from "./useFront";
@@ -37,6 +38,10 @@ export function FrontView() {
         </div>
       ) : (
         <>
+          {sessions.map((s) => {
+            const member = s.memberId ? members.byId.get(s.memberId) : undefined;
+            return member ? <CatchUpPanel key={s.id} member={member} byId={members.byId} /> : null;
+          })}
           <div className="panel">
             <h2 className="panel__title">{m.front_now()}</h2>
             {sessions.length === 0 && current.isSuccess && (

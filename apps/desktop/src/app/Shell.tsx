@@ -2,11 +2,13 @@ import { useState } from "react";
 import { Button } from "react-aria-components";
 import { FrontView } from "../features/front/FrontView";
 import { MembersView } from "../features/members/MembersView";
+import { MessagesView } from "../features/messages/MessagesView";
 import { m } from "../paraglide/messages.js";
 import { Logo } from "../ui/Logo";
 
 const VIEWS = {
   front: { label: m.nav_front, Component: FrontView },
+  messages: { label: m.nav_messages, Component: MessagesView },
   members: { label: m.nav_members, Component: MembersView },
 } as const;
 type View = keyof typeof VIEWS;

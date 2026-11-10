@@ -49,7 +49,7 @@ const COLUMNS: &str = "id, member_id, started_at, ended_at";
 
 pub fn current(conn: &Connection) -> Result<Vec<FrontSession>> {
     let mut st = conn.prepare_cached(&format!(
-        "SELECT {COLUMNS} FROM front_session WHERE ended_at IS NULL ORDER BY started_at"
+        "SELECT {COLUMNS} FROM front_session WHERE ended_at IS NULL ORDER BY started_at, id"
     ))?;
     Ok(st
         .query_map([], from_row)?
@@ -64,7 +64,7 @@ pub fn history(conn: &Connection, from: i64, to: i64) -> Result<Vec<FrontSession
     let mut st = conn.prepare_cached(&format!(
         "SELECT {COLUMNS} FROM front_session
          WHERE started_at < ?2 AND (ended_at IS NULL OR ended_at > ?1)
-         ORDER BY started_at"
+         ORDER BY started_at, id"
     ))?;
     Ok(st
         .query_map(params![from, to], from_row)?

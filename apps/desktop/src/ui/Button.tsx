@@ -1,6 +1,6 @@
 import { Button as AriaButton, type ButtonProps as AriaButtonProps } from "react-aria-components";
 
-type Variant = "primary" | "accent" | "ghost";
+type Variant = "primary" | "accent" | "ghost" | "danger";
 
 export interface ButtonProps extends Omit<AriaButtonProps, "className"> {
   variant?: Variant;
