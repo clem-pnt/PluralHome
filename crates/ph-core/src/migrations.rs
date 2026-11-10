@@ -48,6 +48,29 @@ const MIGRATIONS: &[&str] = &[
         member_id BLOB PRIMARY KEY NOT NULL REFERENCES member (id) ON DELETE CASCADE,
         acked_at  INTEGER NOT NULL
     ) STRICT, WITHOUT ROWID;",
+    // 4 — réglages (dont secrets : jetons), file d'envoi vers PluralKit et correspondances.
+    "CREATE TABLE kv (
+        key   TEXT PRIMARY KEY NOT NULL,
+        value TEXT NOT NULL
+    ) STRICT, WITHOUT ROWID;
+    CREATE TABLE outbox (
+        id         INTEGER PRIMARY KEY,
+        topic      TEXT NOT NULL,
+        payload    TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        attempts   INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT
+    ) STRICT;
+    CREATE TABLE pk_member (
+        member_id BLOB PRIMARY KEY NOT NULL REFERENCES member (id) ON DELETE CASCADE,
+        pk_uuid   TEXT NOT NULL UNIQUE,
+        pk_hid    TEXT NOT NULL,
+        snapshot  TEXT NOT NULL
+    ) STRICT, WITHOUT ROWID;
+    CREATE TABLE pk_switch (
+        pk_id     TEXT PRIMARY KEY NOT NULL,
+        timestamp INTEGER NOT NULL
+    ) STRICT, WITHOUT ROWID;",
 ];
 
 pub fn run(conn: &mut Connection) -> Result<()> {

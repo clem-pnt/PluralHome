@@ -8,9 +8,11 @@ pub mod backup;
 pub mod error;
 pub mod front;
 pub mod keyfile;
+pub mod kv;
 pub mod members;
 pub mod messages;
 mod migrations;
+pub mod outbox;
 mod time;
 pub mod vault;
 

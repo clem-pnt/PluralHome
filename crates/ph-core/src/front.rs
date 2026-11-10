@@ -71,55 +71,112 @@ pub fn history(conn: &Connection, from: i64, to: i64) -> Result<Vec<FrontSession
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// Applique un changement de front de façon atomique : ferme les intervalles
-/// des membres qui partent, ouvre ceux des membres qui arrivent, et laisse
-/// intacts ceux qui restent (un co-front qui s'élargit ne coupe personne).
+/// Provenance d'un changement de front.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Origin {
+    /// Saisi dans l'application : à propager aux services liés.
+    Local,
+    /// Reçu d'un service lié (PluralKit) : ne pas le renvoyer, sinon boucle.
+    Remote,
+}
+
+/// Sujet de la file d'envoi pour les switchs à pousser vers PluralKit.
+pub const PK_SWITCH_TOPIC: &str = "pluralkit.switch";
+
+/// Contenu d'un switch en attente d'envoi.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PendingSwitch {
+    pub members: Vec<Uuid>,
+    pub blurry: bool,
+    pub at: i64,
+}
+
+/// Applique un changement de front maintenant, depuis l'application.
 pub fn change(conn: &mut Connection, change: &FrontChange) -> Result<Vec<FrontSession>> {
+    change_at(conn, change, crate::time::now_ms()?, Origin::Local)
+}
+
+/// Applique un changement de front de façon atomique à l'instant `at` : ferme les
+/// intervalles des membres qui partent, ouvre ceux des membres qui arrivent, et
+/// laisse intacts ceux qui restent (un co-front qui s'élargit ne coupe personne).
+///
+/// `at` ne peut pas précéder le début d'un intervalle encore ouvert : l'historique
+/// resterait incohérent. Un changement qui ne change rien n'est pas enregistré.
+pub fn change_at(
+    conn: &mut Connection,
+    change: &FrontChange,
+    at: i64,
+    origin: Origin,
+) -> Result<Vec<FrontSession>> {
     let wanted: HashSet<Uuid> = change.members.iter().copied().collect();
     if wanted.len() != change.members.len() {
         return Err(CoreError::Invalid("members"));
     }
-    let now = crate::time::now_ms()?;
     let tx = conn.transaction()?;
     members::ensure_active(&tx, &change.members)?;
 
     let open = current(&tx)?;
-    let mut still_open: HashSet<Option<Uuid>> = HashSet::new();
+    if open.iter().any(|s| s.started_at > at) {
+        return Err(CoreError::Invalid("timestamp"));
+    }
+    let before: HashSet<Option<Uuid>> = open.iter().map(|s| s.member_id).collect();
+    let after: HashSet<Option<Uuid>> = change
+        .members
+        .iter()
+        .map(|m| Some(*m))
+        .chain(change.blurry.then_some(None))
+        .collect();
+    if before == after {
+        return Ok(open);
+    }
+
     {
-        let mut close = tx.prepare_cached(
-            "UPDATE front_session SET ended_at = max(?2, started_at) WHERE id = ?1",
-        )?;
-        for s in &open {
-            let stays = match s.member_id {
-                Some(m) => wanted.contains(&m),
-                None => change.blurry,
-            };
-            if stays {
-                still_open.insert(s.member_id);
-            } else {
-                close.execute(params![s.id.as_bytes(), now])?;
-            }
+        let mut close =
+            tx.prepare_cached("UPDATE front_session SET ended_at = ?2 WHERE id = ?1")?;
+        for s in open.iter().filter(|s| !after.contains(&s.member_id)) {
+            close.execute(params![s.id.as_bytes(), at])?;
         }
         let mut insert = tx.prepare_cached(
             "INSERT INTO front_session (id, member_id, started_at) VALUES (?1, ?2, ?3)",
         )?;
+        // Ordre stable : celui de la saisie, le flou en dernier.
         let arriving = change
             .members
             .iter()
             .map(|m| Some(*m))
             .chain(change.blurry.then_some(None))
-            .filter(|m| !still_open.contains(m));
+            .filter(|m| !before.contains(m));
         for member in arriving {
             insert.execute(params![
                 Uuid::now_v7().as_bytes(),
                 member.map(|m| *m.as_bytes()),
-                now
+                at
             ])?;
         }
     }
+
+    if origin == Origin::Local && crate::kv::flag(&tx, "pluralkit.enabled")? {
+        let pending = PendingSwitch {
+            members: change.members.clone(),
+            blurry: change.blurry,
+            at,
+        };
+        let payload = serde_json::to_string(&pending).map_err(|_| CoreError::Invalid("payload"))?;
+        crate::outbox::push(&tx, PK_SWITCH_TOPIC, &payload, at)?;
+    }
+
     let result = current(&tx)?;
     tx.commit()?;
     Ok(result)
+}
+
+/// Instant du dernier changement de front enregistré (début ou fin d'intervalle).
+pub fn last_change(conn: &Connection) -> Result<Option<i64>> {
+    Ok(conn.query_row(
+        "SELECT max(max(started_at), ifnull(max(ended_at), 0)) FROM front_session",
+        [],
+        |r| r.get(0),
+    )?)
 }
 
 #[cfg(test)]
@@ -238,5 +295,68 @@ mod tests {
             history(v.conn().unwrap(), 10, 10),
             Err(CoreError::Invalid("range"))
         ));
+    }
+}
+
+#[cfg(test)]
+mod timed_tests {
+    use super::*;
+    use crate::keyfile::KdfParams;
+    use crate::members::NewMember;
+    use crate::vault::Vault;
+
+    #[test]
+    fn remote_changes_are_dated_and_not_echoed() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut v = Vault::new(tmp.path()).with_kdf(KdfParams::TEST);
+        v.create("phrase secrete longue").unwrap();
+        let a = members::create(
+            v.conn().unwrap(),
+            NewMember {
+                name: "Mila".into(),
+                pronouns: None,
+                color: "#4f8583".into(),
+            },
+        )
+        .unwrap()
+        .id;
+        let c = v.conn_mut().unwrap();
+        crate::kv::set(c, "pluralkit.enabled", "1").unwrap();
+
+        let one = FrontChange {
+            members: vec![a],
+            blurry: false,
+        };
+        change_at(c, &one, 1_000, Origin::Remote).unwrap();
+        assert_eq!(
+            crate::outbox::count(c, PK_SWITCH_TOPIC).unwrap(),
+            0,
+            "pas d'écho"
+        );
+        assert_eq!(current(c).unwrap()[0].started_at, 1_000);
+
+        // Antérieur à un intervalle ouvert : refusé.
+        let none = FrontChange {
+            members: vec![],
+            blurry: false,
+        };
+        assert!(matches!(
+            change_at(c, &none, 500, Origin::Remote),
+            Err(CoreError::Invalid("timestamp"))
+        ));
+
+        change_at(c, &none, 2_000, Origin::Local).unwrap();
+        let pending = crate::outbox::pending(c, PK_SWITCH_TOPIC, 10).unwrap();
+        assert_eq!(pending.len(), 1);
+        let p: PendingSwitch = serde_json::from_str(&pending[0].payload).unwrap();
+        assert_eq!(
+            p,
+            PendingSwitch {
+                members: vec![],
+                blurry: false,
+                at: 2_000
+            }
+        );
+        assert_eq!(last_change(c).unwrap(), Some(2_000));
     }
 }

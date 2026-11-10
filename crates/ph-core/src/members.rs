@@ -27,7 +27,7 @@ pub struct NewMember {
 }
 
 impl NewMember {
-    fn validated(self) -> Result<Self> {
+    pub(crate) fn validated(self) -> Result<Self> {
         let name = self.name.trim().to_owned();
         if !(1..=64).contains(&name.chars().count()) {
             return Err(CoreError::Invalid("name"));
@@ -72,6 +72,51 @@ pub fn list(conn: &Connection) -> Result<Vec<Member>> {
     )?;
     let rows = st.query_map([], from_row)?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+pub fn get(conn: &Connection, id: Uuid) -> Result<Member> {
+    conn.query_row(
+        "SELECT id, name, pronouns, color, created_at FROM member WHERE id = ?1",
+        [id.as_bytes()],
+        from_row,
+    )
+    .map_err(|e| match e {
+        rusqlite::Error::QueryReturnedNoRows => CoreError::NotFound,
+        e => e.into(),
+    })
+}
+
+/// Remplace le nom, les pronoms et la couleur d'un membre actif.
+pub fn update(conn: &Connection, id: Uuid, input: NewMember) -> Result<Member> {
+    let m = input.validated()?;
+    let n = conn.execute(
+        "UPDATE member SET name = ?2, pronouns = ?3, color = ?4 WHERE id = ?1 AND archived_at IS NULL",
+        params![id.as_bytes(), m.name, m.pronouns, m.color],
+    )?;
+    if n == 0 {
+        return Err(CoreError::NotFound);
+    }
+    get(conn, id)
+}
+
+/// Archive un membre : il disparaît des listes mais son historique reste intact.
+pub fn archive(conn: &mut Connection, id: Uuid) -> Result<()> {
+    let now = crate::time::now_ms()?;
+    let tx = conn.transaction()?;
+    let n = tx.execute(
+        "UPDATE member SET archived_at = ?2 WHERE id = ?1 AND archived_at IS NULL",
+        params![id.as_bytes(), now],
+    )?;
+    if n == 0 {
+        return Err(CoreError::NotFound);
+    }
+    // Un membre archivé ne peut pas rester au front.
+    tx.execute(
+        "UPDATE front_session SET ended_at = max(?2, started_at) WHERE member_id = ?1 AND ended_at IS NULL",
+        params![id.as_bytes(), now],
+    )?;
+    tx.commit()?;
+    Ok(())
 }
 
 pub fn create(conn: &Connection, input: NewMember) -> Result<Member> {

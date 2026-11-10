@@ -281,6 +281,66 @@ mod tests {
     }
 
     #[test]
+    fn update_and_archive_member() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut v = vault(tmp.path());
+        v.create("phrase secrete longue").unwrap();
+        let id = members::create(
+            v.conn().unwrap(),
+            NewMember {
+                name: "Lou".into(),
+                pronouns: None,
+                color: "#123456".into(),
+            },
+        )
+        .unwrap()
+        .id;
+        let up = members::update(
+            v.conn().unwrap(),
+            id,
+            NewMember {
+                name: "Louise".into(),
+                pronouns: Some("elle".into()),
+                color: "#ABCDEF".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            (up.name.as_str(), up.pronouns.as_deref(), up.color.as_str()),
+            ("Louise", Some("elle"), "#abcdef")
+        );
+
+        let c = v.conn_mut().unwrap();
+        crate::front::change(
+            c,
+            &crate::front::FrontChange {
+                members: vec![id],
+                blurry: false,
+            },
+        )
+        .unwrap();
+        members::archive(c, id).unwrap();
+        assert!(members::list(c).unwrap().is_empty());
+        assert!(
+            crate::front::current(c).unwrap().is_empty(),
+            "un membre archivé quitte le front"
+        );
+        assert!(matches!(members::archive(c, id), Err(CoreError::NotFound)));
+        assert!(matches!(
+            members::update(
+                c,
+                id,
+                NewMember {
+                    name: "X".into(),
+                    pronouns: None,
+                    color: "#000000".into()
+                }
+            ),
+            Err(CoreError::NotFound)
+        ));
+    }
+
+    #[test]
     fn rejects_invalid_member() {
         let tmp = tempfile::tempdir().unwrap();
         let mut v = vault(tmp.path());
