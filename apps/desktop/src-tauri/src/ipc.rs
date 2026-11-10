@@ -12,6 +12,8 @@ use serde::Serialize;
 use tauri::State;
 use uuid::Uuid;
 
+use crate::remote::{self, Remote, Wake};
+
 #[derive(Clone)]
 pub struct AppState {
     vault: Arc<Mutex<Vault>>,
@@ -32,6 +34,10 @@ impl AppState {
             v.lock();
             v
         })
+    }
+
+    pub fn vault(&self) -> Arc<Mutex<Vault>> {
+        Arc::clone(&self.vault)
     }
 
     pub fn lock_vault(&self) {
@@ -99,11 +105,17 @@ pub async fn vault_create(state: State<'_, AppState>, passphrase: String) -> Ipc
 
 #[tauri::command]
 #[specta::specta]
-pub async fn vault_unlock(state: State<'_, AppState>, passphrase: String) -> IpcResult<()> {
+pub async fn vault_unlock(
+    state: State<'_, AppState>,
+    rem: State<'_, Remote>,
+    passphrase: String,
+) -> IpcResult<()> {
     blocking(&state, move |v| {
         v.unlock(&zeroize::Zeroizing::new(passphrase))
     })
-    .await
+    .await?;
+    rem.wake(Wake::Full);
+    Ok(())
 }
 
 #[tauri::command]
@@ -124,8 +136,34 @@ pub async fn members_list(state: State<'_, AppState>) -> IpcResult<Vec<Member>> 
 
 #[tauri::command]
 #[specta::specta]
-pub async fn members_create(state: State<'_, AppState>, input: NewMember) -> IpcResult<Member> {
-    blocking(&state, move |v| members::create(v.conn()?, input)).await
+pub async fn members_create(
+    state: State<'_, AppState>,
+    rem: State<'_, Remote>,
+    input: NewMember,
+) -> IpcResult<Member> {
+    let m = blocking(&state, move |v| members::create(v.conn()?, input)).await?;
+    rem.wake(Wake::Full);
+    Ok(m)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn members_update(
+    state: State<'_, AppState>,
+    rem: State<'_, Remote>,
+    id: Uuid,
+    input: NewMember,
+) -> IpcResult<Member> {
+    let m = blocking(&state, move |v| members::update(v.conn()?, id, input)).await?;
+    rem.wake(Wake::Full);
+    Ok(m)
+}
+
+/// Archive : le membre disparaît des listes, son historique reste.
+#[tauri::command]
+#[specta::specta]
+pub async fn members_archive(state: State<'_, AppState>, id: Uuid) -> IpcResult<()> {
+    blocking(&state, move |v| members::archive(v.conn_mut()?, id)).await
 }
 
 #[tauri::command]
@@ -138,9 +176,12 @@ pub async fn front_current(state: State<'_, AppState>) -> IpcResult<Vec<FrontSes
 #[specta::specta]
 pub async fn front_change(
     state: State<'_, AppState>,
+    rem: State<'_, Remote>,
     change: FrontChange,
 ) -> IpcResult<Vec<FrontSession>> {
-    blocking(&state, move |v| front::change(v.conn_mut()?, &change)).await
+    let current = blocking(&state, move |v| front::change(v.conn_mut()?, &change)).await?;
+    rem.wake(Wake::Switches);
+    Ok(current)
 }
 
 /// Bornes en millisecondes Unix, `[from, to)`.
@@ -250,6 +291,8 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         vault_lock,
         members_list,
         members_create,
+        members_update,
+        members_archive,
         front_current,
         front_change,
         front_history,
@@ -261,5 +304,14 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         messages_mark_read,
         backup_export,
         backup_restore,
+        remote::account_get,
+        remote::account_login,
+        remote::account_login_cancel,
+        remote::account_refresh,
+        remote::account_logout,
+        remote::pk_status,
+        remote::pk_link,
+        remote::pk_unlink,
+        remote::pk_sync_now,
     ])
 }

@@ -1,12 +1,15 @@
 import { commands, type IpcError_Serialize } from "./bindings";
 
 export type {
+  Account_Serialize as Account,
   CatchUp_Serialize as CatchUp,
   FrontChange,
   FrontSession_Serialize as FrontSession,
   Member_Serialize as Member,
   Message_Serialize as Message,
   NewMember_Serialize as NewMember,
+  PkSystem_Serialize as PkSystem,
+  Status_Serialize as PkStatus,
   VaultStatus,
 } from "./bindings";
 
@@ -42,6 +45,22 @@ export const api = {
     list: () => unwrap(commands.membersList()),
     create: (input: Parameters<typeof commands.membersCreate>[0]) =>
       unwrap(commands.membersCreate(input)),
+    update: (id: string, input: Parameters<typeof commands.membersUpdate>[1]) =>
+      unwrap(commands.membersUpdate(id, input)),
+    archive: (id: string) => unwrap(commands.membersArchive(id)),
+  },
+  account: {
+    get: () => unwrap(commands.accountGet()),
+    login: () => unwrap(commands.accountLogin()),
+    cancelLogin: () => unwrap(commands.accountLoginCancel()),
+    refresh: () => unwrap(commands.accountRefresh()),
+    logout: () => unwrap(commands.accountLogout()),
+  },
+  pluralkit: {
+    status: () => unwrap(commands.pkStatus()),
+    link: (token: string) => unwrap(commands.pkLink(token)),
+    unlink: () => unwrap(commands.pkUnlink()),
+    syncNow: () => unwrap(commands.pkSyncNow()),
   },
   front: {
     current: () => unwrap(commands.frontCurrent()),

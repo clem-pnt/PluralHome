@@ -1,6 +1,7 @@
 //! Services distants. Rien ici ne touche au stockage sans passer par `ph-core` ;
 //! les verrous sur la base ne sont jamais tenus pendant un appel réseau.
 
+pub mod aragonite;
 pub mod db;
 pub mod error;
 pub mod pluralkit;

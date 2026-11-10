@@ -14,4 +14,6 @@ export const keys = {
   frontHistory: (day: number) => ["front", "history", day] as const,
   messages: ["messages"] as const,
   catchUp: (memberId: string) => ["catch-up", memberId] as const,
+  account: ["account"] as const,
+  pkStatus: ["pluralkit", "status"] as const,
 };

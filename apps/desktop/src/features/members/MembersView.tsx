@@ -1,9 +1,9 @@
-import { DialogTrigger } from "react-aria-components";
+import { Button as AriaButton, DialogTrigger } from "react-aria-components";
 import type { Member } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
 import { Avatar } from "../../ui/Avatar";
 import { Button } from "../../ui/Button";
-import { NewMemberDialog } from "./NewMemberDialog";
+import { MemberDialog } from "./MemberDialog";
 import { useMembers } from "./useMembers";
 
 export function MembersView() {
@@ -13,7 +13,7 @@ export function MembersView() {
   const addButton = (
     <DialogTrigger>
       <Button variant="primary">{m.members_add()}</Button>
-      <NewMemberDialog />
+      <MemberDialog />
     </DialogTrigger>
   );
 
@@ -48,14 +48,21 @@ export function MembersView() {
 
 function MemberCard({ member }: { member: Member }) {
   return (
-    <li className="member" style={{ "--member": member.color } as React.CSSProperties}>
-      <Avatar name={member.name} color={member.color} />
-      <span className="member__text">
-        <span className="member__name" data-selectable>
-          {member.name}
-        </span>
-        {member.pronouns && <span className="member__pronouns">{member.pronouns}</span>}
-      </span>
+    <li>
+      <DialogTrigger>
+        <AriaButton
+          className="member"
+          aria-label={`${m.member_edit()} ${member.name}`}
+          style={{ "--member": member.color } as React.CSSProperties}
+        >
+          <Avatar name={member.name} color={member.color} />
+          <span className="member__text">
+            <span className="member__name">{member.name}</span>
+            {member.pronouns && <span className="member__pronouns">{member.pronouns}</span>}
+          </span>
+        </AriaButton>
+        <MemberDialog member={member} />
+      </DialogTrigger>
     </li>
   );
 }

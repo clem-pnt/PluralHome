@@ -19,7 +19,8 @@ pub const API: &str = "https://api.pluralkit.me/v2";
 const WRITE_SPACING: Duration = Duration::from_millis(400);
 const MAX_RETRY_WAIT: Duration = Duration::from_secs(5);
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct PkSystem {
     pub id: String,
     pub uuid: String,

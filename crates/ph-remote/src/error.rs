@@ -14,6 +14,10 @@ pub enum RemoteError {
     Network(String),
     #[error("réponse illisible")]
     Decode,
+    #[error("opération annulée")]
+    Cancelled,
+    #[error("délai dépassé")]
+    Timeout,
     #[error("non configuré")]
     NotLinked,
     #[error(transparent)]
@@ -29,6 +33,8 @@ impl RemoteError {
             Self::Http { .. } => "remote_http",
             Self::Network(_) => "remote_network",
             Self::Decode => "remote_decode",
+            Self::Cancelled => "remote_cancelled",
+            Self::Timeout => "remote_timeout",
             Self::NotLinked => "remote_not_linked",
             Self::Core(e) => e.code(),
         }

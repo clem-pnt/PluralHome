@@ -63,11 +63,18 @@ pub struct SyncReport {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+#[serde(rename_all = "camelCase")]
 pub struct Status {
     pub enabled: bool,
+    /// Identifiant court du système PluralKit.
     pub system: Option<String>,
+    #[cfg_attr(feature = "specta", specta(type = Option<f64>))]
     pub last_sync: Option<i64>,
+    /// Code d'erreur de la dernière tentative (`remote_*`), effacé au premier succès.
     pub last_error: Option<String>,
+    /// Switchs locaux pas encore envoyés.
+    #[cfg_attr(feature = "specta", specta(type = f64))]
     pub pending: i64,
 }
 

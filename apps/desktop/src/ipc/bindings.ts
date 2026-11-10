@@ -12,6 +12,9 @@ export const commands = {
 	vaultLock: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("vault_lock")),
 	membersList: () => typedError<Member_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("members_list")),
 	membersCreate: (input: NewMember_Deserialize) => typedError<Member_Serialize, IpcError_Serialize>(__TAURI_INVOKE("members_create", { input })),
+	membersUpdate: (id: string, input: NewMember_Deserialize) => typedError<Member_Serialize, IpcError_Serialize>(__TAURI_INVOKE("members_update", { id, input })),
+	/**  Archive : le membre disparaît des listes, son historique reste. */
+	membersArchive: (id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("members_archive", { id })),
 	frontCurrent: () => typedError<FrontSession_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("front_current")),
 	frontChange: (change: FrontChange) => typedError<FrontSession_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("front_change", { change })),
 	/**  Bornes en millisecondes Unix, `[from, to)`. */
@@ -24,9 +27,35 @@ export const commands = {
 	messagesMarkRead: (memberId: string, ids: string[]) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("messages_mark_read", { memberId, ids })),
 	backupExport: (path: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("backup_export", { path })),
 	backupRestore: (path: string, passphrase: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("backup_restore", { path, passphrase })),
+	accountGet: () => typedError<Account_Serialize | null, IpcError_Serialize>(__TAURI_INVOKE("account_get")),
+	/**  Ouvre le navigateur sur la page de connexion et attend son retour (5 min au plus). */
+	accountLogin: () => typedError<Account_Serialize, IpcError_Serialize>(__TAURI_INVOKE("account_login")),
+	accountLoginCancel: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("account_login_cancel")),
+	accountRefresh: () => typedError<Account_Serialize, IpcError_Serialize>(__TAURI_INVOKE("account_refresh")),
+	accountLogout: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("account_logout")),
+	pkStatus: () => typedError<Status_Serialize, IpcError_Serialize>(__TAURI_INVOKE("pk_status")),
+	pkLink: (token: string) => typedError<PkSystem_Serialize, IpcError_Serialize>(__TAURI_INVOKE("pk_link", { token })),
+	pkUnlink: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("pk_unlink")),
+	/**  Synchro complète immédiate ; renvoie l'état à jour (erreur comprise). */
+	pkSyncNow: () => typedError<Status_Serialize, IpcError_Serialize>(__TAURI_INVOKE("pk_sync_now")),
 };
 
 /* Types */
+/**  Compte tel qu'affiché dans l'application. */
+export type Account = Account_Serialize | Account_Deserialize;
+
+/**  Compte tel qu'affiché dans l'application. */
+export type Account_Deserialize = {
+	displayName: string,
+	discord?: DiscordIdentity | null,
+};
+
+/**  Compte tel qu'affiché dans l'application. */
+export type Account_Serialize = {
+	displayName: string,
+	discord: DiscordIdentity | null,
+};
+
 /**  Ce qu'un membre a manqué depuis son dernier passage au front. */
 export type CatchUp = CatchUp_Serialize | CatchUp_Deserialize;
 
@@ -50,6 +79,12 @@ export type CatchUp_Serialize = {
 	fronts: FrontSession_Serialize[],
 	/**  Messages qui le concernent et qu'il n'a pas encore lus. */
 	unread: Message_Serialize[],
+};
+
+export type DiscordIdentity = {
+	id: string,
+	username: string,
+	displayName: string,
 };
 
 /**  Nouvel état du front. Liste vide et `blurry = false` : plus personne au front. */
@@ -159,6 +194,44 @@ export type NewMessage_Serialize = {
 	authorId: string | null,
 	recipientId: string | null,
 	body: string,
+};
+
+export type PkSystem = PkSystem_Serialize | PkSystem_Deserialize;
+
+export type PkSystem_Deserialize = {
+	id: string,
+	uuid: string,
+	name?: string | null,
+};
+
+export type PkSystem_Serialize = {
+	id: string,
+	uuid: string,
+	name: string | null,
+};
+
+export type Status = Status_Serialize | Status_Deserialize;
+
+export type Status_Deserialize = {
+	enabled: boolean,
+	/**  Identifiant court du système PluralKit. */
+	system?: string | null,
+	lastSync?: number | null,
+	/**  Code d'erreur de la dernière tentative (`remote_*`), effacé au premier succès. */
+	lastError?: string | null,
+	/**  Switchs locaux pas encore envoyés. */
+	pending: number | null,
+};
+
+export type Status_Serialize = {
+	enabled: boolean,
+	/**  Identifiant court du système PluralKit. */
+	system: string | null,
+	lastSync: number | null,
+	/**  Code d'erreur de la dernière tentative (`remote_*`), effacé au premier succès. */
+	lastError: string | null,
+	/**  Switchs locaux pas encore envoyés. */
+	pending: number | null,
 };
 
 export type VaultStatus = "uninitialized" | "locked" | "unlocked";

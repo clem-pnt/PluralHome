@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0 — Connexions
+
+- Compte Aragonite facultatif : connexion par le navigateur (OAuth 2 + PKCE), affichage du compte Discord rattaché. Aucune donnée du coffre n'est envoyée.
+- Synchro PluralKit dans les deux sens, tant que l'application est ouverte : membres (nom, pronoms, couleur) en fusion à trois voies, switchs envoyés aussitôt et reçus en moins d'une minute, sans écho. File d'envoi conservée hors ligne.
+- Modification et archivage des membres ; noms et pronoms jusqu'à 100 caractères, comme sur PluralKit.
+
 ## 0.4.0 — Sauvegarde chiffrée
 
 - Export du coffre en un seul fichier `.phbackup`, chiffré, qui s'ouvre avec la phrase secrète du moment.

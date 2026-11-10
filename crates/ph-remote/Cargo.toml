@@ -10,6 +10,7 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
+specta = { version = "=2.0.0-rc.26", features = ["derive"], optional = true }
 base64 = "0.23.1"
 getrandom = "0.4.3"
 ph-core = { path = "../ph-core" }
@@ -22,8 +23,11 @@ time = { version = "0.3.55", features = ["parsing", "formatting", "serde"] }
 tracing = "0.1.44"
 url = "2.5.8"
 uuid = { version = "1.29.2", features = ["serde", "v7"] }
-zeroize = "1.9.1"
+zeroize = { version = "1.9.1", features = ["serde"] }
 
 [dev-dependencies]
 tempfile = "3.27.0"
 time = "0.3.55"
+
+[features]
+specta = ["dep:specta"]

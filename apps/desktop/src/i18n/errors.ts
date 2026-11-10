@@ -8,7 +8,20 @@ const byCode: Record<string, () => string> = {
   locked: m.error_locked,
   corrupt_key_file: m.error_corrupt_key_file,
   not_found: m.error_not_found,
+  remote_unauthorized: m.error_remote_unauthorized,
+  remote_rate_limited: m.error_remote_rate_limited,
+  remote_network: m.error_remote_network,
+  remote_http: m.error_remote_http,
+  remote_decode: m.error_remote_http,
+  remote_timeout: m.error_remote_timeout,
+  remote_cancelled: m.error_remote_cancelled,
+  remote_not_linked: m.error_remote_not_linked,
 };
+
+/** Message d'un code d'erreur enregistré (dernière synchro, par exemple). */
+export function codeMessage(code: string): string {
+  return (byCode[code] ?? m.error_generic)();
+}
 
 export function errorMessage(e: unknown): string {
   if (e instanceof AppError && e.code === "invalid" && e.field === "backup") {

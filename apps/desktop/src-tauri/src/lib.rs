@@ -1,5 +1,6 @@
 mod ipc;
 mod logging;
+mod remote;
 
 use tauri::{Manager, WindowEvent};
 
@@ -19,6 +20,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(specta.invoke_handler())
         .setup(move |app| {
             let log_dir = app.path().app_log_dir()?;
@@ -26,7 +28,9 @@ pub fn run() {
             app.manage(guard);
             let data_dir = app.path().app_data_dir()?;
             tracing::info!(version = env!("CARGO_PKG_VERSION"), "démarrage");
-            app.manage(AppState::new(ph_core::Vault::new(data_dir.join("vault"))));
+            let state = AppState::new(ph_core::Vault::new(data_dir.join("vault")));
+            app.manage(remote::Remote::start(app.handle().clone(), state.vault())?);
+            app.manage(state);
             specta.mount_events(app);
             Ok(())
         })
