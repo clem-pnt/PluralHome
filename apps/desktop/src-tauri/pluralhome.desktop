@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=PluralHome
+GenericName=Assistant pour systèmes pluriels
+Comment=Un foyer pour tout le système
+Exec={{exec}}
+Icon={{icon}}
+Terminal=false
+Categories=Utility;
+Keywords=dissociation;TDI;OSDD;pluriel;système;
+StartupWMClass=pluralhome

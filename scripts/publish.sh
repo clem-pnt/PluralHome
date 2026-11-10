@@ -32,7 +32,8 @@ if [[ "${1:-}" != "--no-build" ]]; then
 fi
 
 BUNDLE="$ROOT/target/release/bundle/deb"
-SRC_DEB="$(ls "$BUNDLE"/PluralHome_"${VERSION}"_amd64.deb)"
+SRC_DEB="$BUNDLE/pluralhome_${VERSION}_amd64.deb"
+[[ -s "$SRC_DEB" ]] || die "paquet introuvable : $SRC_DEB"
 [[ -s "$SRC_DEB.sig" ]] || die "signature absente : $SRC_DEB.sig"
 DEB_NAME="pluralhome_${VERSION}_amd64.deb"
 

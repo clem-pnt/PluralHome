@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "PluralHome",
+  "productName": "pluralhome",
   "mainBinaryName": "pluralhome",
   "identifier": "fr.aragonite.pluralhome",
   "version": "../package.json",
@@ -41,28 +41,40 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["deb"],
+    "targets": [
+      "deb"
+    ],
     "createUpdaterArtifacts": true,
-    "category": "Lifestyle",
+    "category": "Utility",
     "shortDescription": "Un foyer pour les systèmes pluriels",
     "longDescription": "PluralHome aide les personnes vivant avec un trouble dissociatif à se coordonner entre membres du système. Données chiffrées, stockées uniquement sur l'appareil.",
     "publisher": "PluralHome",
     "copyright": "GPL-3.0-or-later",
     "license": "GPL-3.0-or-later",
     "homepage": "https://updates.aragonite.fr/",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.png"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png"
+    ],
     "linux": {
       "deb": {
         "section": "utils",
         "priority": "optional",
-        "depends": ["pkexec | policykit-1"]
+        "depends": [
+          "pkexec | policykit-1"
+        ],
+        "desktopTemplate": "pluralhome.desktop"
       }
     }
   },
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJBODk3OEU1QzJDRjVDMEMKUldRTVhNL0M1WGlKdWhyanJMeWFVZGZLR0RwQW1ISHNyRGRXNzFBMXZPeTZ4ek5wenBadUF2VEwK",
-      "endpoints": ["https://updates.aragonite.fr/pluralhome/latest.json"],
+      "endpoints": [
+        "https://updates.aragonite.fr/pluralhome/latest.json"
+      ],
       "dangerousInsecureTransportProtocol": false
     }
   }
