@@ -1,12 +1,13 @@
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import { Form } from "react-aria-components";
+import { DialogTrigger, Form } from "react-aria-components";
 import { keys, queryClient } from "../../app/query";
 import { errorMessage } from "../../i18n/errors";
 import { api } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
 import { Button } from "../../ui/Button";
 import { TextField } from "../../ui/TextField";
+import { RestoreDialog } from "../backup/RestoreDialog";
 import { AuthLayout } from "./AuthLayout";
 
 const MIN_CHARS = 8;
@@ -58,6 +59,12 @@ export function SetupScreen() {
           {create.isPending ? m.working() : m.setup_submit()}
         </Button>
       </Form>
+      <DialogTrigger>
+        <Button variant="ghost" block>
+          {m.backup_have_one()}
+        </Button>
+        <RestoreDialog />
+      </DialogTrigger>
     </AuthLayout>
   );
 }

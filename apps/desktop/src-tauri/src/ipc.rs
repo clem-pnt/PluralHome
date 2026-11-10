@@ -1,6 +1,7 @@
 //! Commandes exposées au front. Les types TypeScript sont générés depuis ces
 //! signatures (`pnpm bindings`) : le contrat front/back ne peut pas dériver.
 
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use ph_core::front::{self, FrontChange, FrontSession};
@@ -206,6 +207,41 @@ pub async fn messages_mark_read(
     .await
 }
 
+/// Les chemins viennent des boîtes de dialogue natives ; on impose l'extension
+/// pour éviter d'écraser par erreur un fichier qui n'est pas une sauvegarde.
+fn backup_path(path: String) -> IpcResult<PathBuf> {
+    let p = PathBuf::from(path);
+    if p.is_absolute() && p.extension().is_some_and(|e| e == "phbackup") {
+        Ok(p)
+    } else {
+        Err(IpcError {
+            code: "invalid".into(),
+            field: Some("path".into()),
+        })
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn backup_export(state: State<'_, AppState>, path: String) -> IpcResult<()> {
+    let path = backup_path(path)?;
+    blocking(&state, move |v| v.export_backup(&path)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn backup_restore(
+    state: State<'_, AppState>,
+    path: String,
+    passphrase: String,
+) -> IpcResult<()> {
+    let path = backup_path(path)?;
+    blocking(&state, move |v| {
+        v.restore_backup(&path, &zeroize::Zeroizing::new(passphrase))
+    })
+    .await
+}
+
 pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
     tauri_specta::Builder::<tauri::Wry>::new().commands(tauri_specta::collect_commands![
         vault_status,
@@ -223,5 +259,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         messages_delete,
         catch_up,
         messages_mark_read,
+        backup_export,
+        backup_restore,
     ])
 }

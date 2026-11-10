@@ -10,8 +10,8 @@ use serde::Serialize;
 use crate::keyfile::{Dek, KdfParams, KeyFile};
 use crate::{CoreError, Result, migrations};
 
-const KEYFILE: &str = "keyfile.json";
-const DATABASE: &str = "pluralhome.db";
+pub(crate) const KEYFILE: &str = "keyfile.json";
+pub(crate) const DATABASE: &str = "pluralhome.db";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -23,9 +23,13 @@ pub enum VaultStatus {
 }
 
 pub struct Vault {
-    dir: PathBuf,
+    pub(crate) dir: PathBuf,
     kdf: KdfParams,
     conn: Option<Connection>,
+    /// Clé de données, gardée en mémoire (effacée à la libération) tant que le
+    /// coffre est ouvert : SQLCipher la détient de toute façon, et elle permet
+    /// des copies chiffrées cohérentes à chaud (sauvegardes).
+    pub(crate) dek: Option<Dek>,
 }
 
 impl Vault {
@@ -35,6 +39,7 @@ impl Vault {
             dir: dir.into(),
             kdf: KdfParams::DEFAULT,
             conn: None,
+            dek: None,
         }
     }
 
@@ -45,7 +50,7 @@ impl Vault {
         self
     }
 
-    fn keyfile_path(&self) -> PathBuf {
+    pub(crate) fn keyfile_path(&self) -> PathBuf {
         self.dir.join(KEYFILE)
     }
 
@@ -75,6 +80,7 @@ impl Vault {
             &serde_json::to_vec_pretty(&kf).map_err(|_| CoreError::Crypto)?,
         )?;
         self.conn = Some(conn);
+        self.dek = Some(dek);
         tracing::info!("coffre créé");
         Ok(())
     }
@@ -89,6 +95,7 @@ impl Vault {
         let kf: KeyFile = serde_json::from_slice(&raw).map_err(|_| CoreError::CorruptKeyFile)?;
         let dek = kf.unwrap_dek(passphrase)?;
         self.conn = Some(open_db(&self.dir.join(DATABASE), &dek)?);
+        self.dek = Some(dek);
         tracing::info!("coffre déverrouillé");
         Ok(())
     }
@@ -108,9 +115,16 @@ impl Vault {
 
     /// Ferme la connexion : `SQLCipher` efface sa copie de la clé.
     pub fn lock(&mut self) {
+        self.dek = None;
         if self.conn.take().is_some() {
             tracing::info!("coffre verrouillé");
         }
+    }
+
+    /// Installe une session déjà ouverte (restauration).
+    pub(crate) fn adopt(&mut self, conn: Connection, dek: Dek) {
+        self.conn = Some(conn);
+        self.dek = Some(dek);
     }
 
     pub fn conn(&self) -> Result<&Connection> {
@@ -123,7 +137,7 @@ impl Vault {
     }
 }
 
-fn open_db(path: &Path, dek: &Dek) -> Result<Connection> {
+pub(crate) fn open_db(path: &Path, dek: &Dek) -> Result<Connection> {
     let mut conn = Connection::open_with_flags(
         path,
         OpenFlags::SQLITE_OPEN_READ_WRITE
@@ -158,7 +172,7 @@ fn restrict(_: &Path) -> Result<()> {
     Ok(())
 }
 
-fn create_private_dir(dir: &Path) -> Result<()> {
+pub(crate) fn create_private_dir(dir: &Path) -> Result<()> {
     fs::create_dir_all(dir)?;
     #[cfg(unix)]
     {
@@ -169,7 +183,7 @@ fn create_private_dir(dir: &Path) -> Result<()> {
 }
 
 /// Écriture atomique : fichier temporaire, fsync, renommage, fsync du dossier.
-fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     let tmp = path.with_extension("tmp");
     {
         let mut f = fs::File::create(&tmp)?;

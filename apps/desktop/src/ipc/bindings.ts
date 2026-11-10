@@ -22,6 +22,8 @@ export const commands = {
 	messagesDelete: (id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("messages_delete", { id })),
 	catchUp: (memberId: string) => typedError<CatchUp_Serialize, IpcError_Serialize>(__TAURI_INVOKE("catch_up", { memberId })),
 	messagesMarkRead: (memberId: string, ids: string[]) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("messages_mark_read", { memberId, ids })),
+	backupExport: (path: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("backup_export", { path })),
+	backupRestore: (path: string, passphrase: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("backup_restore", { path, passphrase })),
 };
 
 /* Types */

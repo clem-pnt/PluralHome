@@ -49,6 +49,10 @@ export const api = {
       unwrap(commands.frontChange(change)),
     history: (from: number, to: number) => unwrap(commands.frontHistory(from, to)),
   },
+  backup: {
+    export: (path: string) => unwrap(commands.backupExport(path)),
+    restore: (path: string, passphrase: string) => unwrap(commands.backupRestore(path, passphrase)),
+  },
   messages: {
     list: (before: string | null, limit: number) => unwrap(commands.messagesList(before, limit)),
     post: (input: Parameters<typeof commands.messagesPost>[0]) =>

@@ -11,6 +11,9 @@ const byCode: Record<string, () => string> = {
 };
 
 export function errorMessage(e: unknown): string {
+  if (e instanceof AppError && e.code === "invalid" && e.field === "backup") {
+    return m.error_invalid_backup();
+  }
   if (e instanceof AppError) return (byCode[e.code] ?? m.error_generic)();
   console.error(e);
   return m.error_generic();

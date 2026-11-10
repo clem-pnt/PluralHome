@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0 — Sauvegarde chiffrée
+
+- Export du coffre en un seul fichier `.phbackup`, chiffré, qui s'ouvre avec la phrase secrète du moment.
+- Restauration vérifiée de bout en bout (phrase secrète, intégrité de chaque page) avant de toucher au coffre actuel, qui est mis de côté et jamais effacé.
+- Restauration possible dès le premier écran d'une nouvelle installation.
+
 ## 0.3.0 — Pont contre l'amnésie
 
 - Messagerie interne : messages adressés à un membre ou à tout le système, épinglage, suppression avec confirmation.

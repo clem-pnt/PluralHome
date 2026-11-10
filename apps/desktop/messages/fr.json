@@ -86,5 +86,20 @@
   "duration_hm": "{h} h {m}",
   "duration_m": "{m} min",
   "messages_everyone_route": "tout le système",
-  "duration_h": "{h} h"
+  "duration_h": "{h} h",
+  "nav_backup": "Sauvegarde",
+  "backup_title": "Sauvegarde",
+  "backup_lead": "Tout est stocké sur cet appareil. Une sauvegarde régulière protège le système d'une panne ou d'une perte.",
+  "backup_export": "Exporter une sauvegarde",
+  "backup_export_body": "Un seul fichier, chiffré. Il s'ouvre avec la phrase secrète actuelle, même si vous la changez plus tard.",
+  "backup_export_done": "Sauvegarde enregistrée.",
+  "backup_advice": "Gardez-la ailleurs que sur cet ordinateur : clé USB, disque externe.",
+  "backup_restore": "Restaurer une sauvegarde",
+  "backup_restore_body": "Remplace le contenu actuel par celui de la sauvegarde. Le coffre actuel est mis de côté, pas effacé.",
+  "backup_restore_pick": "Choisir le fichier",
+  "backup_restore_passphrase": "Phrase secrète de la sauvegarde",
+  "backup_restore_confirm": "Restaurer",
+  "backup_have_one": "J'ai déjà une sauvegarde",
+  "backup_file_label": "Sauvegarde PluralHome",
+  "error_invalid_backup": "Ce fichier n'est pas une sauvegarde PluralHome valide, ou il a été modifié."
 }
