@@ -14,6 +14,9 @@ export function AuthLayout({
 }) {
   return (
     <div className="auth">
+      <div className="auth__help">
+        <GroundingDialog />
+      </div>
       <div className="auth__panel">
         <header className="auth__header">
           <Logo size={56} title={m.app_name()} />
@@ -22,7 +25,6 @@ export function AuthLayout({
         </header>
         {children}
       </div>
-      <GroundingDialog />
       <p className="auth__foot">{m.app_tagline()}</p>
     </div>
   );

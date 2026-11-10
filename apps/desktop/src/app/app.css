@@ -699,6 +699,13 @@
     border: 0;
     padding: 0;
     margin: 0;
+    min-inline-size: 0;
+  }
+  .plan__contacts-edit legend {
+    padding: 0;
+    margin-block-end: var(--space-2);
+  }
+  .plan__contacts-edit {
     display: grid;
     gap: var(--space-3);
   }
@@ -719,5 +726,21 @@
     .breathing__circle {
       transition: none;
     }
+  }
+}
+
+@layer components {
+  .auth__help {
+    position: fixed;
+    inset-block-start: var(--space-4);
+    inset-inline-end: var(--space-4);
+  }
+}
+
+@layer components {
+  /* Hauteur stable : les onglets ne doivent pas bouger d'un exercice à l'autre. */
+  .grounding__panel {
+    min-block-size: 400px;
+    align-content: start;
   }
 }
