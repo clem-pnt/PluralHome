@@ -3,6 +3,7 @@
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
+use ph_core::front::{self, FrontChange, FrontSession};
 use ph_core::members::{self, Member, NewMember};
 use ph_core::{CoreError, Vault, VaultStatus};
 use serde::Serialize;
@@ -124,6 +125,34 @@ pub async fn members_create(state: State<'_, AppState>, input: NewMember) -> Ipc
     blocking(&state, move |v| members::create(v.conn()?, input)).await
 }
 
+#[tauri::command]
+#[specta::specta]
+pub async fn front_current(state: State<'_, AppState>) -> IpcResult<Vec<FrontSession>> {
+    blocking(&state, |v| front::current(v.conn()?)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn front_change(
+    state: State<'_, AppState>,
+    change: FrontChange,
+) -> IpcResult<Vec<FrontSession>> {
+    blocking(&state, move |v| front::change(v.conn_mut()?, &change)).await
+}
+
+/// Bornes en millisecondes Unix, `[from, to)`.
+#[tauri::command]
+#[specta::specta]
+pub async fn front_history(
+    state: State<'_, AppState>,
+    from: f64,
+    to: f64,
+) -> IpcResult<Vec<FrontSession>> {
+    #[allow(clippy::cast_possible_truncation)]
+    let (from, to) = (from as i64, to as i64);
+    blocking(&state, move |v| front::history(v.conn()?, from, to)).await
+}
+
 pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
     tauri_specta::Builder::<tauri::Wry>::new().commands(tauri_specta::collect_commands![
         vault_status,
@@ -132,5 +161,8 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         vault_lock,
         members_list,
         members_create,
+        front_current,
+        front_change,
+        front_history,
     ])
 }

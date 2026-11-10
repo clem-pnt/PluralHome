@@ -2,7 +2,6 @@
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "app_name": "PluralHome",
   "app_tagline": "Un foyer pour tout le système.",
-
   "setup_title": "Bienvenue",
   "setup_lead": "Choisissez une phrase secrète. Elle chiffre tout ce que vous écrivez ici, et rien ne quitte cet appareil.",
   "setup_passphrase": "Phrase secrète",
@@ -11,23 +10,19 @@
   "setup_mismatch": "Les deux phrases ne correspondent pas.",
   "setup_warning": "Personne ne peut la récupérer à votre place, pas même nous. Gardez-la en lieu sûr.",
   "setup_submit": "Créer le coffre",
-
   "unlock_title": "Bon retour",
   "unlock_lead": "Entrez la phrase secrète du système.",
   "unlock_submit": "Déverrouiller",
   "working": "Un instant…",
-
   "nav_home": "Accueil",
   "nav_members": "Membres",
   "nav_lock": "Verrouiller",
-
   "members_title": "Membres du système",
   "members_lead": "Chaque membre a son nom, ses pronoms et sa couleur.",
   "members_empty_title": "Personne pour l'instant",
   "members_empty_body": "Ajoutez le premier membre du système. Vous pourrez compléter son profil plus tard.",
   "members_add": "Ajouter un membre",
   "members_count": "{count} membres",
-
   "member_form_title": "Nouveau membre",
   "member_name": "Nom",
   "member_pronouns": "Pronoms",
@@ -35,15 +30,31 @@
   "member_color": "Couleur",
   "member_save": "Ajouter",
   "cancel": "Annuler",
-
   "update_ready": "Une nouvelle version ({version}) est prête.",
   "update_downloading": "Téléchargement de la version {version}…",
   "update_restart": "Redémarrer",
-
   "error_bad_passphrase": "Phrase secrète incorrecte.",
   "error_weak_passphrase": "Phrase secrète trop courte (8 caractères minimum).",
   "error_invalid": "Ce champ n'est pas valide.",
   "error_locked": "Le coffre est verrouillé.",
   "error_corrupt_key_file": "Le fichier de clé est illisible ou a été modifié.",
-  "error_generic": "Une erreur est survenue. Les détails sont dans le journal de l'application."
+  "error_generic": "Une erreur est survenue. Les détails sont dans le journal de l'application.",
+  "nav_front": "Au front",
+  "front_title": "Au front",
+  "front_now": "Maintenant",
+  "front_nobody": "Personne n'est indiqué au front.",
+  "front_blurry": "Flou",
+  "front_blurry_hint": "On ne sait pas bien qui est là",
+  "front_since": "depuis {time}",
+  "front_change": "Changer",
+  "front_quick": "Switch rapide",
+  "front_quick_hint": "Un geste pour indiquer qui prend le front.",
+  "front_dialog_title": "Qui est au front ?",
+  "front_dialog_lead": "Sélectionnez une ou plusieurs personnes pour un co-front.",
+  "front_save": "Enregistrer",
+  "front_clear": "Personne",
+  "front_today": "Aujourd'hui",
+  "front_today_empty": "Rien d'enregistré aujourd'hui.",
+  "front_no_members": "Ajoutez d'abord des membres pour suivre le front.",
+  "error_not_found": "Ce membre n'existe plus."
 }

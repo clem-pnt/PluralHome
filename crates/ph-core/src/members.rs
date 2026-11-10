@@ -1,6 +1,5 @@
 use rusqlite::{Connection, Row, params};
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{CoreError, Result};
@@ -77,8 +76,7 @@ pub fn list(conn: &Connection) -> Result<Vec<Member>> {
 
 pub fn create(conn: &Connection, input: NewMember) -> Result<Member> {
     let m = input.validated()?;
-    let now = i64::try_from(OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000_000)
-        .map_err(|_| CoreError::Invalid("clock"))?;
+    let now = crate::time::now_ms()?;
     // UUIDv7 : triable dans le temps, sans coordination, prêt pour une synchro future.
     let id = Uuid::now_v7();
     conn.execute(
@@ -92,4 +90,16 @@ pub fn create(conn: &Connection, input: NewMember) -> Result<Member> {
         color: m.color,
         created_at: now,
     })
+}
+
+/// Vérifie que tous les identifiants désignent des membres actifs.
+pub(crate) fn ensure_active(conn: &Connection, ids: &[Uuid]) -> Result<()> {
+    let mut st =
+        conn.prepare_cached("SELECT 1 FROM member WHERE id = ?1 AND archived_at IS NULL")?;
+    for id in ids {
+        if !st.exists([id.as_bytes()])? {
+            return Err(CoreError::NotFound);
+        }
+    }
+    Ok(())
 }

@@ -7,6 +7,7 @@ const byCode: Record<string, () => string> = {
   invalid: m.error_invalid,
   locked: m.error_locked,
   corrupt_key_file: m.error_corrupt_key_file,
+  not_found: m.error_not_found,
 };
 
 export function errorMessage(e: unknown): string {

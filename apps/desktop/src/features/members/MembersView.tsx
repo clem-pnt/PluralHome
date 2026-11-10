@@ -1,14 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
 import { DialogTrigger } from "react-aria-components";
-import { keys } from "../../app/query";
-import { api, type Member } from "../../ipc";
+import type { Member } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
+import { Avatar } from "../../ui/Avatar";
 import { Button } from "../../ui/Button";
 import { NewMemberDialog } from "./NewMemberDialog";
+import { useMembers } from "./useMembers";
 
 export function MembersView() {
-  const members = useQuery({ queryKey: keys.members, queryFn: api.members.list });
-  const list = members.data ?? [];
+  const members = useMembers();
+  const { list } = members;
 
   const addButton = (
     <DialogTrigger>
@@ -49,9 +49,7 @@ export function MembersView() {
 function MemberCard({ member }: { member: Member }) {
   return (
     <li className="member" style={{ "--member": member.color } as React.CSSProperties}>
-      <span className="member__avatar" aria-hidden>
-        {member.name.slice(0, 1).toLocaleUpperCase()}
-      </span>
+      <Avatar name={member.name} color={member.color} />
       <span className="member__text">
         <span className="member__name" data-selectable>
           {member.name}

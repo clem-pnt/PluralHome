@@ -5,9 +5,11 @@
 //! Sur disque, la DEK est enveloppée par une clé dérivée de la phrase secrète.
 
 pub mod error;
+pub mod front;
 pub mod keyfile;
 pub mod members;
 mod migrations;
+mod time;
 pub mod vault;
 
 pub use error::{CoreError, Result};

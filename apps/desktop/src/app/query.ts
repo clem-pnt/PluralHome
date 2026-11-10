@@ -10,4 +10,6 @@ export const queryClient = new QueryClient({
 export const keys = {
   vaultStatus: ["vault", "status"] as const,
   members: ["members"] as const,
+  frontCurrent: ["front", "current"] as const,
+  frontHistory: (day: number) => ["front", "history", day] as const,
 };

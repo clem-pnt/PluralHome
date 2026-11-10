@@ -116,6 +116,11 @@ impl Vault {
     pub fn conn(&self) -> Result<&Connection> {
         self.conn.as_ref().ok_or(CoreError::Locked)
     }
+
+    /// Accès mutable, nécessaire aux opérations transactionnelles.
+    pub fn conn_mut(&mut self) -> Result<&mut Connection> {
+        self.conn.as_mut().ok_or(CoreError::Locked)
+    }
 }
 
 fn open_db(path: &Path, dek: &Dek) -> Result<Connection> {

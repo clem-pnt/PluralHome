@@ -1,6 +1,8 @@
 import { commands, type IpcError_Serialize } from "./bindings";
 
 export type {
+  FrontChange,
+  FrontSession_Serialize as FrontSession,
   Member_Serialize as Member,
   NewMember_Serialize as NewMember,
   VaultStatus,
@@ -38,5 +40,11 @@ export const api = {
     list: () => unwrap(commands.membersList()),
     create: (input: Parameters<typeof commands.membersCreate>[0]) =>
       unwrap(commands.membersCreate(input)),
+  },
+  front: {
+    current: () => unwrap(commands.frontCurrent()),
+    change: (change: Parameters<typeof commands.frontChange>[0]) =>
+      unwrap(commands.frontChange(change)),
+    history: (from: number, to: number) => unwrap(commands.frontHistory(from, to)),
   },
 };

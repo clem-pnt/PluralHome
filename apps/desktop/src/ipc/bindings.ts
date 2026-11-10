@@ -12,9 +12,37 @@ export const commands = {
 	vaultLock: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("vault_lock")),
 	membersList: () => typedError<Member_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("members_list")),
 	membersCreate: (input: NewMember_Deserialize) => typedError<Member_Serialize, IpcError_Serialize>(__TAURI_INVOKE("members_create", { input })),
+	frontCurrent: () => typedError<FrontSession_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("front_current")),
+	frontChange: (change: FrontChange) => typedError<FrontSession_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("front_change", { change })),
+	/**  Bornes en millisecondes Unix, `[from, to)`. */
+	frontHistory: (from: number | null, to: number | null) => typedError<FrontSession_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("front_history", { from, to })),
 };
 
 /* Types */
+/**  Nouvel état du front. Liste vide et `blurry = false` : plus personne au front. */
+export type FrontChange = {
+	members: string[],
+	blurry: boolean,
+};
+
+export type FrontSession = FrontSession_Serialize | FrontSession_Deserialize;
+
+export type FrontSession_Deserialize = {
+	id: string,
+	/**  `None` : front flou. */
+	memberId?: string | null,
+	startedAt: number | null,
+	endedAt?: number | null,
+};
+
+export type FrontSession_Serialize = {
+	id: string,
+	/**  `None` : front flou. */
+	memberId: string | null,
+	startedAt: number | null,
+	endedAt: number | null,
+};
+
 /**  Erreur telle que vue par le front : un code stable à traduire, jamais de détail brut. */
 export type IpcError = IpcError_Serialize | IpcError_Deserialize;
 

@@ -16,6 +16,17 @@ const MIGRATIONS: &[&str] = &[
         archived_at INTEGER
     ) STRICT;
     CREATE INDEX member_active ON member (archived_at, name);",
+    // 2 — présences au front. member_id NULL = front « flou » (on ne sait pas qui est là).
+    "CREATE TABLE front_session (
+        id         BLOB PRIMARY KEY NOT NULL CHECK (length(id) = 16),
+        member_id  BLOB REFERENCES member (id) ON DELETE CASCADE,
+        started_at INTEGER NOT NULL,
+        ended_at   INTEGER CHECK (ended_at IS NULL OR ended_at >= started_at)
+    ) STRICT;
+    CREATE INDEX front_open ON front_session (member_id) WHERE ended_at IS NULL;
+    CREATE INDEX front_range ON front_session (started_at, ended_at);
+    CREATE UNIQUE INDEX front_one_open_per_member
+        ON front_session (ifnull(member_id, x'00')) WHERE ended_at IS NULL;",
 ];
 
 pub fn run(conn: &mut Connection) -> Result<()> {

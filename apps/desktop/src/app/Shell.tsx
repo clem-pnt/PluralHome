@@ -1,9 +1,20 @@
+import { useState } from "react";
 import { Button } from "react-aria-components";
+import { FrontView } from "../features/front/FrontView";
 import { MembersView } from "../features/members/MembersView";
 import { m } from "../paraglide/messages.js";
 import { Logo } from "../ui/Logo";
 
+const VIEWS = {
+  front: { label: m.nav_front, Component: FrontView },
+  members: { label: m.nav_members, Component: MembersView },
+} as const;
+type View = keyof typeof VIEWS;
+
 export function Shell({ onLock }: { onLock: () => void }) {
+  const [view, setView] = useState<View>("front");
+  const { Component } = VIEWS[view];
+
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -12,16 +23,23 @@ export function Shell({ onLock }: { onLock: () => void }) {
           <span>{m.app_name()}</span>
         </div>
         <nav className="sidebar__nav" aria-label={m.app_name()}>
-          <a className="navlink" aria-current="page" href="#members">
-            {m.nav_members()}
-          </a>
+          {(Object.keys(VIEWS) as View[]).map((key) => (
+            <Button
+              key={key}
+              className="navlink"
+              aria-current={view === key ? "page" : false}
+              onPress={() => setView(key)}
+            >
+              {VIEWS[key].label()}
+            </Button>
+          ))}
         </nav>
         <Button className="navlink navlink--quiet" onPress={onLock}>
           {m.nav_lock()}
         </Button>
       </aside>
-      <main className="main" id="members">
-        <MembersView />
+      <main className="main">
+        <Component />
       </main>
     </div>
   );
