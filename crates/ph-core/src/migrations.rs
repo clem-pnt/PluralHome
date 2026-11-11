@@ -85,6 +85,14 @@ const MIGRATIONS: &[&str] = &[
     DROP TABLE member;
     ALTER TABLE member_v5 RENAME TO member;
     CREATE INDEX member_active ON member (archived_at, name);",
+    // 6 — profil détaillé, propre à l'appareil : jamais envoyé à PluralKit.
+    // roles : tableau JSON de libellés ; avatar : image PNG, JPEG ou WebP déjà réduite.
+    "CREATE TABLE member_profile (
+        member_id   BLOB PRIMARY KEY NOT NULL REFERENCES member (id) ON DELETE CASCADE,
+        description TEXT CHECK (description IS NULL OR length(description) <= 2000),
+        roles       TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(roles)),
+        avatar      BLOB CHECK (avatar IS NULL OR length(avatar) <= 262144)
+    ) STRICT;",
 ];
 
 pub fn run(conn: &mut Connection) -> Result<()> {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.0 — Profils des membres
+
+- Image de profil : recadrée au carré et réduite sur l'appareil, métadonnées (GPS, appareil photo) retirées au passage.
+- Description libre et rôles (suggestions courantes ou libellés personnels), visibles sur la fiche de chaque membre.
+- Ce profil détaillé reste sur l'appareil, dans le coffre chiffré : il n'est jamais envoyé à PluralKit.
+
 ## 0.6.0 — Ancrage et plan de crise
 
 - Écran « Ancrage » : respiration au carré guidée, exercice 5-4-3-2-1, repères « ici et maintenant » (date, heure, phrases d'orientation).

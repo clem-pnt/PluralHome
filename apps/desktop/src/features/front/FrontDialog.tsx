@@ -56,7 +56,7 @@ function FrontForm({ current, onDone }: { current: FrontSession[]; onDone: () =>
       >
         {members.list.map((member) => (
           <Checkbox key={member.id} value={member.id} className="pick">
-            <Avatar name={member.name} color={member.color} size={32} />
+            <Avatar name={member.name} color={member.color} src={member.avatar} size={32} />
             <span className="pick__name">{member.name}</span>
           </Checkbox>
         ))}

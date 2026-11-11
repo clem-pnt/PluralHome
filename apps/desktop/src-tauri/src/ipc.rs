@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use ph_core::front::{self, FrontChange, FrontSession};
-use ph_core::members::{self, Member, NewMember};
+use ph_core::members::{self, Member, NewMember, Profile};
 use ph_core::messages::{self, CatchUp, Message, NewMessage};
 use ph_core::safety::{self, SafetyPlan};
 use ph_core::{CoreError, Vault, VaultStatus};
@@ -160,6 +160,20 @@ pub async fn members_update(
     Ok(m)
 }
 
+/// Profil détaillé (description, rôles, image) : reste sur l'appareil, rien n'est envoyé.
+#[tauri::command]
+#[specta::specta]
+pub async fn members_set_profile(
+    state: State<'_, AppState>,
+    id: Uuid,
+    profile: Profile,
+) -> IpcResult<Member> {
+    blocking(&state, move |v| {
+        members::set_profile(v.conn()?, id, profile)
+    })
+    .await
+}
+
 /// Archive : le membre disparaît des listes, son historique reste.
 #[tauri::command]
 #[specta::specta]
@@ -305,6 +319,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         members_list,
         members_create,
         members_update,
+        members_set_profile,
         members_archive,
         front_current,
         front_change,

@@ -1,8 +1,10 @@
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import {
+  TextField as AriaTextField,
   Dialog,
   DialogTrigger,
+  FileTrigger,
   Form,
   Heading,
   Label,
@@ -10,18 +12,23 @@ import {
   ModalOverlay,
   Radio,
   RadioGroup,
+  TextArea,
 } from "react-aria-components";
 import { keys, queryClient } from "../../app/query";
 import { errorMessage } from "../../i18n/errors";
-import { api, type Member } from "../../ipc";
+import { type AvatarEdit, api, type Member } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
+import { Avatar } from "../../ui/Avatar";
 import { Button } from "../../ui/Button";
 import { TextField } from "../../ui/TextField";
+import { squareAvatar } from "./image";
 import { MEMBER_COLORS } from "./palette";
+import { RolesField } from "./RolesField";
 
 /** Limites du cœur, alignées sur PluralKit. */
 const MAX_NAME = 100;
 const MAX_PRONOUNS = 100;
+const MAX_DESCRIPTION = 2000;
 
 const PALETTE: readonly string[] = MEMBER_COLORS;
 const byName = (a: Member, b: Member) => a.name.localeCompare(b.name);
@@ -30,7 +37,7 @@ const byName = (a: Member, b: Member) => a.name.localeCompare(b.name);
 export function MemberDialog({ member }: { member?: Member }) {
   return (
     <ModalOverlay className="overlay" isDismissable>
-      <Modal className="modal">
+      <Modal className="modal modal--wide">
         <Dialog className="dialog">
           {({ close }) => <MemberForm member={member} onDone={close} />}
         </Dialog>
@@ -47,9 +54,37 @@ function MemberForm({ member, onDone }: { member: Member | undefined; onDone: ()
   const original = member?.color;
   const colors = original && !PALETTE.includes(original) ? [...PALETTE, original] : PALETTE;
 
+  const [description, setDescription] = useState(member?.description ?? "");
+  const [roles, setRoles] = useState<string[]>(member?.roles ?? []);
+  // Aperçu affiché (adresse data:) et modification à envoyer au cœur.
+  const [avatar, setAvatar] = useState<string | null>(member?.avatar ?? null);
+  const [avatarEdit, setAvatarEdit] = useState<AvatarEdit>({ kind: "keep" });
+  const [avatarError, setAvatarError] = useState(false);
+
+  const pickAvatar = async (files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+    try {
+      const { data, preview } = await squareAvatar(file);
+      setAvatarError(false);
+      setAvatarEdit({ kind: "set", data });
+      setAvatar(preview);
+    } catch {
+      setAvatarError(true);
+    }
+  };
+
   const save = useMutation({
-    mutationFn: (input: { name: string; pronouns: string | null; color: string }) =>
-      member ? api.members.update(member.id, input) : api.members.create(input),
+    mutationFn: async (input: { name: string; pronouns: string | null; color: string }) => {
+      const saved = member
+        ? await api.members.update(member.id, input)
+        : await api.members.create(input);
+      return api.members.setProfile(saved.id, {
+        description: description.trim() || null,
+        roles,
+        avatar: avatarEdit,
+      });
+    },
     onSuccess: (saved) => {
       queryClient.setQueryData<Member[]>(keys.members, (prev = []) =>
         [...prev.filter((x) => x.id !== saved.id), saved].sort(byName),
@@ -70,6 +105,35 @@ function MemberForm({ member, onDone }: { member: Member | undefined; onDone: ()
       <Heading slot="title">
         {member ? m.member_form_title_edit({ name: member.name }) : m.member_form_title()}
       </Heading>
+      <div className="avatar-edit">
+        <Avatar name={name || "?"} color={color} src={avatar} size={72} />
+        <div className="avatar-edit__actions">
+          <FileTrigger
+            acceptedFileTypes={["image/png", "image/jpeg", "image/webp"]}
+            onSelect={(files) => void pickAvatar(files)}
+          >
+            <Button variant="ghost">
+              {avatar ? m.member_avatar_change() : m.member_avatar_add()}
+            </Button>
+          </FileTrigger>
+          {avatar && (
+            <Button
+              variant="ghost"
+              onPress={() => {
+                setAvatar(null);
+                setAvatarEdit({ kind: "remove" });
+              }}
+            >
+              {m.member_avatar_remove()}
+            </Button>
+          )}
+        </div>
+      </div>
+      {avatarError && (
+        <p className="alert" role="alert">
+          {m.member_avatar_error()}
+        </p>
+      )}
       <TextField
         label={m.member_name()}
         autoFocus
@@ -93,6 +157,18 @@ function MemberForm({ member, onDone }: { member: Member | undefined; onDone: ()
           ))}
         </div>
       </RadioGroup>
+      <AriaTextField
+        className="field"
+        maxLength={MAX_DESCRIPTION}
+        value={description}
+        onChange={setDescription}
+      >
+        <Label className="field__label">{m.member_description()}</Label>
+        <TextArea className="input input--area" rows={4} />
+        <span className="field__hint">{m.member_description_hint()}</span>
+      </AriaTextField>
+      <RolesField roles={roles} onChange={setRoles} />
+      <p className="field__hint">{m.member_profile_local()}</p>
       {save.isError && (
         <p className="alert" role="alert">
           {errorMessage(save.error)}

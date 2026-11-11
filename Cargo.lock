@@ -2940,9 +2940,10 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "ph-core"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "argon2",
+ "base64 0.23.1",
  "chacha20poly1305",
  "getrandom 0.4.3",
  "hex",
@@ -2960,7 +2961,7 @@ dependencies = [
 
 [[package]]
 name = "ph-remote"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "base64 0.23.1",
  "getrandom 0.4.3",
@@ -3134,7 +3135,7 @@ dependencies = [
 
 [[package]]
 name = "pluralhome"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "ph-core",
  "ph-remote",

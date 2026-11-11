@@ -23,7 +23,7 @@ export function MessageCard({
   return (
     <article className="message" data-pinned={message.pinned || undefined}>
       {author ? (
-        <Avatar name={author.name} color={author.color} size={36} />
+        <Avatar name={author.name} color={author.color} src={author.avatar} size={36} />
       ) : (
         <span
           className="avatar avatar--blurry"

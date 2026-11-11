@@ -53,7 +53,12 @@ export function FrontView() {
                 return (
                   <li key={s.id} className="fronter">
                     {member ? (
-                      <Avatar name={member.name} color={member.color} size={48} />
+                      <Avatar
+                        name={member.name}
+                        color={member.color}
+                        src={member.avatar}
+                        size={48}
+                      />
                     ) : (
                       <span className="avatar avatar--blurry" aria-hidden />
                     )}
@@ -81,7 +86,7 @@ export function FrontView() {
                   aria-pressed={fronting.has(member.id) && sessions.length === 1}
                   onPress={() => change.mutate({ members: [member.id], blurry: false })}
                 >
-                  <Avatar name={member.name} color={member.color} size={22} />
+                  <Avatar name={member.name} color={member.color} src={member.avatar} size={22} />
                   {member.name}
                 </Button>
               ))}

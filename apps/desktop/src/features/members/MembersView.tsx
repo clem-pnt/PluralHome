@@ -55,10 +55,16 @@ function MemberCard({ member }: { member: Member }) {
           aria-label={`${m.member_edit()} ${member.name}`}
           style={{ "--member": member.color } as React.CSSProperties}
         >
-          <Avatar name={member.name} color={member.color} />
+          <Avatar name={member.name} color={member.color} src={member.avatar} size={48} />
           <span className="member__text">
             <span className="member__name">{member.name}</span>
             {member.pronouns && <span className="member__pronouns">{member.pronouns}</span>}
+            {member.roles.length > 0 && (
+              <span className="member__roles">{member.roles.join(" · ")}</span>
+            )}
+            {member.description && (
+              <span className="member__description">{member.description}</span>
+            )}
           </span>
         </AriaButton>
         <MemberDialog member={member} />

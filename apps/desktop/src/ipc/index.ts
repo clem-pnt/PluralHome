@@ -2,6 +2,7 @@ import { commands, type IpcError_Serialize } from "./bindings";
 
 export type {
   Account_Serialize as Account,
+  AvatarEdit,
   CatchUp_Serialize as CatchUp,
   Contact_Serialize as Contact,
   FrontChange,
@@ -49,6 +50,8 @@ export const api = {
       unwrap(commands.membersCreate(input)),
     update: (id: string, input: Parameters<typeof commands.membersUpdate>[1]) =>
       unwrap(commands.membersUpdate(id, input)),
+    setProfile: (id: string, profile: Parameters<typeof commands.membersSetProfile>[1]) =>
+      unwrap(commands.membersSetProfile(id, profile)),
     archive: (id: string) => unwrap(commands.membersArchive(id)),
   },
   account: {

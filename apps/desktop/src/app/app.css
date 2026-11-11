@@ -744,3 +744,86 @@
     align-content: start;
   }
 }
+
+@layer components {
+  .sr-only {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .avatar {
+    overflow: hidden;
+  }
+  .avatar__img {
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: cover;
+  }
+  .avatar-edit {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+  }
+  .avatar-edit__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    list-style: none;
+    padding: 0;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding-inline-start: var(--space-3);
+    border-radius: 999px;
+    background: var(--accent-soft);
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .chip .btn {
+    block-size: 28px;
+    padding-inline: var(--space-2);
+    border: 0;
+    border-radius: 999px;
+  }
+  .chips--suggest .btn {
+    block-size: 30px;
+    padding-inline: var(--space-3);
+    font-size: 13px;
+    border-style: dashed;
+  }
+  .roles__add {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
+  }
+  .roles__input {
+    flex: 1;
+  }
+  .member {
+    align-items: flex-start;
+  }
+  .member__roles {
+    font-size: 13px;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .member__description {
+    margin-block-start: var(--space-1);
+    font-size: 13px;
+    color: var(--ink-muted);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}

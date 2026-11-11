@@ -13,6 +13,8 @@ export const commands = {
 	membersList: () => typedError<Member_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("members_list")),
 	membersCreate: (input: NewMember_Deserialize) => typedError<Member_Serialize, IpcError_Serialize>(__TAURI_INVOKE("members_create", { input })),
 	membersUpdate: (id: string, input: NewMember_Deserialize) => typedError<Member_Serialize, IpcError_Serialize>(__TAURI_INVOKE("members_update", { id, input })),
+	/**  Profil détaillé (description, rôles, image) : reste sur l'appareil, rien n'est envoyé. */
+	membersSetProfile: (id: string, profile: Profile_Deserialize) => typedError<Member_Serialize, IpcError_Serialize>(__TAURI_INVOKE("members_set_profile", { id, profile })),
 	/**  Archive : le membre disparaît des listes, son historique reste. */
 	membersArchive: (id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("members_archive", { id })),
 	frontCurrent: () => typedError<FrontSession_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("front_current")),
@@ -57,6 +59,12 @@ export type Account_Serialize = {
 	displayName: string,
 	discord: DiscordIdentity | null,
 };
+
+export type AvatarEdit = 
+/**  Ne pas toucher à l'image actuelle. */
+{ kind: "keep" } | { kind: "remove" } | 
+/**  Image encodée en base64 (PNG, JPEG ou WebP, 256 Kio au plus). */
+{ kind: "set"; data: string };
 
 /**  Ce qu'un membre a manqué depuis son dernier passage au front. */
 export type CatchUp = CatchUp_Serialize | CatchUp_Deserialize;
@@ -147,6 +155,10 @@ export type Member_Deserialize = {
 	name: string,
 	pronouns?: string | null,
 	color: string,
+	description?: string | null,
+	roles: string[],
+	/**  Image en adresse `data:` (PNG, JPEG ou WebP), prête pour `<img src>`. */
+	avatar?: string | null,
 	/**  Millisecondes depuis l'époque Unix (sûr en `number` JS jusqu'en l'an 287 396). */
 	createdAt: number | null,
 };
@@ -156,6 +168,10 @@ export type Member_Serialize = {
 	name: string,
 	pronouns: string | null,
 	color: string,
+	description: string | null,
+	roles: string[],
+	/**  Image en adresse `data:` (PNG, JPEG ou WebP), prête pour `<img src>`. */
+	avatar: string | null,
 	/**  Millisecondes depuis l'époque Unix (sûr en `number` JS jusqu'en l'an 287 396). */
 	createdAt: number | null,
 };
@@ -222,6 +238,23 @@ export type PkSystem_Serialize = {
 	id: string,
 	uuid: string,
 	name: string | null,
+};
+
+/**  Profil détaillé d'un membre. Local à l'appareil : la synchro PluralKit ne le lit jamais. */
+export type Profile = Profile_Serialize | Profile_Deserialize;
+
+/**  Profil détaillé d'un membre. Local à l'appareil : la synchro PluralKit ne le lit jamais. */
+export type Profile_Deserialize = {
+	description?: string | null,
+	roles: string[],
+	avatar: AvatarEdit,
+};
+
+/**  Profil détaillé d'un membre. Local à l'appareil : la synchro PluralKit ne le lit jamais. */
+export type Profile_Serialize = {
+	description: string | null,
+	roles: string[],
+	avatar: AvatarEdit,
 };
 
 export type SafetyPlan = SafetyPlan_Serialize | SafetyPlan_Deserialize;
