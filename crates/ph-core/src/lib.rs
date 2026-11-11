@@ -7,6 +7,7 @@
 pub mod backup;
 pub mod error;
 pub mod front;
+pub mod journal;
 pub mod keyfile;
 pub mod kv;
 pub mod members;

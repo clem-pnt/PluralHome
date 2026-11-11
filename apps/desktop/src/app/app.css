@@ -470,7 +470,9 @@
       transition: opacity 140ms var(--ease);
     }
     .message:hover .message__actions,
-    .message:focus-within .message__actions {
+    .message:focus-within .message__actions,
+    .entry:hover .message__actions,
+    .entry:focus-within .message__actions {
       opacity: 1;
     }
   }
@@ -825,5 +827,102 @@
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+  }
+}
+
+@layer components {
+  .journal-form {
+    display: grid;
+    gap: var(--space-4);
+  }
+  .choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+  .choice {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    block-size: 32px;
+    padding-inline: var(--space-3);
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-muted);
+    cursor: default;
+    outline: none;
+  }
+  .choice:has(.avatar) {
+    padding-inline-start: var(--space-1);
+  }
+  .choice[data-hovered] {
+    background: var(--surface-sunken);
+  }
+  .choice[data-selected] {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--ink);
+  }
+  .choice[data-focus-visible] {
+    box-shadow: var(--focus);
+  }
+  .journal__filter {
+    max-inline-size: 280px;
+  }
+  .journal {
+    display: grid;
+    gap: var(--space-2);
+  }
+  .journal__item {
+    display: grid;
+    gap: var(--space-2);
+  }
+  .journal__day {
+    font-family: var(--font-display);
+    font-size: 18px;
+    margin-block-start: var(--space-4);
+  }
+  .journal__day::first-letter {
+    text-transform: uppercase;
+  }
+  .entry {
+    display: grid;
+    gap: var(--space-2);
+    padding: var(--space-4);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+  }
+  .entry__meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    font-size: 13px;
+  }
+  .entry__authors {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+  .entry__author {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-weight: 600;
+  }
+  .entry__title {
+    font-family: var(--font-display);
+    font-size: 18px;
+  }
+  .tag[data-mood="1"],
+  .tag[data-mood="2"] {
+    background: color-mix(in oklab, var(--rose) 30%, transparent);
+  }
+  .tag[data-mood="4"],
+  .tag[data-mood="5"] {
+    background: var(--accent-soft);
   }
 }

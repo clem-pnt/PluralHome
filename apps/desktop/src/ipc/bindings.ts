@@ -29,6 +29,10 @@ export const commands = {
 	messagesMarkRead: (memberId: string, ids: string[]) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("messages_mark_read", { memberId, ids })),
 	backupExport: (path: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("backup_export", { path })),
 	backupRestore: (path: string, passphrase: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("backup_restore", { path, passphrase })),
+	journalList: (before: string | null, author: string | null, limit: number) => typedError<Entry_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("journal_list", { before, author, limit })),
+	journalCreate: (input: NewEntry_Deserialize) => typedError<Entry_Serialize, IpcError_Serialize>(__TAURI_INVOKE("journal_create", { input })),
+	journalUpdate: (id: string, input: NewEntry_Deserialize) => typedError<Entry_Serialize, IpcError_Serialize>(__TAURI_INVOKE("journal_update", { id, input })),
+	journalDelete: (id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("journal_delete", { id })),
 	safetyGet: () => typedError<SafetyPlan_Serialize, IpcError_Serialize>(__TAURI_INVOKE("safety_get")),
 	safetySet: (plan: SafetyPlan_Deserialize) => typedError<SafetyPlan_Serialize, IpcError_Serialize>(__TAURI_INVOKE("safety_set", { plan })),
 	accountGet: () => typedError<Account_Serialize | null, IpcError_Serialize>(__TAURI_INVOKE("account_get")),
@@ -107,6 +111,32 @@ export type DiscordIdentity = {
 	id: string,
 	username: string,
 	displayName: string,
+};
+
+export type Entry = Entry_Serialize | Entry_Deserialize;
+
+export type Entry_Deserialize = {
+	id: string,
+	title?: string | null,
+	body: string,
+	/**  Humeur de 1 (très difficile) à 5 (très bien), facultative. */
+	mood?: number | null,
+	/**  Vide : auteur inconnu. */
+	authorIds: string[],
+	createdAt: number | null,
+	updatedAt?: number | null,
+};
+
+export type Entry_Serialize = {
+	id: string,
+	title: string | null,
+	body: string,
+	/**  Humeur de 1 (très difficile) à 5 (très bien), facultative. */
+	mood: number | null,
+	/**  Vide : auteur inconnu. */
+	authorIds: string[],
+	createdAt: number | null,
+	updatedAt: number | null,
 };
 
 /**  Nouvel état du front. Liste vide et `blurry = false` : plus personne au front. */
@@ -196,6 +226,22 @@ export type Message_Serialize = {
 	body: string,
 	pinned: boolean,
 	createdAt: number | null,
+};
+
+export type NewEntry = NewEntry_Serialize | NewEntry_Deserialize;
+
+export type NewEntry_Deserialize = {
+	title?: string | null,
+	body: string,
+	mood?: number | null,
+	authorIds: string[],
+};
+
+export type NewEntry_Serialize = {
+	title: string | null,
+	body: string,
+	mood: number | null,
+	authorIds: string[],
 };
 
 export type NewMember = NewMember_Serialize | NewMember_Deserialize;

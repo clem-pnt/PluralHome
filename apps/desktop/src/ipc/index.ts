@@ -5,10 +5,12 @@ export type {
   AvatarEdit,
   CatchUp_Serialize as CatchUp,
   Contact_Serialize as Contact,
+  Entry_Serialize as Entry,
   FrontChange,
   FrontSession_Serialize as FrontSession,
   Member_Serialize as Member,
   Message_Serialize as Message,
+  NewEntry_Deserialize as NewEntry,
   NewMember_Serialize as NewMember,
   PkSystem_Serialize as PkSystem,
   SafetyPlan_Serialize as SafetyPlan,
@@ -72,6 +74,15 @@ export const api = {
     change: (change: Parameters<typeof commands.frontChange>[0]) =>
       unwrap(commands.frontChange(change)),
     history: (from: number, to: number) => unwrap(commands.frontHistory(from, to)),
+  },
+  journal: {
+    list: (before: string | null, author: string | null, limit: number) =>
+      unwrap(commands.journalList(before, author, limit)),
+    create: (input: Parameters<typeof commands.journalCreate>[0]) =>
+      unwrap(commands.journalCreate(input)),
+    update: (id: string, input: Parameters<typeof commands.journalUpdate>[1]) =>
+      unwrap(commands.journalUpdate(id, input)),
+    remove: (id: string) => unwrap(commands.journalDelete(id)),
   },
   safety: {
     get: () => unwrap(commands.safetyGet()),

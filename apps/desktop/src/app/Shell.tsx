@@ -5,6 +5,7 @@ import { BackupView } from "../features/backup/BackupView";
 import { ConnectionsView } from "../features/connections/ConnectionsView";
 import { FrontView } from "../features/front/FrontView";
 import { GroundingView } from "../features/grounding/GroundingView";
+import { JournalView } from "../features/journal/JournalView";
 import { MembersView } from "../features/members/MembersView";
 import { MessagesView } from "../features/messages/MessagesView";
 import { m } from "../paraglide/messages.js";
@@ -14,6 +15,7 @@ import { keys, queryClient } from "./query";
 const VIEWS = {
   front: { label: m.nav_front, Component: FrontView },
   messages: { label: m.nav_messages, Component: MessagesView },
+  journal: { label: m.nav_journal, Component: JournalView },
   members: { label: m.nav_members, Component: MembersView },
   grounding: { label: m.nav_grounding, Component: GroundingView },
   backup: { label: m.nav_backup, Component: BackupView },

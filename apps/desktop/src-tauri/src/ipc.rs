@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use ph_core::front::{self, FrontChange, FrontSession};
+use ph_core::journal::{self, Entry, NewEntry};
 use ph_core::members::{self, Member, NewMember, Profile};
 use ph_core::messages::{self, CatchUp, Message, NewMessage};
 use ph_core::safety::{self, SafetyPlan};
@@ -275,6 +276,42 @@ pub async fn safety_set(state: State<'_, AppState>, plan: SafetyPlan) -> IpcResu
     blocking(&state, move |v| safety::set(v.conn()?, plan)).await
 }
 
+#[tauri::command]
+#[specta::specta]
+pub async fn journal_list(
+    state: State<'_, AppState>,
+    before: Option<Uuid>,
+    author: Option<Uuid>,
+    limit: u32,
+) -> IpcResult<Vec<Entry>> {
+    blocking(&state, move |v| {
+        journal::list(v.conn()?, before, author, limit)
+    })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn journal_create(state: State<'_, AppState>, input: NewEntry) -> IpcResult<Entry> {
+    blocking(&state, move |v| journal::create(v.conn_mut()?, input)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn journal_update(
+    state: State<'_, AppState>,
+    id: Uuid,
+    input: NewEntry,
+) -> IpcResult<Entry> {
+    blocking(&state, move |v| journal::update(v.conn_mut()?, id, input)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn journal_delete(state: State<'_, AppState>, id: Uuid) -> IpcResult<()> {
+    blocking(&state, move |v| journal::delete(v.conn()?, id)).await
+}
+
 /// Les chemins viennent des boîtes de dialogue natives ; on impose l'extension
 /// pour éviter d'écraser par erreur un fichier qui n'est pas une sauvegarde.
 fn backup_path(path: String) -> IpcResult<PathBuf> {
@@ -332,6 +369,10 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         messages_mark_read,
         backup_export,
         backup_restore,
+        journal_list,
+        journal_create,
+        journal_update,
+        journal_delete,
         safety_get,
         safety_set,
         remote::account_get,

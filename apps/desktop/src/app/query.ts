@@ -17,4 +17,5 @@ export const keys = {
   account: ["account"] as const,
   pkStatus: ["pluralkit", "status"] as const,
   safetyPlan: ["safety-plan"] as const,
+  journal: (author: string | null) => ["journal", author] as const,
 };

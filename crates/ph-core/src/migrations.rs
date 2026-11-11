@@ -93,6 +93,21 @@ const MIGRATIONS: &[&str] = &[
         roles       TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(roles)),
         avatar      BLOB CHECK (avatar IS NULL OR length(avatar) <= 262144)
     ) STRICT;",
+    // 7 — journal partagé. Plusieurs auteurs possibles (co-front) ; aucun = auteur inconnu.
+    "CREATE TABLE journal_entry (
+        id         BLOB PRIMARY KEY NOT NULL CHECK (length(id) = 16),
+        title      TEXT CHECK (title IS NULL OR length(title) BETWEEN 1 AND 120),
+        body       TEXT NOT NULL CHECK (length(body) BETWEEN 1 AND 20000),
+        mood       INTEGER CHECK (mood IS NULL OR mood BETWEEN 1 AND 5),
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER
+    ) STRICT;
+    CREATE TABLE journal_author (
+        entry_id  BLOB NOT NULL REFERENCES journal_entry (id) ON DELETE CASCADE,
+        member_id BLOB NOT NULL REFERENCES member (id) ON DELETE CASCADE,
+        PRIMARY KEY (entry_id, member_id)
+    ) STRICT, WITHOUT ROWID;
+    CREATE INDEX journal_by_member ON journal_author (member_id, entry_id);",
 ];
 
 pub fn run(conn: &mut Connection) -> Result<()> {

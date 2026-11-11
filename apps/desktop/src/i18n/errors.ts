@@ -32,6 +32,7 @@ export function errorMessage(e: unknown): string {
     if (e.field === "avatar") return m.member_avatar_error();
     if (e.field === "roles") return m.error_invalid_roles();
     if (e.field === "description") return m.error_invalid_description();
+    if (e.field === "title") return m.error_invalid_title();
     if (e.field === "contacts") return m.error_invalid_contacts();
     if (e.field === "warningSigns" || e.field === "coping" || e.field === "reasons") {
       return m.error_invalid_plan();

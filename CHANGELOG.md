@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.0 — Journal partagé
+
+- Nouvel écran « Journal » : ce qui s'est passé, écrit par qui était là, pour retrouver le fil d'une journée malgré l'amnésie.
+- Une entrée peut avoir plusieurs auteurs (co-front) ; par défaut, les membres au front la signent. Aucun auteur coché : auteur inconnu.
+- Titre facultatif, humeur facultative (de « Très dur » à « Très bien »), entrées classées par jour.
+- Modification (la date d'écriture reste, la mention « modifié » apparaît) et suppression avec confirmation.
+- Filtre par membre. Tout reste dans le coffre chiffré, rien n'est envoyé à PluralKit.
+
 ## 0.7.0 — Profils des membres
 
 - Image de profil : recadrée au carré et réduite sur l'appareil, métadonnées (GPS, appareil photo) retirées au passage.
