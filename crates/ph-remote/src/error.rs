@@ -20,6 +20,10 @@ pub enum RemoteError {
     Timeout,
     #[error("non configuré")]
     NotLinked,
+    #[error("déjà configuré sur ce compte")]
+    Conflict,
+    #[error("espace de synchro plein")]
+    Quota,
     #[error(transparent)]
     Core(#[from] CoreError),
 }
@@ -36,6 +40,8 @@ impl RemoteError {
             Self::Cancelled => "remote_cancelled",
             Self::Timeout => "remote_timeout",
             Self::NotLinked => "remote_not_linked",
+            Self::Conflict => "remote_conflict",
+            Self::Quota => "remote_quota",
             Self::Core(e) => e.code(),
         }
     }

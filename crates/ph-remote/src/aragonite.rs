@@ -3,12 +3,14 @@
 //!
 //! Le compte ne sert qu'à l'identité (nom affiché, Discord rattaché). Aucune donnée
 //! du coffre ne part vers le SSO. Seul le jeton de renouvellement est gardé, dans le
-//! coffre chiffré ; le jeton d'accès vit en mémoire le temps d'un appel. Le SSO fait
-//! tourner les jetons de renouvellement et ferme la session si un ancien est rejoué :
-//! le nouveau est donc enregistré avant toute autre chose.
+//! coffre chiffré ; le jeton d'accès reste en mémoire (moins d'une heure) pour la
+//! synchro chiffrée. Le SSO fait tourner les jetons de renouvellement et ferme la
+//! session si un ancien est rejoué : le nouveau est donc enregistré avant toute autre
+//! chose, et un seul renouvellement a lieu à la fois (verrou [`SESSION`]).
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
@@ -30,6 +32,19 @@ pub const CLIENT_ID: &str = "pluralhome";
 
 const K_REFRESH: &str = "aragonite.refresh_token";
 const K_ACCOUNT: &str = "aragonite.account";
+
+/// Le SSO émet des jetons d'accès d'une heure ; on les renouvelle un peu avant.
+const ACCESS_TTL: Duration = Duration::from_secs(50 * 60);
+
+/// Jeton d'accès courant. Le verrou est tenu pendant le renouvellement : deux
+/// renouvellements concurrents rejoueraient le même jeton et fermeraient la session.
+static SESSION: Mutex<Option<(Zeroizing<String>, Instant)>> = Mutex::new(None);
+
+fn session() -> std::sync::MutexGuard<'static, Option<(Zeroizing<String>, Instant)>> {
+    SESSION
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
 
 /// Compte tel qu'affiché dans l'application.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -260,6 +275,7 @@ impl Login {
             ("device_name", device_name()),
         ])?;
         store_refresh(db, &tokens.refresh_token)?;
+        *session() = Some((tokens.access_token.clone(), Instant::now()));
         let account = sso.userinfo(&tokens.access_token)?;
         store_account(db, &account)?;
         Ok(account)
@@ -379,8 +395,15 @@ pub fn account(db: &impl Db) -> Result<Option<Account>> {
     Ok(raw.and_then(|s| serde_json::from_str(&s).ok()))
 }
 
-/// Relit le profil auprès du SSO (nom, Discord). Une session refusée est oubliée.
-pub fn refresh(db: &impl Db, sso: &Sso) -> Result<Account> {
+/// Jeton d'accès valide, renouvelé si besoin. Une session refusée est oubliée.
+pub fn access_token(db: &impl Db, sso: &Sso) -> Result<Zeroizing<String>> {
+    let mut cached = session();
+    if let Some((token, at)) = cached.as_ref()
+        && at.elapsed() < ACCESS_TTL
+    {
+        return Ok(token.clone());
+    }
+    *cached = None;
     let refresh = db
         .with(|c| kv::get(c, K_REFRESH))?
         .map(Zeroizing::new)
@@ -392,13 +415,30 @@ pub fn refresh(db: &impl Db, sso: &Sso) -> Result<Account> {
     ]) {
         Ok(t) => t,
         Err(RemoteError::Unauthorized) => {
-            forget(db)?;
+            forget_keys(db)?;
             return Err(RemoteError::Unauthorized);
         }
         Err(e) => return Err(e),
     };
     store_refresh(db, &tokens.refresh_token)?;
-    let account = sso.userinfo(&tokens.access_token)?;
+    *cached = Some((tokens.access_token.clone(), Instant::now()));
+    Ok(tokens.access_token)
+}
+
+/// Oublie le jeton d'accès en mémoire (refusé par un service, ou déconnexion).
+pub fn invalidate() {
+    *session() = None;
+}
+
+/// Relit le profil auprès du SSO (nom, Discord). Une session refusée est oubliée.
+pub fn refresh(db: &impl Db, sso: &Sso) -> Result<Account> {
+    let account = match sso.userinfo(&access_token(db, sso)?) {
+        Err(RemoteError::Unauthorized) => {
+            invalidate();
+            sso.userinfo(&access_token(db, sso)?)?
+        }
+        r => r?,
+    };
     store_account(db, &account)?;
     Ok(account)
 }
@@ -417,6 +457,11 @@ pub fn logout(db: &impl Db, sso: &Sso) -> Result<()> {
 }
 
 fn forget(db: &impl Db) -> Result<()> {
+    invalidate();
+    forget_keys(db)
+}
+
+fn forget_keys(db: &impl Db) -> Result<()> {
     Ok(db.with(|c| {
         kv::delete(c, K_REFRESH)?;
         kv::delete(c, K_ACCOUNT)

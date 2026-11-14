@@ -2,6 +2,7 @@
 //! les verrous sur la base ne sont jamais tenus pendant un appel réseau.
 
 pub mod aragonite;
+pub mod cloud;
 pub mod db;
 pub mod error;
 pub mod pluralkit;
