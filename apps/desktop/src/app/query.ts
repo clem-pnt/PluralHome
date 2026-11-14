@@ -15,6 +15,8 @@ export const keys = {
   messages: ["messages"] as const,
   catchUp: (memberId: string) => ["catch-up", memberId] as const,
   account: ["account"] as const,
+  cloudStatus: ["cloud", "status"] as const,
+  cloudDevices: ["cloud", "devices"] as const,
   pkStatus: ["pluralkit", "status"] as const,
   safetyPlan: ["safety-plan"] as const,
   journal: (author: string | null) => ["journal", author] as const,

@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 use ph_core::{CoreError, Vault};
 use ph_remote::RemoteError;
 use ph_remote::aragonite::{self, Account, Login, Sso};
+use ph_remote::cloud::{self, HttpCloud, PairPoll, PendingDevice, SsoAuth};
 use ph_remote::pluralkit::{HttpPk, PkSystem};
 use ph_remote::sync::{self, Status};
 use tauri::{AppHandle, Emitter, State};
@@ -24,6 +25,8 @@ const LOGIN_TIMEOUT: Duration = Duration::from_secs(300);
 
 /// Émis après une synchro qui a modifié des données locales ou l'état.
 pub const EVENT_SYNCED: &str = "pluralkit://synced";
+/// Émis après une synchro chiffrée qui a reçu des données ou changé d'état.
+pub const EVENT_CLOUD: &str = "cloud://synced";
 
 #[derive(Debug, Clone, Copy)]
 pub enum Wake {
@@ -60,6 +63,12 @@ impl Remote {
                     let _guard = lock
                         .lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    match run_cloud(&vault) {
+                        Ok(Some(true)) | Err(_) => {
+                            let _ = app.emit(EVENT_CLOUD, ());
+                        }
+                        Ok(_) => {}
+                    }
                     match run_sync(&vault, full) {
                         Ok(Some(changed)) => {
                             if full {
@@ -103,6 +112,42 @@ fn run_sync(vault: &Mutex<Vault>, full: bool) -> ph_remote::Result<Option<bool>>
     let api = HttpPk::new(&token)?;
     let r = sync::sync(vault, &api, full)?;
     Ok(Some(r != sync::SyncReport::default()))
+}
+
+/// `Ok(None)` : synchro chiffrée inactive. `Ok(Some(changed))` sinon.
+fn run_cloud(vault: &Mutex<Vault>) -> ph_remote::Result<Option<bool>> {
+    match cloud::status(vault) {
+        Ok(s) if s.enabled => {}
+        Ok(_) | Err(RemoteError::Core(CoreError::Locked | CoreError::NotInitialized)) => {
+            return Ok(None);
+        }
+        Err(e) => return Err(e),
+    }
+    let sso = Sso::new()?;
+    let auth = SsoAuth {
+        db: vault,
+        sso: &sso,
+    };
+    match cloud::sync(vault, &HttpCloud::new()?, &auth) {
+        Ok(r) => Ok(Some(r.pulled > 0)),
+        Err(e) => {
+            tracing::warn!(code = e.code(), "synchro chiffrée échouée");
+            Err(e)
+        }
+    }
+}
+
+/// Exécute `f` avec le client de synchro et le jeton du compte Aragonite.
+fn with_cloud<T>(
+    vault: &Mutex<Vault>,
+    f: impl FnOnce(&HttpCloud, &SsoAuth<'_, Mutex<Vault>>) -> ph_remote::Result<T>,
+) -> ph_remote::Result<T> {
+    let sso = Sso::new()?;
+    let auth = SsoAuth {
+        db: vault,
+        sso: &sso,
+    };
+    f(&HttpCloud::new()?, &auth)
 }
 
 impl From<RemoteError> for IpcError {
@@ -249,6 +294,178 @@ pub async fn pk_sync_now(state: State<'_, AppState>, rem: State<'_, Remote>) -> 
             tracing::warn!(code = e.code(), "synchro PluralKit échouée");
         }
         sync::status(&*vault)
+    })
+    .await
+}
+
+// ---------- synchro chiffrée ----------
+
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_status(state: State<'_, AppState>) -> IpcResult<cloud::CloudStatus> {
+    let vault = state.vault();
+    remote(move || cloud::status(&*vault)).await
+}
+
+/// Indique si une synchro existe déjà sur ce compte (il faut alors la rejoindre).
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_probe(state: State<'_, AppState>) -> IpcResult<cloud::Remote> {
+    let vault = state.vault();
+    remote(move || with_cloud(&vault, |api, auth| cloud::probe(api, auth))).await
+}
+
+/// Active la synchro ; renvoie la clé de secours, affichée une seule fois.
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_enable(state: State<'_, AppState>, rem: State<'_, Remote>) -> IpcResult<String> {
+    let vault = state.vault();
+    let lock = Arc::clone(&rem.sync_lock);
+    let key = remote(move || {
+        let _guard = lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        with_cloud(&vault, |api, auth| cloud::enable(&*vault, api, auth))
+    })
+    .await?;
+    rem.wake(Wake::Full);
+    Ok(key.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_join_recovery(
+    state: State<'_, AppState>,
+    rem: State<'_, Remote>,
+    recovery: String,
+) -> IpcResult<()> {
+    let vault = state.vault();
+    let lock = Arc::clone(&rem.sync_lock);
+    let recovery = zeroize::Zeroizing::new(recovery);
+    remote(move || {
+        let _guard = lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        with_cloud(&vault, |api, auth| {
+            cloud::join_with_recovery(&*vault, api, auth, &recovery)
+        })
+    })
+    .await?;
+    rem.wake(Wake::Full);
+    Ok(())
+}
+
+/// Demande la clé à un appareil déjà synchronisé ; renvoie l'empreinte à comparer.
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_pair_request(state: State<'_, AppState>) -> IpcResult<String> {
+    let vault = state.vault();
+    remote(move || with_cloud(&vault, |api, auth| cloud::pair_request(&*vault, api, auth))).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_pair_poll(
+    state: State<'_, AppState>,
+    rem: State<'_, Remote>,
+) -> IpcResult<PairPoll> {
+    let vault = state.vault();
+    let lock = Arc::clone(&rem.sync_lock);
+    let r = remote(move || {
+        let _guard = lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        with_cloud(&vault, |api, auth| cloud::pair_poll(&*vault, api, auth))
+    })
+    .await?;
+    if r == PairPoll::Joined {
+        rem.wake(Wake::Full);
+    }
+    Ok(r)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_pair_cancel(state: State<'_, AppState>) -> IpcResult<()> {
+    let vault = state.vault();
+    remote(move || with_cloud(&vault, |api, auth| cloud::pair_cancel(&*vault, api, auth))).await
+}
+
+/// Appareils qui attendent la clé (vu depuis un appareil déjà synchronisé).
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_pair_requests(state: State<'_, AppState>) -> IpcResult<Vec<PendingDevice>> {
+    let vault = state.vault();
+    remote(move || with_cloud(&vault, |api, auth| cloud::pair_requests(&*vault, api, auth))).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_pair_approve(state: State<'_, AppState>, id: String) -> IpcResult<()> {
+    let vault = state.vault();
+    remote(move || {
+        with_cloud(&vault, |api, auth| {
+            cloud::pair_approve(&*vault, api, auth, &id)
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_pair_reject(state: State<'_, AppState>, id: String) -> IpcResult<()> {
+    let vault = state.vault();
+    remote(move || with_cloud(&vault, |api, auth| cloud::pair_reject(api, auth, &id))).await
+}
+
+/// Arrête la synchro sur cet appareil ; rien n'est effacé.
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_disable(state: State<'_, AppState>, rem: State<'_, Remote>) -> IpcResult<()> {
+    let vault = state.vault();
+    let lock = Arc::clone(&rem.sync_lock);
+    remote(move || {
+        let _guard = lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        cloud::disable(&*vault)
+    })
+    .await
+}
+
+/// Efface les données du serveur pour ce compte (tous les appareils s'arrêtent).
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_delete(state: State<'_, AppState>, rem: State<'_, Remote>) -> IpcResult<()> {
+    let vault = state.vault();
+    let lock = Arc::clone(&rem.sync_lock);
+    remote(move || {
+        let _guard = lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        with_cloud(&vault, |api, auth| cloud::delete_remote(&*vault, api, auth))
+    })
+    .await
+}
+
+/// Synchro immédiate ; renvoie l'état à jour (erreur comprise).
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_sync_now(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    rem: State<'_, Remote>,
+) -> IpcResult<cloud::CloudStatus> {
+    let vault = state.vault();
+    let lock = Arc::clone(&rem.sync_lock);
+    remote(move || {
+        let _guard = lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Ok(Some(true)) = run_cloud(&vault) {
+            let _ = app.emit(EVENT_CLOUD, ());
+        }
+        cloud::status(&*vault)
     })
     .await
 }

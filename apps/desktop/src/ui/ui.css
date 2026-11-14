@@ -104,6 +104,17 @@
     background: var(--accent-soft);
     font-size: 14px;
   }
+  .recovery {
+    display: block;
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-m);
+    background: var(--surface-sunken);
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 15px;
+    letter-spacing: 0.04em;
+    overflow-wrap: anywhere;
+    user-select: all;
+  }
 
   .overlay {
     position: fixed;

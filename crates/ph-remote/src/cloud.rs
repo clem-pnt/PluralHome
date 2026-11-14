@@ -335,7 +335,7 @@ fn load_pairing(conn: &Connection) -> ph_core::Result<Option<(String, PairingSec
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
 #[serde(rename_all = "camelCase")]
-pub struct Status {
+pub struct CloudStatus {
     pub enabled: bool,
     #[cfg_attr(feature = "specta", specta(type = f64))]
     pub pending: i64,
@@ -347,13 +347,17 @@ pub struct Status {
 }
 
 /// État local, sans réseau.
-pub fn status(db: &impl Db) -> Result<Status> {
+pub fn status(db: &impl Db) -> Result<CloudStatus> {
     Ok(db.with(|c| {
         let enabled = kv::get(c, K_KEY)?.is_some();
         let pairing = load_pairing(c)?.map(|(_, s)| cloudkey::fingerprint(&s.public()));
-        Ok(Status {
+        Ok(CloudStatus {
             enabled,
-            pending: if enabled { replica::pending_count(c)? } else { 0 },
+            pending: if enabled {
+                replica::pending_count(c)?
+            } else {
+                0
+            },
             last_sync: kv::get(c, K_LAST_AT)?.and_then(|s| s.parse().ok()),
             last_error: kv::get(c, K_LAST_ERROR)?,
             pairing,
@@ -504,7 +508,11 @@ pub struct PendingDevice {
 }
 
 /// Demandes d'appairage en attente (sur un appareil déjà synchronisé).
-pub fn pair_requests(db: &impl Db, api: &impl CloudApi, auth: &impl Auth) -> Result<Vec<PendingDevice>> {
+pub fn pair_requests(
+    db: &impl Db,
+    api: &impl CloudApi,
+    auth: &impl Auth,
+) -> Result<Vec<PendingDevice>> {
     let own = db.with(|c| load_pairing(c))?.map(|(id, _)| id);
     let list = authed(auth, |t| api.pair_list(t))?;
     Ok(list
@@ -679,10 +687,12 @@ fn decode(key: &SyncKey, item: &Item) -> Option<Change> {
 
 fn hex(bytes: &[u8]) -> String {
     use std::fmt::Write as _;
-    bytes.iter().fold(String::with_capacity(bytes.len() * 2), |mut s, b| {
-        let _ = write!(s, "{b:02x}");
-        s
-    })
+    bytes
+        .iter()
+        .fold(String::with_capacity(bytes.len() * 2), |mut s, b| {
+            let _ = write!(s, "{b:02x}");
+            s
+        })
 }
 
 fn unhex32(s: &str) -> Option<[u8; 32]> {

@@ -1,11 +1,9 @@
 import { useMutation } from "@tanstack/react-query";
-import { DialogTrigger } from "react-aria-components";
 import { keys, queryClient } from "../../app/query";
 import { errorMessage } from "../../i18n/errors";
 import { api } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
 import { Button } from "../../ui/Button";
-import { RestoreDialog } from "../backup/RestoreDialog";
 import { AuthLayout } from "./AuthLayout";
 
 export function SetupScreen() {
@@ -27,12 +25,6 @@ export function SetupScreen() {
           {create.isPending ? m.working() : m.setup_submit()}
         </Button>
       </div>
-      <DialogTrigger>
-        <Button variant="ghost" block>
-          {m.backup_have_one()}
-        </Button>
-        <RestoreDialog />
-      </DialogTrigger>
     </AuthLayout>
   );
 }

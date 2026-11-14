@@ -32,17 +32,61 @@ use Kind::{Blob, Text};
 
 /// Ordre parents → enfants : les insertions le suivent, les suppressions l'inversent.
 const TABLES: &[Spec] = &[
-    Spec { name: "member", pk: &[("id", Blob)], only_key: None },
-    Spec { name: "journal_entry", pk: &[("id", Blob)], only_key: None },
-    Spec { name: "message", pk: &[("id", Blob)], only_key: None },
-    Spec { name: "member_profile", pk: &[("member_id", Blob)], only_key: None },
-    Spec { name: "front_session", pk: &[("id", Blob)], only_key: None },
-    Spec { name: "message_read", pk: &[("message_id", Blob), ("member_id", Blob)], only_key: None },
-    Spec { name: "catchup_ack", pk: &[("member_id", Blob)], only_key: None },
-    Spec { name: "journal_author", pk: &[("entry_id", Blob), ("member_id", Blob)], only_key: None },
-    Spec { name: "pk_member", pk: &[("member_id", Blob)], only_key: None },
-    Spec { name: "pk_switch", pk: &[("pk_id", Text)], only_key: None },
-    Spec { name: "kv", pk: &[("key", Text)], only_key: Some("safety.plan") },
+    Spec {
+        name: "member",
+        pk: &[("id", Blob)],
+        only_key: None,
+    },
+    Spec {
+        name: "journal_entry",
+        pk: &[("id", Blob)],
+        only_key: None,
+    },
+    Spec {
+        name: "message",
+        pk: &[("id", Blob)],
+        only_key: None,
+    },
+    Spec {
+        name: "member_profile",
+        pk: &[("member_id", Blob)],
+        only_key: None,
+    },
+    Spec {
+        name: "front_session",
+        pk: &[("id", Blob)],
+        only_key: None,
+    },
+    Spec {
+        name: "message_read",
+        pk: &[("message_id", Blob), ("member_id", Blob)],
+        only_key: None,
+    },
+    Spec {
+        name: "catchup_ack",
+        pk: &[("member_id", Blob)],
+        only_key: None,
+    },
+    Spec {
+        name: "journal_author",
+        pk: &[("entry_id", Blob), ("member_id", Blob)],
+        only_key: None,
+    },
+    Spec {
+        name: "pk_member",
+        pk: &[("member_id", Blob)],
+        only_key: None,
+    },
+    Spec {
+        name: "pk_switch",
+        pk: &[("pk_id", Text)],
+        only_key: None,
+    },
+    Spec {
+        name: "kv",
+        pk: &[("key", Text)],
+        only_key: Some("safety.plan"),
+    },
 ];
 
 fn spec(name: &str) -> Option<(usize, &'static Spec)> {
@@ -95,9 +139,10 @@ fn from_json(v: &Json) -> Result<Value> {
         },
         Json::String(s) => Value::Text(s.clone()),
         Json::Object(m) => match m.get("b") {
-            Some(Json::String(b)) => {
-                Value::Blob(B64.decode(b).map_err(|_| CoreError::Invalid("sync_value"))?)
-            }
+            Some(Json::String(b)) => Value::Blob(
+                B64.decode(b)
+                    .map_err(|_| CoreError::Invalid("sync_value"))?,
+            ),
             _ => return Err(CoreError::Invalid("sync_value")),
         },
         Json::Array(_) => return Err(CoreError::Invalid("sync_value")),
@@ -106,8 +151,7 @@ fn from_json(v: &Json) -> Result<Value> {
 
 /// Décode la clé primaire texte en valeurs SQL, en vérifiant sa forme.
 fn pk_values(s: &Spec, pk: &str) -> Result<Vec<Value>> {
-    let parts: Vec<String> =
-        serde_json::from_str(pk).map_err(|_| CoreError::Invalid("sync_pk"))?;
+    let parts: Vec<String> = serde_json::from_str(pk).map_err(|_| CoreError::Invalid("sync_pk"))?;
     if parts.len() != s.pk.len() {
         return Err(CoreError::Invalid("sync_pk"));
     }
@@ -115,7 +159,9 @@ fn pk_values(s: &Spec, pk: &str) -> Result<Vec<Value>> {
         .into_iter()
         .zip(s.pk)
         .map(|(p, (_, kind))| match kind {
-            Blob => hex::decode(&p).map(Value::Blob).map_err(|_| CoreError::Invalid("sync_pk")),
+            Blob => hex::decode(&p)
+                .map(Value::Blob)
+                .map_err(|_| CoreError::Invalid("sync_pk")),
             Text => Ok(Value::Text(p)),
         })
         .collect::<Result<Vec<_>>>()?;
@@ -136,21 +182,22 @@ fn pk_where(s: &Spec) -> String {
 }
 
 fn pk_select(s: &Spec) -> String {
-    let parts = s
-        .pk
-        .iter()
-        .map(|(c, k)| match k {
-            Blob => format!("hex({c})"),
-            Text => (*c).to_string(),
-        })
-        .collect::<Vec<_>>()
-        .join(", ");
+    let parts =
+        s.pk.iter()
+            .map(|(c, k)| match k {
+                Blob => format!("hex({c})"),
+                Text => (*c).to_string(),
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
     format!("json_array({parts})")
 }
 
 fn columns(conn: &Connection, table: &str) -> Result<Vec<String>> {
     let mut st = conn.prepare(&format!("SELECT name FROM pragma_table_info('{table}')"))?;
-    let cols = st.query_map([], |r| r.get(0))?.collect::<rusqlite::Result<Vec<String>>>()?;
+    let cols = st
+        .query_map([], |r| r.get(0))?
+        .collect::<rusqlite::Result<Vec<String>>>()?;
     Ok(cols)
 }
 
@@ -175,7 +222,10 @@ fn read_row(conn: &Connection, s: &Spec, pk: &str) -> Result<Option<Map<String, 
 /// Tout est ensuite marqué « à envoyer » (nouveau jeu de clés, nouvel appareil).
 pub fn seed(conn: &Connection) -> Result<()> {
     for s in TABLES {
-        let filter = s.only_key.map(|k| format!(" WHERE key = '{k}'")).unwrap_or_default();
+        let filter = s
+            .only_key
+            .map(|k| format!(" WHERE key = '{k}'"))
+            .unwrap_or_default();
         conn.execute(
             &format!(
                 "INSERT OR IGNORE INTO sync_state (tbl, pk, at, dev, dirty)
@@ -193,7 +243,11 @@ pub fn seed(conn: &Connection) -> Result<()> {
 
 /// Nombre de changements locaux pas encore envoyés.
 pub fn pending_count(conn: &Connection) -> Result<i64> {
-    Ok(conn.query_row("SELECT count(*) FROM sync_state WHERE dirty = 1", [], |r| r.get(0))?)
+    Ok(
+        conn.query_row("SELECT count(*) FROM sync_state WHERE dirty = 1", [], |r| {
+            r.get(0)
+        })?,
+    )
 }
 
 /// Changements locaux à envoyer, au plus `limit`.
@@ -221,7 +275,13 @@ pub fn pending(conn: &Connection, me: &str, limit: usize) -> Result<Vec<Change>>
                 continue;
             }
         };
-        out.push(Change { t, p, r, a, d: d.unwrap_or_else(|| me.to_owned()) });
+        out.push(Change {
+            t,
+            p,
+            r,
+            a,
+            d: d.unwrap_or_else(|| me.to_owned()),
+        });
     }
     Ok(out)
 }
@@ -284,14 +344,21 @@ fn write(conn: &Connection, s: &Spec, pk: &[Value], row: Option<&Map<String, Jso
         cols.push(k.clone());
         vals.push(from_json(v)?);
     }
-    let marks = (1..=cols.len()).map(|i| format!("?{i}")).collect::<Vec<_>>().join(", ");
+    let marks = (1..=cols.len())
+        .map(|i| format!("?{i}"))
+        .collect::<Vec<_>>()
+        .join(", ");
     let pkcols = s.pk.iter().map(|(c, _)| *c).collect::<Vec<_>>().join(", ");
     let update = cols[s.pk.len()..]
         .iter()
         .map(|c| format!("{c} = excluded.{c}"))
         .collect::<Vec<_>>()
         .join(", ");
-    let action = if update.is_empty() { "NOTHING".to_owned() } else { format!("UPDATE SET {update}") };
+    let action = if update.is_empty() {
+        "NOTHING".to_owned()
+    } else {
+        format!("UPDATE SET {update}")
+    };
     conn.execute(
         &format!(
             "INSERT INTO {} ({}) VALUES ({marks}) ON CONFLICT ({pkcols}) DO {action}",
@@ -305,11 +372,20 @@ fn write(conn: &Connection, s: &Spec, pk: &[Value], row: Option<&Map<String, Jso
 
 /// Lève un conflit d'unicité local pour laisser passer la version reçue. Renvoie
 /// `false` si la table n'a pas de résolution connue.
-fn resolve_unique(conn: &Connection, s: &Spec, pk: &[Value], row: &Map<String, Json>) -> Result<bool> {
+fn resolve_unique(
+    conn: &Connection,
+    s: &Spec,
+    pk: &[Value],
+    row: &Map<String, Json>,
+) -> Result<bool> {
     match s.name {
         // Deux présences ouvertes pour la même personne : on ferme la locale.
         "front_session" => {
-            let member = row.get("member_id").map(from_json).transpose()?.unwrap_or(Value::Null);
+            let member = row
+                .get("member_id")
+                .map(from_json)
+                .transpose()?
+                .unwrap_or(Value::Null);
             let started = row.get("started_at").and_then(Json::as_i64).unwrap_or(0);
             let mut st = conn.prepare(
                 "SELECT json_array(hex(id)) FROM front_session
@@ -330,7 +406,9 @@ fn resolve_unique(conn: &Connection, s: &Spec, pk: &[Value], row: &Map<String, J
         }
         // Même membre PluralKit relié à deux membres : la correspondance reçue gagne.
         "pk_member" => {
-            let Some(Json::String(uuid)) = row.get("pk_uuid") else { return Ok(false) };
+            let Some(Json::String(uuid)) = row.get("pk_uuid") else {
+                return Ok(false);
+            };
             let mut st = conn.prepare(
                 "SELECT json_array(hex(member_id)) FROM pk_member WHERE pk_uuid = ?1 AND member_id <> ?2",
             )?;
@@ -388,7 +466,10 @@ pub fn apply(conn: &mut Connection, changes: &[Change], me: &str) -> Result<Appl
             None => None,
         })
         .collect();
-    let mut out = Applied { skipped: changes.len() - order.len(), ..Applied::default() };
+    let mut out = Applied {
+        skipped: changes.len() - order.len(),
+        ..Applied::default()
+    };
     order.sort_by_key(|(i, _)| *i);
 
     let tx = conn.transaction()?;
@@ -469,9 +550,13 @@ mod tests {
     }
 
     fn name(c: &Connection, id: u8) -> Option<String> {
-        c.query_row("SELECT name FROM member WHERE id = ?1", [vec![id; 16]], |r| r.get(0))
-            .optional()
-            .unwrap()
+        c.query_row(
+            "SELECT name FROM member WHERE id = ?1",
+            [vec![id; 16]],
+            |r| r.get(0),
+        )
+        .optional()
+        .unwrap()
     }
 
     /// Envoie tout ce qui est en attente de `a` vers `b`.
@@ -490,8 +575,11 @@ mod tests {
             params![vec![9u8; 16], vec![1u8; 16]],
         )
         .unwrap();
-        a.execute("INSERT INTO kv (key, value) VALUES ('safety.plan', '{}'), ('aragonite.refresh', 'x')", [])
-            .unwrap();
+        a.execute(
+            "INSERT INTO kv (key, value) VALUES ('safety.plan', '{}'), ('aragonite.refresh', 'x')",
+            [],
+        )
+        .unwrap();
         assert_eq!(pending_count(&a).unwrap(), 3);
         let r = ship(&mut a, "A", &mut b, "B");
         assert_eq!(r.applied, 3);
@@ -499,15 +587,22 @@ mod tests {
         assert_eq!(pending_count(&b).unwrap(), 0, "rien n'est renvoyé en écho");
         assert_eq!(name(&b, 1).as_deref(), Some("Alex"));
         let secret: Option<String> = b
-            .query_row("SELECT value FROM kv WHERE key = 'aragonite.refresh'", [], |r| r.get(0))
+            .query_row(
+                "SELECT value FROM kv WHERE key = 'aragonite.refresh'",
+                [],
+                |r| r.get(0),
+            )
             .optional()
             .unwrap();
         assert_eq!(secret, None, "les jetons restent locaux");
 
-        b.execute("DELETE FROM member WHERE id = ?1", [vec![1u8; 16]]).unwrap();
+        b.execute("DELETE FROM member WHERE id = ?1", [vec![1u8; 16]])
+            .unwrap();
         ship(&mut b, "B", &mut a, "A");
         assert_eq!(name(&a, 1), None);
-        let fronts: i64 = a.query_row("SELECT count(*) FROM front_session", [], |r| r.get(0)).unwrap();
+        let fronts: i64 = a
+            .query_row("SELECT count(*) FROM front_session", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(fronts, 0);
     }
 
@@ -516,9 +611,18 @@ mod tests {
         let (mut a, mut b) = (db(), db());
         add_member(&a, 1, "Alex");
         ship(&mut a, "A", &mut b, "B");
-        a.execute("UPDATE member SET name = 'Old' WHERE id = ?1", [vec![1u8; 16]]).unwrap();
-        a.execute("UPDATE sync_state SET at = 10 WHERE tbl = 'member'", []).unwrap();
-        b.execute("UPDATE member SET name = 'New' WHERE id = ?1", [vec![1u8; 16]]).unwrap();
+        a.execute(
+            "UPDATE member SET name = 'Old' WHERE id = ?1",
+            [vec![1u8; 16]],
+        )
+        .unwrap();
+        a.execute("UPDATE sync_state SET at = 10 WHERE tbl = 'member'", [])
+            .unwrap();
+        b.execute(
+            "UPDATE member SET name = 'New' WHERE id = ?1",
+            [vec![1u8; 16]],
+        )
+        .unwrap();
         let r = ship(&mut a, "A", &mut b, "B");
         assert_eq!(r.kept_local, 1);
         assert_eq!(name(&b, 1).as_deref(), Some("New"));
@@ -534,14 +638,34 @@ mod tests {
         r.insert("key".into(), Json::String("aragonite.refresh".into()));
         r.insert("value".into(), Json::String("pirate".into()));
         let ch = vec![
-            Change { t: "kv".into(), p: "[\"aragonite.refresh\"]".into(), r: Some(r), a: 5, d: "X".into() },
-            Change { t: "outbox".into(), p: "[1]".into(), r: None, a: 5, d: "X".into() },
-            Change { t: "member".into(), p: "[\"zz\"]".into(), r: None, a: 5, d: "X".into() },
+            Change {
+                t: "kv".into(),
+                p: "[\"aragonite.refresh\"]".into(),
+                r: Some(r),
+                a: 5,
+                d: "X".into(),
+            },
+            Change {
+                t: "outbox".into(),
+                p: "[1]".into(),
+                r: None,
+                a: 5,
+                d: "X".into(),
+            },
+            Change {
+                t: "member".into(),
+                p: "[\"zz\"]".into(),
+                r: None,
+                a: 5,
+                d: "X".into(),
+            },
         ];
         let out = apply(&mut b, &ch, "B").unwrap();
         assert_eq!(out.applied, 0);
         assert_eq!(out.skipped, 3);
-        let n: i64 = b.query_row("SELECT count(*) FROM kv", [], |r| r.get(0)).unwrap();
+        let n: i64 = b
+            .query_row("SELECT count(*) FROM kv", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(n, 0);
     }
 
@@ -563,7 +687,11 @@ mod tests {
         let r = ship(&mut a, "A", &mut b, "B");
         assert_eq!(r.applied, 1);
         let open: i64 = b
-            .query_row("SELECT count(*) FROM front_session WHERE ended_at IS NULL", [], |r| r.get(0))
+            .query_row(
+                "SELECT count(*) FROM front_session WHERE ended_at IS NULL",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(open, 1);
         let ch = pending(&b, "B", 10).unwrap();
@@ -576,7 +704,8 @@ mod tests {
     fn seed_lets_remote_win() {
         let (mut a, mut b) = (db(), db());
         add_member(&a, 1, "Serveur");
-        b.execute("INSERT INTO sync_applying VALUES (1)", []).unwrap();
+        b.execute("INSERT INTO sync_applying VALUES (1)", [])
+            .unwrap();
         add_member(&b, 1, "Local");
         b.execute("DELETE FROM sync_applying", []).unwrap();
         seed(&b).unwrap();

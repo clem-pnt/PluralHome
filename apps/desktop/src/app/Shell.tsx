@@ -1,7 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
 import { Button } from "react-aria-components";
-import { BackupView } from "../features/backup/BackupView";
 import { ConnectionsView } from "../features/connections/ConnectionsView";
 import { FrontView } from "../features/front/FrontView";
 import { GroundingView } from "../features/grounding/GroundingView";
@@ -18,12 +17,13 @@ const VIEWS = {
   journal: { label: m.nav_journal, Component: JournalView },
   members: { label: m.nav_members, Component: MembersView },
   grounding: { label: m.nav_grounding, Component: GroundingView },
-  backup: { label: m.nav_backup, Component: BackupView },
   connections: { label: m.nav_connections, Component: ConnectionsView },
 } as const;
 
 /** Émis par la boucle de synchro (src-tauri/src/remote.rs) quand des données ont changé. */
 const EVENT_SYNCED = "pluralkit://synced";
+/** Émis quand la synchro chiffrée a reçu des changements d'un autre appareil. */
+const EVENT_CLOUD = "cloud://synced";
 
 function useRemoteSync() {
   useEffect(() => {
@@ -32,8 +32,12 @@ function useRemoteSync() {
         void queryClient.invalidateQueries({ queryKey });
       }
     });
+    const offCloud = listen(EVENT_CLOUD, () => {
+      void queryClient.invalidateQueries();
+    });
     return () => {
       void off.then((unlisten) => unlisten());
+      void offCloud.then((unlisten) => unlisten());
     };
   }, []);
 }

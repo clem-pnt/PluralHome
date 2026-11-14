@@ -1,7 +1,6 @@
 //! Commandes exposées au front. Les types TypeScript sont générés depuis ces
 //! signatures (`pnpm bindings`) : le contrat front/back ne peut pas dériver.
 
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use ph_core::front::{self, FrontChange, FrontSession};
@@ -116,6 +115,15 @@ pub async fn vault_open(
 #[specta::specta]
 pub async fn vault_create(state: State<'_, AppState>) -> IpcResult<()> {
     blocking(&state, Vault::create).await
+}
+
+/// Le coffre ne s'ouvre plus : on le met de côté et on repart d'un coffre vide.
+#[tauri::command]
+#[specta::specta]
+pub async fn vault_start_over(state: State<'_, AppState>, rem: State<'_, Remote>) -> IpcResult<()> {
+    blocking(&state, Vault::start_over).await?;
+    rem.wake(Wake::Full);
+    Ok(())
 }
 
 /// Migration d'un coffre d'avant 0.9 : dernière saisie de la phrase secrète.
@@ -316,52 +324,11 @@ pub async fn journal_delete(state: State<'_, AppState>, id: Uuid) -> IpcResult<(
     blocking(&state, move |v| journal::delete(v.conn()?, id)).await
 }
 
-/// Les chemins viennent des boîtes de dialogue natives ; on impose l'extension
-/// pour éviter d'écraser par erreur un fichier qui n'est pas une sauvegarde.
-fn backup_path(path: String) -> IpcResult<PathBuf> {
-    let p = PathBuf::from(path);
-    if p.is_absolute() && p.extension().is_some_and(|e| e == "phbackup") {
-        Ok(p)
-    } else {
-        Err(IpcError {
-            code: "invalid".into(),
-            field: Some("path".into()),
-        })
-    }
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn backup_export(
-    state: State<'_, AppState>,
-    path: String,
-    password: String,
-) -> IpcResult<()> {
-    let path = backup_path(path)?;
-    blocking(&state, move |v| {
-        v.export_backup(&path, &zeroize::Zeroizing::new(password))
-    })
-    .await
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn backup_restore(
-    state: State<'_, AppState>,
-    path: String,
-    passphrase: String,
-) -> IpcResult<()> {
-    let path = backup_path(path)?;
-    blocking(&state, move |v| {
-        v.restore_backup(&path, &zeroize::Zeroizing::new(passphrase))
-    })
-    .await
-}
-
 pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
     tauri_specta::Builder::<tauri::Wry>::new().commands(tauri_specta::collect_commands![
         vault_open,
         vault_create,
+        vault_start_over,
         vault_upgrade,
         members_list,
         members_create,
@@ -377,8 +344,6 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         messages_delete,
         catch_up,
         messages_mark_read,
-        backup_export,
-        backup_restore,
         journal_list,
         journal_create,
         journal_update,
@@ -394,5 +359,18 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         remote::pk_link,
         remote::pk_unlink,
         remote::pk_sync_now,
+        remote::cloud_status,
+        remote::cloud_probe,
+        remote::cloud_enable,
+        remote::cloud_join_recovery,
+        remote::cloud_pair_request,
+        remote::cloud_pair_poll,
+        remote::cloud_pair_cancel,
+        remote::cloud_pair_requests,
+        remote::cloud_pair_approve,
+        remote::cloud_pair_reject,
+        remote::cloud_disable,
+        remote::cloud_delete,
+        remote::cloud_sync_now,
     ])
 }

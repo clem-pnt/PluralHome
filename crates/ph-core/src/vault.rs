@@ -145,12 +145,6 @@ impl Vault {
         }
     }
 
-    /// Installe une session déjà ouverte (restauration).
-    pub(crate) fn adopt(&mut self, conn: Connection, dek: Dek) {
-        self.conn = Some(conn);
-        self.dek = Some(dek);
-    }
-
     pub fn conn(&self) -> Result<&Connection> {
         self.conn.as_ref().ok_or(CoreError::Locked)
     }

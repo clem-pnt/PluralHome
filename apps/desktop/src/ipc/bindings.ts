@@ -12,6 +12,8 @@ export const commands = {
 	 */
 	vaultOpen: () => typedError<VaultStatus, IpcError_Serialize>(__TAURI_INVOKE("vault_open")),
 	vaultCreate: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("vault_create")),
+	/**  Le coffre ne s'ouvre plus : on le met de côté et on repart d'un coffre vide. */
+	vaultStartOver: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("vault_start_over")),
 	/**  Migration d'un coffre d'avant 0.9 : dernière saisie de la phrase secrète. */
 	vaultUpgrade: (passphrase: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("vault_upgrade", { passphrase })),
 	membersList: () => typedError<Member_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("members_list")),
@@ -31,8 +33,6 @@ export const commands = {
 	messagesDelete: (id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("messages_delete", { id })),
 	catchUp: (memberId: string) => typedError<CatchUp_Serialize, IpcError_Serialize>(__TAURI_INVOKE("catch_up", { memberId })),
 	messagesMarkRead: (memberId: string, ids: string[]) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("messages_mark_read", { memberId, ids })),
-	backupExport: (path: string, password: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("backup_export", { path, password })),
-	backupRestore: (path: string, passphrase: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("backup_restore", { path, passphrase })),
 	journalList: (before: string | null, author: string | null, limit: number) => typedError<Entry_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("journal_list", { before, author, limit })),
 	journalCreate: (input: NewEntry_Deserialize) => typedError<Entry_Serialize, IpcError_Serialize>(__TAURI_INVOKE("journal_create", { input })),
 	journalUpdate: (id: string, input: NewEntry_Deserialize) => typedError<Entry_Serialize, IpcError_Serialize>(__TAURI_INVOKE("journal_update", { id, input })),
@@ -50,6 +50,26 @@ export const commands = {
 	pkUnlink: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("pk_unlink")),
 	/**  Synchro complète immédiate ; renvoie l'état à jour (erreur comprise). */
 	pkSyncNow: () => typedError<Status_Serialize, IpcError_Serialize>(__TAURI_INVOKE("pk_sync_now")),
+	cloudStatus: () => typedError<CloudStatus_Serialize, IpcError_Serialize>(__TAURI_INVOKE("cloud_status")),
+	/**  Indique si une synchro existe déjà sur ce compte (il faut alors la rejoindre). */
+	cloudProbe: () => typedError<Remote, IpcError_Serialize>(__TAURI_INVOKE("cloud_probe")),
+	/**  Active la synchro ; renvoie la clé de secours, affichée une seule fois. */
+	cloudEnable: () => typedError<string, IpcError_Serialize>(__TAURI_INVOKE("cloud_enable")),
+	cloudJoinRecovery: (recovery: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("cloud_join_recovery", { recovery })),
+	/**  Demande la clé à un appareil déjà synchronisé ; renvoie l'empreinte à comparer. */
+	cloudPairRequest: () => typedError<string, IpcError_Serialize>(__TAURI_INVOKE("cloud_pair_request")),
+	cloudPairPoll: () => typedError<PairPoll, IpcError_Serialize>(__TAURI_INVOKE("cloud_pair_poll")),
+	cloudPairCancel: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("cloud_pair_cancel")),
+	/**  Appareils qui attendent la clé (vu depuis un appareil déjà synchronisé). */
+	cloudPairRequests: () => typedError<PendingDevice[], IpcError_Serialize>(__TAURI_INVOKE("cloud_pair_requests")),
+	cloudPairApprove: (id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("cloud_pair_approve", { id })),
+	cloudPairReject: (id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("cloud_pair_reject", { id })),
+	/**  Arrête la synchro sur cet appareil ; rien n'est effacé. */
+	cloudDisable: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("cloud_disable")),
+	/**  Efface les données du serveur pour ce compte (tous les appareils s'arrêtent). */
+	cloudDelete: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("cloud_delete")),
+	/**  Synchro immédiate ; renvoie l'état à jour (erreur comprise). */
+	cloudSyncNow: () => typedError<CloudStatus_Serialize, IpcError_Serialize>(__TAURI_INVOKE("cloud_sync_now")),
 };
 
 /* Types */
@@ -97,6 +117,26 @@ export type CatchUp_Serialize = {
 	fronts: FrontSession_Serialize[],
 	/**  Messages qui le concernent et qu'il n'a pas encore lus. */
 	unread: Message_Serialize[],
+};
+
+export type CloudStatus = CloudStatus_Serialize | CloudStatus_Deserialize;
+
+export type CloudStatus_Deserialize = {
+	enabled: boolean,
+	pending: number | null,
+	lastSync?: number | null,
+	lastError?: string | null,
+	/**  Empreinte de la demande d'appairage en cours sur cet appareil. */
+	pairing?: string | null,
+};
+
+export type CloudStatus_Serialize = {
+	enabled: boolean,
+	pending: number | null,
+	lastSync: number | null,
+	lastError: string | null,
+	/**  Empreinte de la demande d'appairage en cours sur cet appareil. */
+	pairing: string | null,
 };
 
 export type Contact = Contact_Serialize | Contact_Deserialize;
@@ -276,6 +316,20 @@ export type NewMessage_Serialize = {
 	body: string,
 };
 
+export type PairPoll = 
+/**  Pas encore approuvée. */
+"waiting" | 
+/**  Clé reçue : la synchro est active. */
+"joined" | 
+/**  Expirée ou refusée. */
+"gone";
+
+export type PendingDevice = {
+	id: string,
+	fingerprint: string,
+	expiresAt: number | null,
+};
+
 export type PkSystem = PkSystem_Serialize | PkSystem_Deserialize;
 
 export type PkSystem_Deserialize = {
@@ -306,6 +360,13 @@ export type Profile_Serialize = {
 	roles: string[],
 	avatar: AvatarEdit,
 };
+
+/**  Ce que le serveur sait de ce compte, pour choisir entre activer et rejoindre. */
+export type Remote = 
+/**  Aucune synchro sur ce compte. */
+"empty" | 
+/**  Une synchro existe : un appareil doit la rejoindre. */
+"exists";
 
 export type SafetyPlan = SafetyPlan_Serialize | SafetyPlan_Deserialize;
 

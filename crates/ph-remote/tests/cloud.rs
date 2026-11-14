@@ -4,10 +4,12 @@
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 
+use ph_core::Vault;
 use ph_core::keyfile::KdfParams;
 use ph_core::members::{self, NewMember};
-use ph_core::Vault;
-use ph_remote::cloud::{self, Auth, CloudApi, Item, Keyset, Page, PairPoll, PairRequest, RemoteState};
+use ph_remote::cloud::{
+    self, Auth, CloudApi, Item, Keyset, Page, PairPoll, PairRequest, RemoteState,
+};
 use ph_remote::db::Db;
 use ph_remote::{RemoteError, Result};
 use zeroize::Zeroizing;
@@ -44,7 +46,10 @@ impl CloudApi for Fake {
     fn state(&self, t: &str) -> Result<RemoteState> {
         self.check(t)?;
         let s = self.st();
-        Ok(RemoteState { keyset: s.keyset.clone(), seq: s.seq })
+        Ok(RemoteState {
+            keyset: s.keyset.clone(),
+            seq: s.seq,
+        })
     }
     fn put_keyset(&self, t: &str, k: &Keyset) -> Result<()> {
         self.check(t)?;
@@ -63,7 +68,13 @@ impl CloudApi for Fake {
         let more = all.len() > limit;
         all.truncate(limit);
         let seq = all.last().map_or(since, |(_, (_, q))| *q);
-        let items = all.into_iter().map(|(k, (v, _))| Item { k: k.clone(), v: v.clone() }).collect();
+        let items = all
+            .into_iter()
+            .map(|(k, (v, _))| Item {
+                k: k.clone(),
+                v: v.clone(),
+            })
+            .collect();
         Ok(Page { items, seq, more })
     }
     fn push(&self, t: &str, items: &[Item]) -> Result<i64> {
@@ -101,20 +112,32 @@ impl CloudApi for Fake {
             .pairs
             .iter()
             .filter(|p| p.2.is_none())
-            .map(|p| PairRequest { id: p.0.clone(), public: p.1.clone(), expires_at: 0 })
+            .map(|p| PairRequest {
+                id: p.0.clone(),
+                public: p.1.clone(),
+                expires_at: 0,
+            })
             .collect())
     }
     fn pair_seal(&self, t: &str, id: &str, sealed: &str) -> Result<()> {
         self.check(t)?;
         let mut s = self.st();
-        let p = s.pairs.iter_mut().find(|p| p.0 == id).ok_or(RemoteError::Core(ph_core::CoreError::NotFound))?;
+        let p = s
+            .pairs
+            .iter_mut()
+            .find(|p| p.0 == id)
+            .ok_or(RemoteError::Core(ph_core::CoreError::NotFound))?;
         p.2 = Some(sealed.to_owned());
         Ok(())
     }
     fn pair_take(&self, t: &str, id: &str) -> Result<Option<String>> {
         self.check(t)?;
         let mut s = self.st();
-        let i = s.pairs.iter().position(|p| p.0 == id).ok_or(RemoteError::Core(ph_core::CoreError::NotFound))?;
+        let i = s
+            .pairs
+            .iter()
+            .position(|p| p.0 == id)
+            .ok_or(RemoteError::Core(ph_core::CoreError::NotFound))?;
         let sealed = s.pairs[i].2.clone();
         if sealed.is_some() {
             s.pairs.remove(i);
@@ -144,13 +167,26 @@ fn vault() -> (tempfile::TempDir, Mutex<Vault>) {
 }
 
 fn add(db: &Mutex<Vault>, name: &str) -> uuid::Uuid {
-    db.with(|c| members::create(c, NewMember { name: name.into(), pronouns: None, color: "#336699".into() }))
-        .unwrap()
-        .id
+    db.with(|c| {
+        members::create(
+            c,
+            NewMember {
+                name: name.into(),
+                pronouns: None,
+                color: "#336699".into(),
+            },
+        )
+    })
+    .unwrap()
+    .id
 }
 
 fn names(db: &Mutex<Vault>) -> Vec<String> {
-    db.with(|c| members::list(c)).unwrap().into_iter().map(|m| m.name).collect()
+    db.with(|c| members::list(c))
+        .unwrap()
+        .into_iter()
+        .map(|m| m.name)
+        .collect()
 }
 
 #[test]
@@ -161,7 +197,10 @@ fn enable_then_join_with_recovery_and_sync_both_ways() {
     add(&a, "Alix");
     assert_eq!(cloud::probe(&api, &Tok).unwrap(), cloud::Remote::Empty);
     let recovery = cloud::enable(&a, &api, &Tok).unwrap();
-    assert!(matches!(cloud::enable(&b, &api, &Tok), Err(RemoteError::Conflict)));
+    assert!(matches!(
+        cloud::enable(&b, &api, &Tok),
+        Err(RemoteError::Conflict)
+    ));
     assert!(!cloud::status(&b).unwrap().enabled);
 
     let r = cloud::sync(&a, &api, &Tok).unwrap();
@@ -186,8 +225,18 @@ fn enable_then_join_with_recovery_and_sync_both_ways() {
 
     // Modification puis suppression qui se propagent.
     let id = a.with(|c| members::list(c)).unwrap()[0].id;
-    a.with(|c| members::update(c, id, NewMember { name: "Alix R".into(), pronouns: None, color: "#336699".into() }))
-        .unwrap();
+    a.with(|c| {
+        members::update(
+            c,
+            id,
+            NewMember {
+                name: "Alix R".into(),
+                pronouns: None,
+                color: "#336699".into(),
+            },
+        )
+    })
+    .unwrap();
     cloud::sync(&a, &api, &Tok).unwrap();
     cloud::sync(&b, &api, &Tok).unwrap();
     assert_eq!(names(&b), ["Alix R", "Bao"]);
@@ -209,7 +258,10 @@ fn pairing_transfers_the_key() {
     cloud::sync(&a, &api, &Tok).unwrap();
 
     let fp = cloud::pair_request(&b, &api, &Tok).unwrap();
-    assert_eq!(cloud::status(&b).unwrap().pairing.as_deref(), Some(fp.as_str()));
+    assert_eq!(
+        cloud::status(&b).unwrap().pairing.as_deref(),
+        Some(fp.as_str())
+    );
     assert_eq!(cloud::pair_poll(&b, &api, &Tok).unwrap(), PairPoll::Waiting);
     // L'appareil demandeur ne voit pas sa propre demande.
     assert!(cloud::pair_requests(&b, &api, &Tok).unwrap().is_empty());
@@ -253,7 +305,10 @@ fn deleted_remote_unlinks_other_devices() {
     cloud::delete_remote(&a, &api, &Tok).unwrap();
     assert!(api.st().items.is_empty());
     assert!(!cloud::status(&a).unwrap().enabled);
-    assert!(matches!(cloud::sync(&b, &api, &Tok), Err(RemoteError::NotLinked)));
+    assert!(matches!(
+        cloud::sync(&b, &api, &Tok),
+        Err(RemoteError::NotLinked)
+    ));
     assert!(!cloud::status(&b).unwrap().enabled);
     // Les données locales restent.
     assert_eq!(names(&b), ["Alix"]);
@@ -268,7 +323,10 @@ fn retries_once_after_refused_token_and_records_errors() {
     cloud::sync(&a, &api, &Tok).unwrap();
     api.st().reject_token = 5;
     assert!(cloud::sync(&a, &api, &Tok).is_err());
-    assert_eq!(cloud::status(&a).unwrap().last_error.as_deref(), Some("remote_unauthorized"));
+    assert_eq!(
+        cloud::status(&a).unwrap().last_error.as_deref(),
+        Some("remote_unauthorized")
+    );
     api.st().reject_token = 0;
     cloud::sync(&a, &api, &Tok).unwrap();
     let st = cloud::status(&a).unwrap();

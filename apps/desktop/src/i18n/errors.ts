@@ -17,6 +17,8 @@ const byCode: Record<string, () => string> = {
   remote_timeout: m.error_remote_timeout,
   remote_cancelled: m.error_remote_cancelled,
   remote_not_linked: m.error_remote_not_linked,
+  remote_conflict: m.error_remote_conflict,
+  remote_quota: m.error_remote_quota,
 };
 
 /** Message d'un code d'erreur enregistré (dernière synchro, par exemple). */
@@ -25,10 +27,8 @@ export function codeMessage(code: string): string {
 }
 
 export function errorMessage(e: unknown): string {
-  if (e instanceof AppError && e.code === "invalid" && e.field === "backup") {
-    return m.error_invalid_backup();
-  }
   if (e instanceof AppError && e.code === "invalid") {
+    if (e.field === "recovery_key") return m.cloud_recovery_invalid();
     if (e.field === "phone") return m.error_invalid_phone();
     if (e.field === "avatar") return m.member_avatar_error();
     if (e.field === "roles") return m.error_invalid_roles();

@@ -4,6 +4,7 @@ export type {
   Account_Serialize as Account,
   AvatarEdit,
   CatchUp_Serialize as CatchUp,
+  CloudStatus_Serialize as CloudStatus,
   Contact_Serialize as Contact,
   Entry_Serialize as Entry,
   FrontChange,
@@ -12,6 +13,8 @@ export type {
   Message_Serialize as Message,
   NewEntry_Deserialize as NewEntry,
   NewMember_Serialize as NewMember,
+  PairPoll,
+  PendingDevice,
   PkSystem_Serialize as PkSystem,
   SafetyPlan_Serialize as SafetyPlan,
   Status_Serialize as PkStatus,
@@ -43,6 +46,7 @@ export const api = {
   vault: {
     open: () => unwrap(commands.vaultOpen()),
     create: () => unwrap(commands.vaultCreate()),
+    startOver: () => unwrap(commands.vaultStartOver()),
     upgrade: (passphrase: string) => unwrap(commands.vaultUpgrade(passphrase)),
   },
   members: {
@@ -87,9 +91,20 @@ export const api = {
     get: () => unwrap(commands.safetyGet()),
     set: (plan: Parameters<typeof commands.safetySet>[0]) => unwrap(commands.safetySet(plan)),
   },
-  backup: {
-    export: (path: string, password: string) => unwrap(commands.backupExport(path, password)),
-    restore: (path: string, password: string) => unwrap(commands.backupRestore(path, password)),
+  cloud: {
+    status: () => unwrap(commands.cloudStatus()),
+    probe: () => unwrap(commands.cloudProbe()),
+    enable: () => unwrap(commands.cloudEnable()),
+    joinRecovery: (recovery: string) => unwrap(commands.cloudJoinRecovery(recovery)),
+    pairRequest: () => unwrap(commands.cloudPairRequest()),
+    pairPoll: () => unwrap(commands.cloudPairPoll()),
+    pairCancel: () => unwrap(commands.cloudPairCancel()),
+    pairRequests: () => unwrap(commands.cloudPairRequests()),
+    pairApprove: (id: string) => unwrap(commands.cloudPairApprove(id)),
+    pairReject: (id: string) => unwrap(commands.cloudPairReject(id)),
+    disable: () => unwrap(commands.cloudDisable()),
+    remove: () => unwrap(commands.cloudDelete()),
+    syncNow: () => unwrap(commands.cloudSyncNow()),
   },
   messages: {
     list: (before: string | null, limit: number) => unwrap(commands.messagesList(before, limit)),

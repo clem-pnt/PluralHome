@@ -9,6 +9,7 @@ import { m } from "../../paraglide/messages.js";
 import { Avatar } from "../../ui/Avatar";
 import { Button } from "../../ui/Button";
 import { TextField } from "../../ui/TextField";
+import { CloudPanel } from "./CloudPanel";
 
 export function ConnectionsView() {
   return (
@@ -21,6 +22,7 @@ export function ConnectionsView() {
       </header>
       <div className="connections">
         <AccountPanel />
+        <CloudPanel />
         <PluralKitPanel />
       </div>
     </section>
