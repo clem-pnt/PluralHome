@@ -1,3 +1,4 @@
+#![allow(clippy::many_single_char_names)]
 #![allow(clippy::unwrap_used, clippy::expect_used)] // code de test
 //! Même scénario que `cloud.rs`, mais contre le vrai serveur Node (`server/test/dev-server.mjs`).
 //! Lancer : `node server/test/dev-server.mjs &` puis

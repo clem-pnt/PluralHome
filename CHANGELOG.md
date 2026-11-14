@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.0 — Synchro entre appareils
+
+- Photos de profil à la place des pastilles de couleur, partout dans l'application.
+- Synchro entre appareils par le compte Aragonite : tout est chiffré sur l'appareil avant l'envoi, le serveur ne garde que des données illisibles.
+- Une clé de synchronisation s'affiche une seule fois à l'activation : elle sert à ajouter un autre appareil, à noter et garder en lieu sûr.
+- Les sauvegardes locales `.phbackup` disparaissent, remplacées par la synchro.
+- Si la clé du coffre disparaît, l'écran d'erreur propose de repartir de zéro ; l'ancien coffre est mis de côté, pas effacé.
+
 ## 0.9.0 — Plus de phrase secrète
 
 - L'application s'ouvre directement : la clé du coffre est rangée dans le trousseau de la session (GNOME Keyring, KWallet, Trousseau macOS, Gestionnaire d'identifiants Windows), ou à défaut dans un fichier protégé du dossier de l'application.
