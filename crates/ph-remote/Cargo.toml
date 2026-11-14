@@ -13,6 +13,7 @@ workspace = true
 specta = { version = "=2.0.0-rc.26", features = ["derive"], optional = true }
 base64 = "0.23.1"
 getrandom = "0.4.3"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
 ph-core = { path = "../ph-core" }
 reqwest = { version = "0.13.5", default-features = false, features = ["blocking", "json", "rustls", "form", "http2"] }
 serde = { version = "1.0.229", features = ["derive"] }

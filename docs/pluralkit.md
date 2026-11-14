@@ -36,6 +36,11 @@ quitte l'appareil. L'écran de liaison rappelle que PluralKit stocke ces donnée
 - Supprimé sur PluralKit : délié, jamais effacé ici. Archivé ici : plus touché par la synchro.
 - Couleur absente sur PluralKit : pas d'avis, la couleur locale est gardée. Champs PluralKit non gérés
   (avatar, description…) : jamais modifiés.
+- Photo de profil, à sens unique (depuis 0.10.1) : la photo PluralKit est téléchargée (HTTPS, sans le jeton,
+  8 Mio au plus), recadrée en 256 px, réencodée puis rangée dans le coffre chiffré, seulement si le membre
+  n'a pas de photo ici. Une photo locale n'est jamais remplacée ; chaque adresse n'est tentée qu'une fois
+  (mémorisée dans `pk_member.snapshot`), donc une photo retirée ici ne revient que si elle change sur
+  PluralKit. Rien n'est renvoyé à PluralKit.
 
 ### Switchs
 

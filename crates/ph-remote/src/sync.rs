@@ -44,6 +44,10 @@ struct Snapshot {
     name: String,
     pronouns: Option<String>,
     color: Option<String>,
+    /// Dernière adresse de photo PluralKit déjà traitée (importée ou écartée) :
+    /// une photo retirée ici n'est jamais réimportée, sauf si elle change là-bas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    avatar: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -100,6 +104,7 @@ fn load_links(c: &Connection) -> ph_core::Result<Vec<Link>> {
             name: String::new(),
             pronouns: None,
             color: None,
+            avatar: None,
         });
         out.push(Link {
             member_id,
@@ -152,6 +157,7 @@ fn snapshot_of_local(m: &Member) -> Snapshot {
         name: m.name.clone(),
         pronouns: m.pronouns.clone(),
         color: Some(m.color.clone()),
+        avatar: None,
     }
 }
 
@@ -160,6 +166,7 @@ fn snapshot_of_remote(r: &PkMember) -> Snapshot {
         name: r.name.clone(),
         pronouns: r.pronouns.clone().filter(|p| !p.trim().is_empty()),
         color: pk_color(r.color.as_deref()),
+        avatar: None,
     }
 }
 
@@ -305,6 +312,7 @@ fn merge_linked(
         name,
         pronouns,
         color: Some(color),
+        avatar: link.snapshot.avatar.clone(),
     };
     if patch.is_empty() {
         save_link(tx, &next)?;
@@ -434,7 +442,91 @@ pub fn sync_members(db: &impl Db, api: &impl PkApi) -> Result<(usize, usize)> {
         db.with(|c| save_link(c, &link))?;
         written += 1;
     }
-    Ok((plan.pulled, written))
+    let imported = import_avatars(db, api, &remote)?;
+    Ok((plan.pulled + imported, written))
+}
+
+/// Erreur passagère : on retentera au prochain passage.
+const fn transient(e: &RemoteError) -> bool {
+    matches!(
+        e,
+        RemoteError::Network(_) | RemoteError::Timeout | RemoteError::RateLimited
+    ) || matches!(e, RemoteError::Http { status, .. } if *status >= 500)
+}
+
+/// Photos PluralKit, à sens unique : seulement pour les membres liés sans photo
+/// ici, jamais par-dessus une photo locale, une seule tentative par adresse.
+/// Rien n'est renvoyé à PluralKit. Un échec n'interrompt pas la synchro.
+fn import_avatars(db: &impl Db, api: &impl PkApi, remote: &[PkMember]) -> Result<usize> {
+    let todo: Vec<(Uuid, String)> = db.with(|c| {
+        let links = load_links(c)?;
+        let mut st = c.prepare_cached(
+            "SELECT 1 FROM member m LEFT JOIN member_profile p ON p.member_id = m.id
+             WHERE m.id = ?1 AND m.archived_at IS NULL AND p.avatar IS NULL",
+        )?;
+        let mut out = Vec::new();
+        for r in remote {
+            let Some(url) = r
+                .avatar_url
+                .as_deref()
+                .map(str::trim)
+                .filter(|u| !u.is_empty())
+            else {
+                continue;
+            };
+            let Some(l) = links.iter().find(|l| l.pk_uuid == r.uuid) else {
+                continue;
+            };
+            if l.snapshot.avatar.as_deref() != Some(url) && st.exists([l.member_id.as_bytes()])? {
+                out.push((l.member_id, url.to_owned()));
+            }
+        }
+        Ok(out)
+    })?;
+
+    let mut imported = 0;
+    for (member_id, url) in todo {
+        let image = match api.fetch_avatar(&url) {
+            Ok(bytes) => crate::avatar::square(&bytes),
+            Err(e) if transient(&e) => {
+                tracing::warn!(
+                    "photo PluralKit non téléchargée, nouvel essai plus tard : {}",
+                    e.code()
+                );
+                continue;
+            }
+            Err(e) => {
+                tracing::warn!("photo PluralKit écartée : {}", e.code());
+                None
+            }
+        };
+        let done = db.with(|c| {
+            let tx = c.transaction()?;
+            let mut wrote = false;
+            if let Some(bytes) = &image {
+                // Revérifié sous verrou : une photo choisie entre-temps reste.
+                wrote = tx.execute(
+                    "INSERT INTO member_profile (member_id, roles, avatar)
+                     SELECT ?1, '[]', ?2 WHERE EXISTS
+                       (SELECT 1 FROM member WHERE id = ?1 AND archived_at IS NULL)
+                     ON CONFLICT (member_id) DO UPDATE SET avatar = excluded.avatar
+                       WHERE member_profile.avatar IS NULL",
+                    params![member_id.as_bytes(), bytes],
+                )? > 0;
+            }
+            if let Some(mut l) = load_links(&tx)?
+                .into_iter()
+                .find(|l| l.member_id == member_id)
+            {
+                l.snapshot.avatar = Some(url.clone());
+                save_link(&tx, &l)?;
+            }
+            tx.commit()?;
+            Ok(wrote)
+        })?;
+        imported += usize::from(done);
+    }
+    Ok(imported)
 }
 
 // ---------- switchs ----------

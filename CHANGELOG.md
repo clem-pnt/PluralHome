@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.1 — Photos PluralKit
+
+- Les photos de profil PluralKit sont importées pour les membres qui n'en ont pas ici : téléchargées une fois, réduites, puis rangées dans le coffre chiffré.
+- Une photo choisie dans PluralHome n'est jamais remplacée, et une photo retirée ici ne revient pas (sauf si elle change sur PluralKit).
+- Rien n'est envoyé à PluralKit : la synchro des photos ne va que dans un sens.
+
 ## 0.10.0 — Synchro entre appareils
 
 - Photos de profil à la place des pastilles de couleur, partout dans l'application.

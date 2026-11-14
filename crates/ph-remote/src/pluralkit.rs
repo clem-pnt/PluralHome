@@ -37,6 +37,9 @@ pub struct PkMember {
     /// Hexadécimal sans `#`.
     #[serde(default)]
     pub color: Option<String>,
+    /// Adresse de la photo de profil : lue seulement, jamais écrite.
+    #[serde(default)]
+    pub avatar_url: Option<String>,
 }
 
 /// Champs écrits par PluralHome ; les autres (avatar, description…) ne sont jamais touchés.
@@ -116,10 +119,14 @@ pub trait PkApi: Sync {
     /// Les plus récents d'abord.
     fn switches(&self, limit: u32) -> Result<Vec<PkSwitch>>;
     fn post_switch(&self, members: &[String], timestamp: i64) -> Result<PkSwitch>;
+    /// Télécharge une photo de profil (HTTPS seulement, sans le jeton).
+    fn fetch_avatar(&self, url: &str) -> Result<Vec<u8>>;
 }
 
 pub struct HttpPk {
     client: Client,
+    /// Pour les photos, hébergées n'importe où : jamais de jeton, HTTPS imposé.
+    files: Client,
     base: String,
     token: Zeroizing<String>,
     last_write: Mutex<Option<Instant>>,
@@ -136,8 +143,15 @@ impl HttpPk {
             .timeout(Duration::from_secs(20))
             .https_only(base.starts_with("https://"))
             .build()?;
+        let files = Client::builder()
+            .user_agent(USER_AGENT)
+            .timeout(Duration::from_secs(20))
+            .https_only(true)
+            .redirect(reqwest::redirect::Policy::limited(3))
+            .build()?;
         Ok(Self {
             client,
+            files,
             base: base.trim_end_matches('/').to_owned(),
             token: Zeroizing::new(token.trim().to_owned()),
             last_write: Mutex::new(None),
@@ -263,6 +277,32 @@ impl PkApi for HttpPk {
         let raw: RawSwitch =
             self.expect(&reqwest::Method::POST, "/systems/@me/switches", Some(&body))?;
         raw.try_into()
+    }
+
+    fn fetch_avatar(&self, url: &str) -> Result<Vec<u8>> {
+        use std::io::Read;
+        let res = self.files.get(url).send()?;
+        let status = res.status();
+        if !status.is_success() {
+            return Err(RemoteError::Http {
+                status: status.as_u16(),
+                message: String::new(),
+            });
+        }
+        if res
+            .content_length()
+            .is_some_and(|n| n > crate::avatar::MAX_DOWNLOAD)
+        {
+            return Err(RemoteError::Decode);
+        }
+        let mut bytes = Vec::new();
+        res.take(crate::avatar::MAX_DOWNLOAD + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|e| RemoteError::Network(e.to_string()))?;
+        if bytes.len() as u64 > crate::avatar::MAX_DOWNLOAD {
+            return Err(RemoteError::Decode);
+        }
+        Ok(bytes)
     }
 }
 

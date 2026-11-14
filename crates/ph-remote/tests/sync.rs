@@ -20,6 +20,10 @@ struct State {
     next: u32,
     offline: bool,
     writes: u32,
+    /// Photos servies par adresse ; une adresse absente répond 404.
+    files: std::collections::HashMap<String, Vec<u8>>,
+    fetches: u32,
+    files_down: bool,
 }
 
 #[derive(Default)]
@@ -39,6 +43,7 @@ impl FakePk {
             name: name.into(),
             pronouns: pronouns.map(Into::into),
             color: color.map(Into::into),
+            avatar_url: None,
         });
         id
     }
@@ -128,6 +133,38 @@ impl PkApi for FakePk {
         s.switches.push(sw.clone());
         Ok(sw)
     }
+    fn fetch_avatar(&self, url: &str) -> Result<Vec<u8>> {
+        let mut s = self.st();
+        s.fetches += 1;
+        if s.files_down {
+            return Err(RemoteError::Network("hors ligne".into()));
+        }
+        s.files.get(url).cloned().ok_or(RemoteError::Http {
+            status: 404,
+            message: String::new(),
+        })
+    }
+}
+
+fn png(w: u32, h: u32) -> Vec<u8> {
+    let img = image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(
+        w,
+        h,
+        image::Rgb([90, 120, 200]),
+    ));
+    let mut out = Vec::new();
+    img.write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
+        .unwrap();
+    out
+}
+
+fn avatar_of(db: &Mutex<Vault>, name: &str) -> Option<String> {
+    db.with(|c| members::list(c))
+        .unwrap()
+        .into_iter()
+        .find(|m| m.name == name)
+        .unwrap()
+        .avatar
 }
 
 fn vault() -> (tempfile::TempDir, Mutex<Vault>) {
@@ -446,4 +483,107 @@ fn unlink_forgets_everything_but_data() {
             .unwrap(),
         0
     );
+}
+
+#[test]
+fn avatars_imported_once_never_over_local() {
+    let (_t, db) = vault();
+    let pk = FakePk::default();
+    for (name, url) in [
+        ("Mila", "https://cdn/m.png"),
+        ("Sacha", "https://cdn/s.png"),
+        ("Lou", "https://cdn/l.png"),
+        ("Noé", "https://cdn/absent.png"),
+    ] {
+        let hid = pk.add_member(name, None, None);
+        let mut s = pk.st();
+        s.members
+            .iter_mut()
+            .find(|m| m.id == hid)
+            .unwrap()
+            .avatar_url = Some(url.into());
+        s.files.insert(url.into(), png(400, 300));
+    }
+    pk.st().files.remove("https://cdn/absent.png");
+    // Lou a déjà une photo ici : elle la garde.
+    let lou = local(&db, "Lou");
+    let mine = {
+        use base64::Engine;
+        base64::engine::general_purpose::STANDARD.encode(png(8, 8))
+    };
+    db.with(|c| {
+        members::set_profile(
+            c,
+            lou,
+            members::Profile {
+                description: Some("ici".into()),
+                roles: vec![],
+                avatar: members::AvatarEdit::Set { data: mine.clone() },
+            },
+        )
+    })
+    .unwrap();
+    pk.st().files_down = true;
+
+    // Photos injoignables à la liaison : rien d'importé, nouvel essai plus tard.
+    sync::link(&db, &pk, "jeton").unwrap();
+    assert!(avatar_of(&db, "Mila").is_none());
+    pk.st().files_down = false;
+
+    let (pulled, _) = sync::sync_members(&db, &pk).unwrap();
+    assert_eq!(pulled, 2, "Mila et Sacha");
+    let mila = avatar_of(&db, "Mila").unwrap();
+    assert!(mila.starts_with("data:image/jpeg;base64,"));
+    assert!(avatar_of(&db, "Sacha").is_some());
+    assert!(avatar_of(&db, "Noé").is_none(), "404 : écartée");
+    assert!(
+        avatar_of(&db, "Lou").unwrap().ends_with(&mine),
+        "photo locale intacte"
+    );
+    let lou_desc = db.with(|c| members::get(c, lou)).unwrap().description;
+    assert_eq!(lou_desc.as_deref(), Some("ici"));
+
+    // Une seule tentative par adresse, même après retrait de la photo ici.
+    let id = db
+        .with(|c| members::list(c))
+        .unwrap()
+        .into_iter()
+        .find(|m| m.name == "Mila")
+        .unwrap()
+        .id;
+    db.with(|c| {
+        members::set_profile(
+            c,
+            id,
+            members::Profile {
+                description: None,
+                roles: vec![],
+                avatar: members::AvatarEdit::Remove,
+            },
+        )
+    })
+    .unwrap();
+    let fetches = pk.st().fetches;
+    assert_eq!(sync::sync_members(&db, &pk).unwrap(), (0, 0));
+    assert_eq!(
+        pk.st().fetches,
+        fetches,
+        "ni Mila ni Noé ne sont redemandées"
+    );
+    assert!(avatar_of(&db, "Mila").is_none());
+
+    // Nouvelle photo sur PluralKit : importée.
+    {
+        let mut s = pk.st();
+        s.members
+            .iter_mut()
+            .find(|m| m.name == "Mila")
+            .unwrap()
+            .avatar_url = Some("https://cdn/m2.png".into());
+        let bytes = png(50, 80);
+        s.files.insert("https://cdn/m2.png".into(), bytes);
+    }
+    assert_eq!(sync::sync_members(&db, &pk).unwrap().0, 1);
+    assert!(avatar_of(&db, "Mila").is_some());
+    assert_eq!(pk.st().writes, 0, "rien n'est écrit sur PluralKit");
 }
