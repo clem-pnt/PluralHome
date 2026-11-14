@@ -5,6 +5,46 @@ use rusqlite::Connection;
 
 use crate::{CoreError, Result};
 
+/// Horloge SQLite en millisecondes Unix (même unité que `time::now_ms`).
+macro_rules! sql_now {
+    () => {
+        "CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)"
+    };
+}
+
+/// Note toute écriture locale d'une table synchronisée dans `sync_state`, sauf
+/// pendant l'application de changements reçus (marqueur `sync_applying`).
+/// L'horodatage ne recule jamais : une écriture locale bat toujours la version connue.
+macro_rules! track {
+    ($t:literal, $new:literal, $old:literal, $wn:literal, $wo:literal) => {
+        concat!(
+            "CREATE TRIGGER sync_", $t, "_ins AFTER INSERT ON ", $t,
+            " WHEN NOT EXISTS (SELECT 1 FROM sync_applying)", $wn, " BEGIN ",
+            track!(@up $t, $new), " END;\n",
+            "CREATE TRIGGER sync_", $t, "_upd AFTER UPDATE ON ", $t,
+            " WHEN NOT EXISTS (SELECT 1 FROM sync_applying)", $wn, " BEGIN ",
+            track!(@up $t, $new),
+            " INSERT INTO sync_state (tbl, pk, at, dev, dirty) SELECT '", $t, "', ", $old, ", ",
+            sql_now!(), ", NULL, 1 WHERE ", $old, " <> ", $new,
+            " ON CONFLICT (tbl, pk) DO UPDATE SET at = max(excluded.at, sync_state.at + 1), dev = NULL, dirty = 1;",
+            " END;\n",
+            "CREATE TRIGGER sync_", $t, "_del AFTER DELETE ON ", $t,
+            " WHEN NOT EXISTS (SELECT 1 FROM sync_applying)", $wo, " BEGIN ",
+            track!(@up $t, $old), " END;\n",
+        )
+    };
+    (@up $t:literal, $pk:literal) => {
+        concat!(
+            "INSERT INTO sync_state (tbl, pk, at, dev, dirty) VALUES ('", $t, "', ", $pk, ", ",
+            sql_now!(), ", NULL, 1) ON CONFLICT (tbl, pk) DO UPDATE SET ",
+            "at = max(excluded.at, sync_state.at + 1), dev = NULL, dirty = 1;"
+        )
+    };
+    ($t:literal, $new:literal, $old:literal) => {
+        track!($t, $new, $old, "", "")
+    };
+}
+
 const MIGRATIONS: &[&str] = &[
     // 1 — membres du système
     "CREATE TABLE member (
@@ -108,6 +148,46 @@ const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (entry_id, member_id)
     ) STRICT, WITHOUT ROWID;
     CREATE INDEX journal_by_member ON journal_author (member_id, entry_id);",
+    // 8 — synchronisation chiffrée entre appareils : version de chaque ligne
+    // (horodatage + appareil, dernier écrivain gagne) et drapeau « à envoyer ».
+    // dev NULL = cet appareil. Une ligne absente de sa table = suppression.
+    concat!(
+        "CREATE TABLE sync_state (
+            tbl   TEXT NOT NULL,
+            pk    TEXT NOT NULL,
+            at    INTEGER NOT NULL,
+            dev   TEXT,
+            dirty INTEGER NOT NULL DEFAULT 1,
+            PRIMARY KEY (tbl, pk)
+        ) STRICT, WITHOUT ROWID;
+        CREATE INDEX sync_dirty ON sync_state (tbl, pk) WHERE dirty = 1;
+        CREATE TABLE sync_applying (x INTEGER) STRICT;\n",
+        track!("member", "json_array(hex(NEW.id))", "json_array(hex(OLD.id))"),
+        track!("member_profile", "json_array(hex(NEW.member_id))", "json_array(hex(OLD.member_id))"),
+        track!("front_session", "json_array(hex(NEW.id))", "json_array(hex(OLD.id))"),
+        track!("message", "json_array(hex(NEW.id))", "json_array(hex(OLD.id))"),
+        track!(
+            "message_read",
+            "json_array(hex(NEW.message_id), hex(NEW.member_id))",
+            "json_array(hex(OLD.message_id), hex(OLD.member_id))"
+        ),
+        track!("catchup_ack", "json_array(hex(NEW.member_id))", "json_array(hex(OLD.member_id))"),
+        track!("journal_entry", "json_array(hex(NEW.id))", "json_array(hex(OLD.id))"),
+        track!(
+            "journal_author",
+            "json_array(hex(NEW.entry_id), hex(NEW.member_id))",
+            "json_array(hex(OLD.entry_id), hex(OLD.member_id))"
+        ),
+        track!("pk_member", "json_array(hex(NEW.member_id))", "json_array(hex(OLD.member_id))"),
+        track!("pk_switch", "json_array(NEW.pk_id)", "json_array(OLD.pk_id)"),
+        track!(
+            "kv",
+            "json_array(NEW.key)",
+            "json_array(OLD.key)",
+            " AND NEW.key = 'safety.plan'",
+            " AND OLD.key = 'safety.plan'"
+        ),
+    ),
 ];
 
 pub fn run(conn: &mut Connection) -> Result<()> {
