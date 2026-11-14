@@ -4,6 +4,7 @@ import { keys } from "../../app/query";
 import { formatTime, startOfDay } from "../../i18n/format";
 import { api, type FrontSession } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
+import { Avatar } from "../../ui/Avatar";
 import { useMembers } from "../members/useMembers";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -57,7 +58,17 @@ export function Timeline() {
         const name = member?.name ?? m.front_blurry();
         return (
           <div key={memberId || "blurry"} className="timeline__row">
-            <span className="timeline__label">{name}</span>
+            <span className="timeline__label">
+              {member ? (
+                <Avatar name={member.name} src={member.avatar} size={20} />
+              ) : (
+                <span
+                  className="avatar avatar--blurry"
+                  style={{ "--size": "20px" } as CSSProperties}
+                />
+              )}
+              <span className="timeline__name">{name}</span>
+            </span>
             <div className="timeline__track">
               {list.map((s) => {
                 const start = s.startedAt ?? from;
@@ -69,7 +80,6 @@ export function Timeline() {
                     title={`${name} · ${formatTime(start)} – ${s.endedAt ? formatTime(end) : "…"}`}
                     style={
                       {
-                        "--member": member?.color ?? "var(--ink-muted)",
                         insetInlineStart: pct(start),
                         inlineSize: `max(3px, calc(${pct(end)} - ${pct(start)}))`,
                       } as CSSProperties

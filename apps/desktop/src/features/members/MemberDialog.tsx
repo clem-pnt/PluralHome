@@ -10,8 +10,6 @@ import {
   Label,
   Modal,
   ModalOverlay,
-  Radio,
-  RadioGroup,
   TextArea,
 } from "react-aria-components";
 import { keys, queryClient } from "../../app/query";
@@ -30,7 +28,6 @@ const MAX_NAME = 100;
 const MAX_PRONOUNS = 100;
 const MAX_DESCRIPTION = 2000;
 
-const PALETTE: readonly string[] = MEMBER_COLORS;
 const byName = (a: Member, b: Member) => a.name.localeCompare(b.name);
 
 /** Création si `member` est absent, modification sinon. */
@@ -49,10 +46,14 @@ export function MemberDialog({ member }: { member?: Member }) {
 function MemberForm({ member, onDone }: { member: Member | undefined; onDone: () => void }) {
   const [name, setName] = useState(member?.name ?? "");
   const [pronouns, setPronouns] = useState(member?.pronouns ?? "");
-  const [color, setColor] = useState<string>(member?.color ?? MEMBER_COLORS[0]);
-  // Une couleur venue de PluralKit peut ne pas être dans la palette : on la propose aussi.
-  const original = member?.color;
-  const colors = original && !PALETTE.includes(original) ? [...PALETTE, original] : PALETTE;
+  // La couleur n'est plus choisie ni affichée (la photo la remplace) ; on la garde
+  // pour PluralKit : celle d'origine, ou une de la palette pour un nouveau membre.
+  const [color] = useState<string>(
+    () =>
+      member?.color ??
+      MEMBER_COLORS[Math.floor(Math.random() * MEMBER_COLORS.length)] ??
+      MEMBER_COLORS[0],
+  );
 
   const [description, setDescription] = useState(member?.description ?? "");
   const [roles, setRoles] = useState<string[]>(member?.roles ?? []);
@@ -106,7 +107,7 @@ function MemberForm({ member, onDone }: { member: Member | undefined; onDone: ()
         {member ? m.member_form_title_edit({ name: member.name }) : m.member_form_title()}
       </Heading>
       <div className="avatar-edit">
-        <Avatar name={name || "?"} color={color} src={avatar} size={72} />
+        <Avatar name={name || "?"} src={avatar} size={72} />
         <div className="avatar-edit__actions">
           <FileTrigger
             acceptedFileTypes={["image/png", "image/jpeg", "image/webp"]}
@@ -149,14 +150,6 @@ function MemberForm({ member, onDone }: { member: Member | undefined; onDone: ()
         value={pronouns}
         onChange={setPronouns}
       />
-      <RadioGroup className="field" value={color} onChange={setColor} orientation="horizontal">
-        <Label className="field__label">{m.member_color()}</Label>
-        <div className="swatches">
-          {colors.map((c) => (
-            <Radio key={c} value={c} aria-label={c} className="swatch" style={{ background: c }} />
-          ))}
-        </div>
-      </RadioGroup>
       <AriaTextField
         className="field"
         maxLength={MAX_DESCRIPTION}

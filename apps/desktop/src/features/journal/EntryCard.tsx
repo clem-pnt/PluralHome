@@ -22,7 +22,7 @@ export function EntryCard({ entry, byId }: { entry: Entry; byId: Map<string, Mem
           {authors.length > 0 ? (
             authors.map((a) => (
               <span key={a.id} className="entry__author">
-                <Avatar name={a.name} color={a.color} src={a.avatar} size={22} />
+                <Avatar name={a.name} src={a.avatar} size={22} />
                 {a.name}
               </span>
             ))

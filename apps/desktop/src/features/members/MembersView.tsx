@@ -50,12 +50,8 @@ function MemberCard({ member }: { member: Member }) {
   return (
     <li>
       <DialogTrigger>
-        <AriaButton
-          className="member"
-          aria-label={`${m.member_edit()} ${member.name}`}
-          style={{ "--member": member.color } as React.CSSProperties}
-        >
-          <Avatar name={member.name} color={member.color} src={member.avatar} size={48} />
+        <AriaButton className="member" aria-label={`${m.member_edit()} ${member.name}`}>
+          <Avatar name={member.name} src={member.avatar} size={48} />
           <span className="member__text">
             <span className="member__name">{member.name}</span>
             {member.pronouns && <span className="member__pronouns">{member.pronouns}</span>}

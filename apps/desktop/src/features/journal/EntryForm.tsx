@@ -98,7 +98,7 @@ export function EntryForm({ entry, onDone }: { entry?: Entry; onDone?: () => voi
           <div className="choices">
             {members.list.map((x) => (
               <Checkbox key={x.id} value={x.id} className="choice">
-                <Avatar name={x.name} color={x.color} src={x.avatar} size={22} />
+                <Avatar name={x.name} src={x.avatar} size={22} />
                 {x.name}
               </Checkbox>
             ))}

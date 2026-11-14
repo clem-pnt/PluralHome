@@ -30,7 +30,7 @@ export function CatchUpPanel({ member, byId }: { member: Member; byId: Map<strin
   }
 
   return (
-    <div className="panel catchup" style={{ "--member": member.color } as React.CSSProperties}>
+    <div className="panel catchup">
       <div>
         <h2 className="panel__title">{m.catchup_title({ name: member.name })}</h2>
         <p className="muted">
