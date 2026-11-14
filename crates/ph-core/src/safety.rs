@@ -121,7 +121,7 @@ mod tests {
     fn vault() -> (tempfile::TempDir, Vault) {
         let dir = tempfile::tempdir().unwrap();
         let mut v = Vault::new(dir.path()).with_kdf(KdfParams::TEST);
-        v.create("phrase de test").unwrap();
+        v.create().unwrap();
         (dir, v)
     }
 

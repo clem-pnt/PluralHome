@@ -90,44 +90,48 @@ async fn blocking<T: Send + 'static>(
         .map_err(IpcError::from)
 }
 
+/// État du coffre ; l'ouvre au passage s'il est simplement fermé (la clé est
+/// rangée sur l'appareil).
 #[tauri::command]
 #[specta::specta]
-pub async fn vault_status(state: State<'_, AppState>) -> IpcResult<VaultStatus> {
-    blocking(&state, |v| Ok(v.status())).await
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn vault_create(state: State<'_, AppState>, passphrase: String) -> IpcResult<()> {
-    blocking(&state, move |v| {
-        v.create(&zeroize::Zeroizing::new(passphrase))
+pub async fn vault_open(
+    state: State<'_, AppState>,
+    rem: State<'_, Remote>,
+) -> IpcResult<VaultStatus> {
+    let (before, after) = blocking(&state, |v| {
+        let before = v.status();
+        if before == VaultStatus::Locked {
+            v.open()?;
+        }
+        Ok((before, v.status()))
     })
-    .await
+    .await?;
+    if before != after {
+        rem.wake(Wake::Full);
+    }
+    Ok(after)
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn vault_unlock(
+pub async fn vault_create(state: State<'_, AppState>) -> IpcResult<()> {
+    blocking(&state, Vault::create).await
+}
+
+/// Migration d'un coffre d'avant 0.9 : dernière saisie de la phrase secrète.
+#[tauri::command]
+#[specta::specta]
+pub async fn vault_upgrade(
     state: State<'_, AppState>,
     rem: State<'_, Remote>,
     passphrase: String,
 ) -> IpcResult<()> {
     blocking(&state, move |v| {
-        v.unlock(&zeroize::Zeroizing::new(passphrase))
+        v.upgrade(&zeroize::Zeroizing::new(passphrase))
     })
     .await?;
     rem.wake(Wake::Full);
     Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn vault_lock(state: State<'_, AppState>) -> IpcResult<()> {
-    blocking(&state, |v| {
-        v.lock();
-        Ok(())
-    })
-    .await
 }
 
 #[tauri::command]
@@ -328,9 +332,16 @@ fn backup_path(path: String) -> IpcResult<PathBuf> {
 
 #[tauri::command]
 #[specta::specta]
-pub async fn backup_export(state: State<'_, AppState>, path: String) -> IpcResult<()> {
+pub async fn backup_export(
+    state: State<'_, AppState>,
+    path: String,
+    password: String,
+) -> IpcResult<()> {
     let path = backup_path(path)?;
-    blocking(&state, move |v| v.export_backup(&path)).await
+    blocking(&state, move |v| {
+        v.export_backup(&path, &zeroize::Zeroizing::new(password))
+    })
+    .await
 }
 
 #[tauri::command]
@@ -349,10 +360,9 @@ pub async fn backup_restore(
 
 pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
     tauri_specta::Builder::<tauri::Wry>::new().commands(tauri_specta::collect_commands![
-        vault_status,
+        vault_open,
         vault_create,
-        vault_unlock,
-        vault_lock,
+        vault_upgrade,
         members_list,
         members_create,
         members_update,

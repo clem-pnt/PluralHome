@@ -1,4 +1,4 @@
-//! Coffre : cycle de vie création / déverrouillage / verrouillage.
+//! Coffre : création, ouverture, migration depuis l'ancien mode à phrase secrète.
 
 use std::fs;
 use std::io::Write;
@@ -8,8 +8,10 @@ use rusqlite::{Connection, OpenFlags};
 use serde::Serialize;
 
 use crate::keyfile::{Dek, KdfParams, KeyFile};
+use crate::keystore::{DEVICE_FILE, DeviceKey};
 use crate::{CoreError, Result, migrations};
 
+/// Ancien fichier de clé (≤ 0.8) : la DEK enveloppée par la phrase secrète.
 pub(crate) const KEYFILE: &str = "keyfile.json";
 pub(crate) const DATABASE: &str = "pluralhome.db";
 
@@ -18,13 +20,17 @@ pub(crate) const DATABASE: &str = "pluralhome.db";
 #[cfg_attr(feature = "specta", derive(specta::Type))]
 pub enum VaultStatus {
     Uninitialized,
+    /// Coffre d'avant 0.9 : la phrase secrète est demandée une dernière fois.
+    Legacy,
+    /// Coffre fermé, ouvrable sans saisie.
     Locked,
     Unlocked,
 }
 
 pub struct Vault {
     pub(crate) dir: PathBuf,
-    kdf: KdfParams,
+    pub(crate) kdf: KdfParams,
+    pub(crate) os_keyring: bool,
     conn: Option<Connection>,
     /// Clé de données, gardée en mémoire (effacée à la libération) tant que le
     /// coffre est ouvert : SQLCipher la détient de toute façon, et elle permet
@@ -33,14 +39,23 @@ pub struct Vault {
 }
 
 impl Vault {
+    /// Coffre dont la clé est rangée dans un fichier protégé.
     #[must_use]
     pub fn new(dir: impl Into<PathBuf>) -> Self {
         Self {
             dir: dir.into(),
             kdf: KdfParams::DEFAULT,
+            os_keyring: false,
             conn: None,
             dek: None,
         }
+    }
+
+    /// Range la clé dans le trousseau du système quand il est disponible.
+    #[must_use]
+    pub fn with_os_keyring(mut self) -> Self {
+        self.os_keyring = true;
+        self
     }
 
     #[doc(hidden)]
@@ -58,58 +73,67 @@ impl Vault {
     pub fn status(&self) -> VaultStatus {
         if self.conn.is_some() {
             VaultStatus::Unlocked
-        } else if self.keyfile_path().exists() {
+        } else if self.dir.join(DEVICE_FILE).exists() {
             VaultStatus::Locked
+        } else if self.keyfile_path().exists() {
+            VaultStatus::Legacy
         } else {
             VaultStatus::Uninitialized
         }
     }
 
-    pub fn create(&mut self, passphrase: &str) -> Result<()> {
+    pub fn create(&mut self) -> Result<()> {
         if self.status() != VaultStatus::Uninitialized {
             return Err(CoreError::AlreadyInitialized);
         }
         create_private_dir(&self.dir)?;
-        let (kf, dek) = KeyFile::create(passphrase, self.kdf)?;
-        // La base d'abord : si on s'interrompt ici, aucun fichier de clé n'existe
+        let dek = crate::keyfile::new_dek()?;
+        // La base d'abord : si on s'interrompt ici, aucune référence de clé n'existe
         // et le coffre reste « non créé ». Une base orpheline est écrasée.
         let _ = fs::remove_file(self.dir.join(DATABASE));
         let conn = open_db(&self.dir.join(DATABASE), &dek)?;
-        write_atomic(
-            &self.keyfile_path(),
-            &serde_json::to_vec_pretty(&kf).map_err(|_| CoreError::Crypto)?,
-        )?;
+        DeviceKey::save(&self.dir, &dek, self.os_keyring)?;
         self.conn = Some(conn);
         self.dek = Some(dek);
         tracing::info!("coffre créé");
         Ok(())
     }
 
-    pub fn unlock(&mut self, passphrase: &str) -> Result<()> {
+    /// Ouvre le coffre avec la clé rangée sur l'appareil.
+    pub fn open(&mut self) -> Result<()> {
         match self.status() {
-            VaultStatus::Uninitialized => return Err(CoreError::NotInitialized),
             VaultStatus::Unlocked => return Ok(()),
+            VaultStatus::Uninitialized => return Err(CoreError::NotInitialized),
+            VaultStatus::Legacy => return Err(CoreError::Locked),
             VaultStatus::Locked => {}
+        }
+        let dk = DeviceKey::read(&self.dir)?.ok_or(CoreError::KeyMissing)?;
+        let dek = dk.load(&self.dir)?;
+        let conn = open_db(&self.dir.join(DATABASE), &dek).map_err(|e| match e {
+            CoreError::BadPassphrase => CoreError::KeyMissing,
+            e => e,
+        })?;
+        self.conn = Some(conn);
+        self.dek = Some(dek);
+        tracing::info!("coffre ouvert");
+        Ok(())
+    }
+
+    /// Passe un coffre d'avant 0.9 au rangement sur l'appareil : la phrase secrète
+    /// sert une dernière fois, puis l'ancien fichier de clé est supprimé.
+    pub fn upgrade(&mut self, passphrase: &str) -> Result<()> {
+        if self.status() != VaultStatus::Legacy {
+            return self.open();
         }
         let raw = fs::read(self.keyfile_path())?;
         let kf: KeyFile = serde_json::from_slice(&raw).map_err(|_| CoreError::CorruptKeyFile)?;
         let dek = kf.unwrap_dek(passphrase)?;
-        self.conn = Some(open_db(&self.dir.join(DATABASE), &dek)?);
+        let conn = open_db(&self.dir.join(DATABASE), &dek)?;
+        DeviceKey::save(&self.dir, &dek, self.os_keyring)?;
+        fs::remove_file(self.keyfile_path())?;
+        self.conn = Some(conn);
         self.dek = Some(dek);
-        tracing::info!("coffre déverrouillé");
-        Ok(())
-    }
-
-    pub fn change_passphrase(&mut self, current: &str, next: &str) -> Result<()> {
-        let raw = fs::read(self.keyfile_path())?;
-        let kf: KeyFile = serde_json::from_slice(&raw).map_err(|_| CoreError::CorruptKeyFile)?;
-        let dek = kf.unwrap_dek(current)?;
-        let next_kf = KeyFile::wrap(next, self.kdf, &dek)?;
-        write_atomic(
-            &self.keyfile_path(),
-            &serde_json::to_vec_pretty(&next_kf).map_err(|_| CoreError::Crypto)?,
-        )?;
-        tracing::info!("phrase secrète changée");
+        tracing::info!("coffre migré : plus de phrase secrète");
         Ok(())
     }
 
@@ -117,7 +141,7 @@ impl Vault {
     pub fn lock(&mut self) {
         self.dek = None;
         if self.conn.take().is_some() {
-            tracing::info!("coffre verrouillé");
+            tracing::info!("coffre fermé");
         }
     }
 
@@ -212,7 +236,8 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut v = vault(tmp.path());
         assert_eq!(v.status(), VaultStatus::Uninitialized);
-        v.create("phrase secrete longue").unwrap();
+        v.create().unwrap();
+        assert!(matches!(v.create(), Err(CoreError::AlreadyInitialized)));
         members::create(
             v.conn().unwrap(),
             NewMember {
@@ -227,11 +252,7 @@ mod tests {
         assert!(matches!(v.conn(), Err(CoreError::Locked)));
 
         let mut v = vault(tmp.path());
-        assert!(matches!(
-            v.unlock("mauvaise phrase"),
-            Err(CoreError::BadPassphrase)
-        ));
-        v.unlock("phrase secrete longue").unwrap();
+        v.open().unwrap();
         let list = members::list(v.conn().unwrap()).unwrap();
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].name, "Mila");
@@ -242,7 +263,7 @@ mod tests {
     fn database_is_encrypted_at_rest() {
         let tmp = tempfile::tempdir().unwrap();
         let mut v = vault(tmp.path());
-        v.create("phrase secrete longue").unwrap();
+        v.create().unwrap();
         members::create(
             v.conn().unwrap(),
             NewMember {
@@ -259,12 +280,24 @@ mod tests {
     }
 
     #[test]
-    fn change_passphrase_keeps_data() {
+    fn missing_or_wrong_key_is_reported() {
         let tmp = tempfile::tempdir().unwrap();
         let mut v = vault(tmp.path());
-        v.create("ancienne phrase").unwrap();
+        v.create().unwrap();
+        v.lock();
+        fs::write(tmp.path().join("device.key"), hex::encode([1u8; 32])).unwrap();
+        assert!(matches!(v.open(), Err(CoreError::KeyMissing)));
+        fs::remove_file(tmp.path().join("device.key")).unwrap();
+        assert!(matches!(v.open(), Err(CoreError::KeyMissing)));
+    }
+
+    /// Reproduit un coffre créé par la 0.8 (phrase secrète).
+    fn legacy_vault(dir: &Path, passphrase: &str) {
+        create_private_dir(dir).unwrap();
+        let (kf, dek) = KeyFile::create(passphrase, KdfParams::TEST).unwrap();
+        let conn = open_db(&dir.join(DATABASE), &dek).unwrap();
         members::create(
-            v.conn().unwrap(),
+            &conn,
             NewMember {
                 name: "Lou".into(),
                 pronouns: None,
@@ -272,19 +305,37 @@ mod tests {
             },
         )
         .unwrap();
-        v.change_passphrase("ancienne phrase", "nouvelle phrase")
-            .unwrap();
+        drop(conn);
+        write_atomic(&dir.join(KEYFILE), &serde_json::to_vec(&kf).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn upgrades_passphrase_vault_once() {
+        let tmp = tempfile::tempdir().unwrap();
+        legacy_vault(tmp.path(), "ancienne phrase");
+        let mut v = vault(tmp.path());
+        assert_eq!(v.status(), VaultStatus::Legacy);
+        assert!(matches!(v.open(), Err(CoreError::Locked)));
+        assert!(matches!(
+            v.upgrade("mauvaise phrase"),
+            Err(CoreError::BadPassphrase)
+        ));
+        assert_eq!(v.status(), VaultStatus::Legacy, "échec sans effet de bord");
+        v.upgrade("ancienne phrase").unwrap();
+        assert!(!tmp.path().join(KEYFILE).exists());
         v.lock();
-        assert!(v.unlock("ancienne phrase").is_err());
-        v.unlock("nouvelle phrase").unwrap();
-        assert_eq!(members::list(v.conn().unwrap()).unwrap().len(), 1);
+
+        let mut v = vault(tmp.path());
+        assert_eq!(v.status(), VaultStatus::Locked);
+        v.open().unwrap();
+        assert_eq!(members::list(v.conn().unwrap()).unwrap()[0].name, "Lou");
     }
 
     #[test]
     fn update_and_archive_member() {
         let tmp = tempfile::tempdir().unwrap();
         let mut v = vault(tmp.path());
-        v.create("phrase secrete longue").unwrap();
+        v.create().unwrap();
         let id = members::create(
             v.conn().unwrap(),
             NewMember {
@@ -344,7 +395,7 @@ mod tests {
     fn rejects_invalid_member() {
         let tmp = tempfile::tempdir().unwrap();
         let mut v = vault(tmp.path());
-        v.create("phrase secrete longue").unwrap();
+        v.create().unwrap();
         let bad = NewMember {
             name: "  ".into(),
             pronouns: None,

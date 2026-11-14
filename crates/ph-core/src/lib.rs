@@ -9,6 +9,7 @@ pub mod error;
 pub mod front;
 pub mod journal;
 pub mod keyfile;
+mod keystore;
 pub mod kv;
 pub mod members;
 pub mod messages;

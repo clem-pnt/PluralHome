@@ -6,8 +6,9 @@
 //! "PLURALHOME-BACKUP\n" | longueur de l'en-tête (u32 LE) | en-tête JSON | base SQLCipher
 //! ```
 //!
-//! L'en-tête embarque le fichier de clé du moment : la sauvegarde s'ouvre avec la
-//! phrase secrète en vigueur lors de l'export, sur n'importe quelle installation.
+//! L'en-tête embarque la clé de données enveloppée par le mot de passe choisi à
+//! l'export : la sauvegarde s'ouvre avec ce mot de passe, sur n'importe quelle
+//! installation.
 //! Rien n'y est en clair : la base est chiffrée page à page et authentifiée (HMAC),
 //! la clé est enveloppée par Argon2id + XChaCha20-Poly1305.
 
@@ -19,9 +20,8 @@ use rusqlite::backup::Backup;
 use serde::{Deserialize, Serialize};
 
 use crate::keyfile::KeyFile;
-use crate::vault::{
-    DATABASE, KEYFILE, Vault, VaultStatus, create_private_dir, open_db, write_atomic,
-};
+use crate::keystore::DeviceKey;
+use crate::vault::{DATABASE, Vault, VaultStatus, create_private_dir, open_db, write_atomic};
 use crate::{CoreError, Result};
 
 const MAGIC: &[u8] = b"PLURALHOME-BACKUP\n";
@@ -60,12 +60,12 @@ fn sibling(dir: &Path, suffix: &str) -> PathBuf {
 }
 
 impl Vault {
-    /// Écrit une sauvegarde complète dans `dest`. Le coffre doit être ouvert.
-    pub fn export_backup(&self, dest: &Path) -> Result<()> {
+    /// Écrit une sauvegarde complète dans `dest`, protégée par `password`. Le
+    /// coffre doit être ouvert.
+    pub fn export_backup(&self, dest: &Path, password: &str) -> Result<()> {
         let src = self.conn()?;
         let dek = self.dek.as_ref().ok_or(CoreError::Locked)?;
-        let keyfile: KeyFile = serde_json::from_slice(&fs::read(self.keyfile_path())?)
-            .map_err(|_| CoreError::CorruptKeyFile)?;
+        let keyfile = KeyFile::wrap(password, self.kdf, dek)?;
 
         // Copie cohérente à chaud, vers une base chiffrée avec la même clé.
         let scratch = Scratch::new(sibling(&self.dir, ".export-tmp"))?;
@@ -97,7 +97,7 @@ impl Vault {
         Ok(())
     }
 
-    /// Restaure une sauvegarde. Elle est intégralement vérifiée (phrase secrète,
+    /// Restaure une sauvegarde. Elle est intégralement vérifiée (mot de passe,
     /// intégrité de chaque page, migrations) avant de toucher au coffre actuel,
     /// qui est conservé à côté et non supprimé.
     pub fn restore_backup(&mut self, src: &Path, passphrase: &str) -> Result<()> {
@@ -114,10 +114,9 @@ impl Vault {
         let conn = open_db(&db_path, &dek)?; // clé + migrations
         verify_integrity(&conn)?;
         drop(conn);
-        write_atomic(
-            &staging.0.join(KEYFILE),
-            &serde_json::to_vec_pretty(&header.keyfile).map_err(|_| CoreError::Crypto)?,
-        )?;
+        // Nouvelle clé d'appareil pour le coffre restauré ; celle de l'ancien
+        // coffre reste en place pour qu'il puisse encore s'ouvrir.
+        DeviceKey::save(&staging.0, &dek, self.os_keyring)?;
 
         // Bascule : l'ancien coffre est mis de côté, jamais effacé.
         self.lock();
@@ -177,7 +176,7 @@ mod tests {
 
     fn seeded(root: &Path) -> Vault {
         let mut v = vault_at(&root.join("vault"));
-        v.create("phrase de sauvegarde").unwrap();
+        v.create().unwrap();
         members::create(
             v.conn().unwrap(),
             NewMember {
@@ -194,7 +193,9 @@ mod tests {
     fn export_then_restore_on_fresh_install() {
         let a = tempfile::tempdir().unwrap();
         let file = a.path().join("systeme.phbackup");
-        seeded(a.path()).export_backup(&file).unwrap();
+        seeded(a.path())
+            .export_backup(&file, "mot de passe sauvegarde")
+            .unwrap();
 
         let raw = fs::read(&file).unwrap();
         assert!(
@@ -205,7 +206,7 @@ mod tests {
         let b = tempfile::tempdir().unwrap();
         let mut fresh = vault_at(&b.path().join("vault"));
         assert!(matches!(
-            fresh.restore_backup(&file, "mauvaise phrase"),
+            fresh.restore_backup(&file, "mauvais mot de passe"),
             Err(CoreError::BadPassphrase)
         ));
         assert_eq!(
@@ -214,7 +215,9 @@ mod tests {
             "échec sans effet de bord"
         );
 
-        fresh.restore_backup(&file, "phrase de sauvegarde").unwrap();
+        fresh
+            .restore_backup(&file, "mot de passe sauvegarde")
+            .unwrap();
         assert_eq!(fresh.status(), VaultStatus::Unlocked);
         assert_eq!(
             members::list(fresh.conn().unwrap()).unwrap()[0].name,
@@ -223,7 +226,7 @@ mod tests {
 
         // Et elle se rouvre normalement ensuite.
         fresh.lock();
-        fresh.unlock("phrase de sauvegarde").unwrap();
+        fresh.open().unwrap();
     }
 
     #[test]
@@ -231,7 +234,7 @@ mod tests {
         let a = tempfile::tempdir().unwrap();
         let file = a.path().join("s.phbackup");
         let mut v = seeded(a.path());
-        v.export_backup(&file).unwrap();
+        v.export_backup(&file, "mot de passe sauvegarde").unwrap();
         members::create(
             v.conn().unwrap(),
             NewMember {
@@ -242,7 +245,7 @@ mod tests {
         )
         .unwrap();
 
-        v.restore_backup(&file, "phrase de sauvegarde").unwrap();
+        v.restore_backup(&file, "mot de passe sauvegarde").unwrap();
         assert_eq!(members::list(v.conn().unwrap()).unwrap().len(), 1);
         let kept = fs::read_dir(a.path())
             .unwrap()
@@ -259,7 +262,9 @@ mod tests {
     fn rejects_tampered_or_foreign_files() {
         let a = tempfile::tempdir().unwrap();
         let file = a.path().join("s.phbackup");
-        seeded(a.path()).export_backup(&file).unwrap();
+        seeded(a.path())
+            .export_backup(&file, "mot de passe sauvegarde")
+            .unwrap();
 
         let mut raw = fs::read(&file).unwrap();
         let last = raw.len() - 100;
@@ -271,7 +276,7 @@ mod tests {
         let mut fresh = vault_at(&b.path().join("vault"));
         assert!(
             fresh
-                .restore_backup(&tampered, "phrase de sauvegarde")
+                .restore_backup(&tampered, "mot de passe sauvegarde")
                 .is_err()
         );
         assert_eq!(fresh.status(), VaultStatus::Uninitialized);

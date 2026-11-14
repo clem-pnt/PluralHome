@@ -7,6 +7,7 @@ const byCode: Record<string, () => string> = {
   invalid: m.error_invalid,
   locked: m.error_locked,
   corrupt_key_file: m.error_corrupt_key_file,
+  key_missing: m.error_key_missing,
   not_found: m.error_not_found,
   remote_unauthorized: m.error_remote_unauthorized,
   remote_rate_limited: m.error_remote_rate_limited,

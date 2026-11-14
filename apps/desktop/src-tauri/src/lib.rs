@@ -28,7 +28,8 @@ pub fn run() {
             app.manage(guard);
             let data_dir = app.path().app_data_dir()?;
             tracing::info!(version = env!("CARGO_PKG_VERSION"), "démarrage");
-            let state = AppState::new(ph_core::Vault::new(data_dir.join("vault")));
+            let state =
+                AppState::new(ph_core::Vault::new(data_dir.join("vault")).with_os_keyring());
             app.manage(remote::Remote::start(app.handle().clone(), state.vault())?);
             app.manage(state);
             specta.mount_events(app);

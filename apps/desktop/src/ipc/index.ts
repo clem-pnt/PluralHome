@@ -41,10 +41,9 @@ async function unwrap<T>(p: Promise<Result<T>>): Promise<T> {
 /** Façade typée : chaque appel rejette avec une `AppError` en cas d'échec. */
 export const api = {
   vault: {
-    status: () => unwrap(commands.vaultStatus()),
-    create: (passphrase: string) => unwrap(commands.vaultCreate(passphrase)),
-    unlock: (passphrase: string) => unwrap(commands.vaultUnlock(passphrase)),
-    lock: () => unwrap(commands.vaultLock()),
+    open: () => unwrap(commands.vaultOpen()),
+    create: () => unwrap(commands.vaultCreate()),
+    upgrade: (passphrase: string) => unwrap(commands.vaultUpgrade(passphrase)),
   },
   members: {
     list: () => unwrap(commands.membersList()),
@@ -89,8 +88,8 @@ export const api = {
     set: (plan: Parameters<typeof commands.safetySet>[0]) => unwrap(commands.safetySet(plan)),
   },
   backup: {
-    export: (path: string) => unwrap(commands.backupExport(path)),
-    restore: (path: string, passphrase: string) => unwrap(commands.backupRestore(path, passphrase)),
+    export: (path: string, password: string) => unwrap(commands.backupExport(path, password)),
+    restore: (path: string, password: string) => unwrap(commands.backupRestore(path, password)),
   },
   messages: {
     list: (before: string | null, limit: number) => unwrap(commands.messagesList(before, limit)),

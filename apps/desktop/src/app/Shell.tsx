@@ -39,7 +39,7 @@ function useRemoteSync() {
 }
 type View = keyof typeof VIEWS;
 
-export function Shell({ onLock }: { onLock: () => void }) {
+export function Shell() {
   const [view, setView] = useState<View>("front");
   useRemoteSync();
   const { Component } = VIEWS[view];
@@ -63,9 +63,6 @@ export function Shell({ onLock }: { onLock: () => void }) {
             </Button>
           ))}
         </nav>
-        <Button className="navlink navlink--quiet" onPress={onLock}>
-          {m.nav_lock()}
-        </Button>
       </aside>
       <main className="main">
         <Component />

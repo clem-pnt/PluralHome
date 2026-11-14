@@ -6,10 +6,14 @@ import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core";
 
 /** Commands */
 export const commands = {
-	vaultStatus: () => typedError<VaultStatus, IpcError_Serialize>(__TAURI_INVOKE("vault_status")),
-	vaultCreate: (passphrase: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("vault_create", { passphrase })),
-	vaultUnlock: (passphrase: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("vault_unlock", { passphrase })),
-	vaultLock: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("vault_lock")),
+	/**
+	 *  État du coffre ; l'ouvre au passage s'il est simplement fermé (la clé est
+	 *  rangée sur l'appareil).
+	 */
+	vaultOpen: () => typedError<VaultStatus, IpcError_Serialize>(__TAURI_INVOKE("vault_open")),
+	vaultCreate: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("vault_create")),
+	/**  Migration d'un coffre d'avant 0.9 : dernière saisie de la phrase secrète. */
+	vaultUpgrade: (passphrase: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("vault_upgrade", { passphrase })),
 	membersList: () => typedError<Member_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("members_list")),
 	membersCreate: (input: NewMember_Deserialize) => typedError<Member_Serialize, IpcError_Serialize>(__TAURI_INVOKE("members_create", { input })),
 	membersUpdate: (id: string, input: NewMember_Deserialize) => typedError<Member_Serialize, IpcError_Serialize>(__TAURI_INVOKE("members_update", { id, input })),
@@ -27,7 +31,7 @@ export const commands = {
 	messagesDelete: (id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("messages_delete", { id })),
 	catchUp: (memberId: string) => typedError<CatchUp_Serialize, IpcError_Serialize>(__TAURI_INVOKE("catch_up", { memberId })),
 	messagesMarkRead: (memberId: string, ids: string[]) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("messages_mark_read", { memberId, ids })),
-	backupExport: (path: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("backup_export", { path })),
+	backupExport: (path: string, password: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("backup_export", { path, password })),
 	backupRestore: (path: string, passphrase: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("backup_restore", { path, passphrase })),
 	journalList: (before: string | null, author: string | null, limit: number) => typedError<Entry_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("journal_list", { before, author, limit })),
 	journalCreate: (input: NewEntry_Deserialize) => typedError<Entry_Serialize, IpcError_Serialize>(__TAURI_INVOKE("journal_create", { input })),
@@ -351,7 +355,11 @@ export type Status_Serialize = {
 	pending: number | null,
 };
 
-export type VaultStatus = "uninitialized" | "locked" | "unlocked";
+export type VaultStatus = "uninitialized" | 
+/**  Coffre d'avant 0.9 : la phrase secrète est demandée une dernière fois. */
+"legacy" | 
+/**  Coffre fermé, ouvrable sans saisie. */
+"locked" | "unlocked";
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {

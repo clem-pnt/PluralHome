@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.0 — Plus de phrase secrète
+
+- L'application s'ouvre directement : la clé du coffre est rangée dans le trousseau de la session (GNOME Keyring, KWallet, Trousseau macOS, Gestionnaire d'identifiants Windows), ou à défaut dans un fichier protégé du dossier de l'application.
+- Les coffres existants demandent la phrase secrète une dernière fois, puis passent au nouveau système.
+- Plus de verrouillage automatique ni de bouton « Verrouiller ».
+- Les sauvegardes sont protégées par un mot de passe choisi à chaque export (8 caractères minimum). Les anciennes sauvegardes se restaurent avec l'ancienne phrase secrète.
+- Si la clé disparaît de l'appareil, un écran le dit clairement et propose de restaurer une sauvegarde.
+
 ## 0.8.0 — Journal partagé
 
 - Nouvel écran « Journal » : ce qui s'est passé, écrit par qui était là, pour retrouver le fil d'une journée malgré l'amnésie.

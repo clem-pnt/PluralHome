@@ -1,5 +1,5 @@
-//! Fichier de clé : la DEK (32 octets aléatoires) enveloppée par une KEK
-//! dérivée de la phrase secrète avec Argon2id, chiffrée en XChaCha20-Poly1305.
+//! Enveloppe de clé : la DEK (32 octets aléatoires) enveloppée par une KEK
+//! dérivée d'un mot de passe (sauvegardes, anciens coffres à phrase secrète) avec Argon2id, chiffrée en XChaCha20-Poly1305.
 //! L'en-tête (version, paramètres, sel) est authentifié comme donnée associée :
 //! toute altération, y compris un affaiblissement des paramètres, est rejetée.
 
@@ -91,15 +91,20 @@ fn aad(version: u32, kdf: KdfParams, salt: &[u8]) -> Vec<u8> {
     v
 }
 
+/// Nouvelle clé de données aléatoire.
+pub fn new_dek() -> Result<Dek> {
+    Ok(Zeroizing::new(random::<DEK_LEN>()?))
+}
+
 impl KeyFile {
     /// Génère une nouvelle DEK et l'enveloppe avec la phrase secrète.
     pub fn create(passphrase: &str, kdf: KdfParams) -> Result<(Self, Dek)> {
-        let dek: Dek = Zeroizing::new(random::<DEK_LEN>()?);
+        let dek = new_dek()?;
         let kf = Self::wrap(passphrase, kdf, &dek)?;
         Ok((kf, dek))
     }
 
-    /// Enveloppe une DEK existante (création, changement de phrase secrète).
+    /// Enveloppe une DEK existante (export de sauvegarde).
     pub fn wrap(passphrase: &str, kdf: KdfParams, dek: &Dek) -> Result<Self> {
         if passphrase.chars().count() < MIN_PASSPHRASE_CHARS {
             return Err(CoreError::WeakPassphrase);

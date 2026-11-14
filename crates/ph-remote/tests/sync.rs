@@ -133,7 +133,7 @@ impl PkApi for FakePk {
 fn vault() -> (tempfile::TempDir, Mutex<Vault>) {
     let tmp = tempfile::tempdir().unwrap();
     let mut v = Vault::new(tmp.path()).with_kdf(KdfParams::MINIMUM);
-    v.create("phrase secrete longue").unwrap();
+    v.create().unwrap();
     (tmp, Mutex::new(v))
 }
 

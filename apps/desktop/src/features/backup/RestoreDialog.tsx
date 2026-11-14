@@ -28,7 +28,9 @@ function RestoreForm({ onDone }: { onDone: () => void }) {
     mutationFn: ({ file, pass }: { file: string; pass: string }) => api.backup.restore(file, pass),
     onSuccess: () => {
       // Tout ce qui était en cache décrit l'ancien coffre.
-      queryClient.clear();
+      // On garde la requête d'état du coffre : App l'observe, la supprimer
+      // laisserait l'écran figé sur l'ancien état.
+      queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== keys.vaultStatus[0] });
       queryClient.setQueryData(keys.vaultStatus, "unlocked");
       onDone();
     },
@@ -65,7 +67,7 @@ function RestoreForm({ onDone }: { onDone: () => void }) {
       </div>
       {path && (
         <TextField
-          label={m.backup_restore_passphrase()}
+          label={m.backup_password()}
           type="password"
           autoComplete="off"
           autoFocus

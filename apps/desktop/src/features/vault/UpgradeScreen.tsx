@@ -9,16 +9,17 @@ import { Button } from "../../ui/Button";
 import { TextField } from "../../ui/TextField";
 import { AuthLayout } from "./AuthLayout";
 
-export function UnlockScreen() {
+/** Coffre d'avant 0.9 : la phrase secrète est demandée une dernière fois. */
+export function UpgradeScreen() {
   const [passphrase, setPassphrase] = useState("");
   const unlock = useMutation({
-    mutationFn: api.vault.unlock,
+    mutationFn: api.vault.upgrade,
     onSuccess: () => queryClient.setQueryData(keys.vaultStatus, "unlocked"),
     onError: () => setPassphrase(""),
   });
 
   return (
-    <AuthLayout title={m.unlock_title()} lead={m.unlock_lead()}>
+    <AuthLayout title={m.upgrade_title()} lead={m.upgrade_lead()}>
       <Form
         className="auth__form"
         onSubmit={(e) => {
@@ -27,7 +28,7 @@ export function UnlockScreen() {
         }}
       >
         <TextField
-          label={m.setup_passphrase()}
+          label={m.upgrade_passphrase()}
           type="password"
           autoComplete="current-password"
           autoFocus
@@ -41,7 +42,7 @@ export function UnlockScreen() {
           </p>
         )}
         <Button type="submit" block isDisabled={unlock.isPending}>
-          {unlock.isPending ? m.working() : m.unlock_submit()}
+          {unlock.isPending ? m.working() : m.upgrade_submit()}
         </Button>
       </Form>
     </AuthLayout>

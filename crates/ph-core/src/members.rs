@@ -311,7 +311,7 @@ mod tests {
     fn setup() -> (tempfile::TempDir, Vault, Uuid) {
         let tmp = tempfile::tempdir().unwrap();
         let mut v = Vault::new(tmp.path()).with_kdf(KdfParams::TEST);
-        v.create("phrase secrete longue").unwrap();
+        v.create().unwrap();
         let id = create(
             v.conn().unwrap(),
             NewMember {

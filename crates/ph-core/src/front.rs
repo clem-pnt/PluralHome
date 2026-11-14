@@ -189,7 +189,7 @@ mod tests {
     fn setup() -> (tempfile::TempDir, Vault, Uuid, Uuid) {
         let tmp = tempfile::tempdir().unwrap();
         let mut v = Vault::new(tmp.path()).with_kdf(KdfParams::TEST);
-        v.create("phrase secrete longue").unwrap();
+        v.create().unwrap();
         let mk = |v: &Vault, n: &str| {
             members::create(
                 v.conn().unwrap(),
@@ -309,7 +309,7 @@ mod timed_tests {
     fn remote_changes_are_dated_and_not_echoed() {
         let tmp = tempfile::tempdir().unwrap();
         let mut v = Vault::new(tmp.path()).with_kdf(KdfParams::TEST);
-        v.create("phrase secrete longue").unwrap();
+        v.create().unwrap();
         let a = members::create(
             v.conn().unwrap(),
             NewMember {

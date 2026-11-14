@@ -20,6 +20,8 @@ pub enum CoreError {
     Invalid(&'static str),
     #[error("introuvable")]
     NotFound,
+    #[error("clé du coffre introuvable sur cet appareil")]
+    KeyMissing,
     #[error("fichier de clé illisible ou altéré")]
     CorruptKeyFile,
     #[error("version de données plus récente que l'application")]
@@ -45,6 +47,7 @@ impl CoreError {
             Self::WeakPassphrase => "weak_passphrase",
             Self::Invalid(_) => "invalid",
             Self::NotFound => "not_found",
+            Self::KeyMissing => "key_missing",
             Self::CorruptKeyFile => "corrupt_key_file",
             Self::FutureSchema => "future_schema",
             Self::Crypto => "crypto",
