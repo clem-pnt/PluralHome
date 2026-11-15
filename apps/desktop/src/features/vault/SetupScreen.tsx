@@ -3,9 +3,9 @@ import { useState } from "react";
 import { Button as AriaButton } from "react-aria-components";
 import { keys, queryClient } from "../../app/query";
 import { errorMessage } from "../../i18n/errors";
-import { AppError, api, type SystemKind } from "../../ipc";
+import { api, type SystemKind } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
-import { Button } from "../../ui/Button";
+import { AccountChoice } from "./AccountChoice";
 import { AuthLayout } from "./AuthLayout";
 
 /**
@@ -32,15 +32,6 @@ export function SetupScreen() {
   });
 
   const enter = () => queryClient.setQueryData(keys.vaultStatus, "unlocked");
-  const login = useMutation({
-    mutationFn: api.account.login,
-    onSuccess: (a) => {
-      queryClient.setQueryData(keys.account, a);
-      enter();
-    },
-  });
-  const loginFailed =
-    login.isError && !(login.error instanceof AppError && login.error.code === "remote_cancelled");
 
   if (step === "kind") {
     return (
@@ -83,38 +74,7 @@ export function SetupScreen() {
 
   return (
     <AuthLayout title={m.setup_account_title()} lead={m.setup_account_lead()}>
-      <div className="auth__form">
-        {login.isPending ? (
-          <>
-            <p className="muted" role="status">
-              {m.account_waiting()}
-            </p>
-            <Button block variant="ghost" onPress={() => void api.account.cancelLogin()}>
-              {m.cancel()}
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button block onPress={() => login.mutate()}>
-              {m.setup_account_login()}
-            </Button>
-            <Button block variant="ghost" onPress={enter}>
-              {m.setup_account_guest()}
-            </Button>
-          </>
-        )}
-        {loginFailed && (
-          <p className="alert" role="alert">
-            {errorMessage(login.error)}
-          </p>
-        )}
-        <p className="note">{m.setup_account_note()}</p>
-        {!login.isPending && (
-          <AriaButton className="auth__back" onPress={() => setStep("kind")}>
-            {m.setup_back()}
-          </AriaButton>
-        )}
-      </div>
+      <AccountChoice onEnter={enter} onBack={() => setStep("kind")} />
     </AuthLayout>
   );
 }

@@ -32,6 +32,9 @@ pub const CLIENT_ID: &str = "pluralhome";
 
 const K_REFRESH: &str = "aragonite.refresh_token";
 const K_ACCOUNT: &str = "aragonite.account";
+/// Posé à la déconnexion (ou session refusée) : l'app revient à l'écran d'accueil
+/// tant qu'on ne se reconnecte pas ou qu'on ne choisit pas le mode invité. Local, jamais synchronisé.
+const K_SIGNED_OUT: &str = "aragonite.signed_out";
 
 /// Le SSO émet des jetons d'accès d'une heure ; on les renouvelle un peu avant.
 const ACCESS_TTL: Duration = Duration::from_secs(50 * 60);
@@ -321,6 +324,7 @@ impl Login {
         *session() = Some((tokens.access_token.clone(), Instant::now()));
         let (account, _) = sso.userinfo(&tokens.access_token)?;
         store_account(db, &account)?;
+        db.with(|c| kv::delete(c, K_SIGNED_OUT))?;
         Ok(account)
     }
 
@@ -511,8 +515,19 @@ fn forget(db: &impl Db) -> Result<()> {
 fn forget_keys(db: &impl Db) -> Result<()> {
     Ok(db.with(|c| {
         kv::delete(c, K_REFRESH)?;
-        kv::delete(c, K_ACCOUNT)
+        kv::delete(c, K_ACCOUNT)?;
+        kv::set(c, K_SIGNED_OUT, "1")
     })?)
+}
+
+/// Vrai après une déconnexion, jusqu'à la reconnexion ou au choix du mode invité.
+pub fn signed_out(db: &impl Db) -> Result<bool> {
+    Ok(db.with(|c| kv::get(c, K_SIGNED_OUT))?.is_some())
+}
+
+/// Continuer sans compte après une déconnexion.
+pub fn continue_as_guest(db: &impl Db) -> Result<()> {
+    Ok(db.with(|c| kv::delete(c, K_SIGNED_OUT))?)
 }
 
 #[cfg(test)]
@@ -577,6 +592,22 @@ mod tests {
         assert!(photo.starts_with("data:image/jpeg;base64,"));
         // Hors HTTPS, seule l'adresse du SSO lui-même est acceptée (tests locaux).
         assert!(sso.avatar("http://example.com/a.png").is_none());
+    }
+
+    #[test]
+    fn forgetting_the_account_signs_out_until_guest_is_chosen() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut vault =
+            ph_core::Vault::new(dir.path()).with_kdf(ph_core::keyfile::KdfParams::MINIMUM);
+        vault.create().unwrap();
+        let db = std::sync::Mutex::new(vault);
+        assert!(!signed_out(&db).unwrap());
+        db.with(|c| kv::set(c, K_REFRESH, "r")).unwrap();
+        forget_keys(&db).unwrap();
+        assert!(signed_out(&db).unwrap());
+        assert!(db.with(|c| kv::get(c, K_REFRESH)).unwrap().is_none());
+        continue_as_guest(&db).unwrap();
+        assert!(!signed_out(&db).unwrap());
     }
 
     #[test]

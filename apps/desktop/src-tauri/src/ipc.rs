@@ -769,6 +769,8 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         remote::account_login_cancel,
         remote::account_refresh,
         remote::account_logout,
+        remote::account_signed_out,
+        remote::account_continue_guest,
         remote::pk_status,
         remote::pk_link,
         remote::pk_unlink,

@@ -21,6 +21,7 @@ export const keys = {
   polls: ["polls"] as const,
   catchUp: (memberId: string) => ["catch-up", memberId] as const,
   account: ["account"] as const,
+  signedOut: ["account", "signed-out"] as const,
   cloudStatus: ["cloud", "status"] as const,
   cloudDevices: ["cloud", "devices"] as const,
   pkStatus: ["pluralkit", "status"] as const,

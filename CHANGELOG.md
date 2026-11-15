@@ -6,6 +6,7 @@
 - Mode singlet : le front, les membres et les votes sont masqués, sans rien supprimer. Le profil se change dans Paramètres > Système.
 - Connexion Aragonite : elle s'ouvre dans une fenêtre de l'application (session privée) au lieu du navigateur. Fermer la fenêtre annule la connexion.
 - Compte Aragonite : sa photo de profil s'affiche dans Paramètres. Elle est gardée dans le coffre chiffré et mise à jour à chaque lancement.
+- Se déconnecter d'Aragonite fait sortir de l'application : un écran propose de se reconnecter ou de continuer en invité. Les données restent sur l'appareil. C'est pareil si la session est fermée côté Aragonite.
 
 ## 0.12.1 — Correctif écran vide
 

@@ -124,6 +124,8 @@ export const api = {
     cancelLogin: () => unwrap(commands.accountLoginCancel()),
     refresh: () => unwrap(commands.accountRefresh()),
     logout: () => unwrap(commands.accountLogout()),
+    signedOut: () => unwrap(commands.accountSignedOut()),
+    continueGuest: () => unwrap(commands.accountContinueGuest()),
   },
   pluralkit: {
     status: () => unwrap(commands.pkStatus()),

@@ -105,6 +105,9 @@ export const commands = {
 	accountLoginCancel: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("account_login_cancel")),
 	accountRefresh: () => typedError<Account_Serialize, IpcError_Serialize>(__TAURI_INVOKE("account_refresh")),
 	accountLogout: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("account_logout")),
+	/**  Vrai après une déconnexion : l'interface revient à l'écran d'accueil. */
+	accountSignedOut: () => typedError<boolean, IpcError_Serialize>(__TAURI_INVOKE("account_signed_out")),
+	accountContinueGuest: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("account_continue_guest")),
 	pkStatus: () => typedError<Status_Serialize, IpcError_Serialize>(__TAURI_INVOKE("pk_status")),
 	pkLink: (token: string) => typedError<PkSystem_Serialize, IpcError_Serialize>(__TAURI_INVOKE("pk_link", { token })),
 	pkUnlink: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("pk_unlink")),

@@ -39,7 +39,14 @@ function AccountPanel() {
 
   const login = useMutation({ mutationFn: api.account.login, onSuccess: setAccount });
   const refresh = useMutation({ mutationFn: api.account.refresh, onSuccess: setAccount });
-  const logout = useMutation({ mutationFn: api.account.logout, onSuccess: () => setAccount(null) });
+  // Se déconnecter d'Aragonite fait sortir de l'application (les données restent).
+  const logout = useMutation({
+    mutationFn: api.account.logout,
+    onSuccess: () => {
+      setAccount(null);
+      queryClient.setQueryData(keys.signedOut, true);
+    },
+  });
   // Une annulation voulue n'est pas une erreur à afficher.
   const failure = [login, refresh, logout].find(
     (x) => x.isError && !(x.error instanceof AppError && x.error.code === "remote_cancelled"),

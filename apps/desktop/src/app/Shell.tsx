@@ -72,7 +72,8 @@ function useAccountRefresh() {
       .then((a) => {
         if (a) queryClient.setQueryData(keys.account, a);
       })
-      .catch(() => undefined);
+      // Session refusée par le SSO : le cœur pose le drapeau de déconnexion.
+      .catch(() => queryClient.invalidateQueries({ queryKey: keys.signedOut }));
   }, []);
 }
 

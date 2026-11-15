@@ -337,6 +337,21 @@ pub async fn account_logout(state: State<'_, AppState>) -> IpcResult<()> {
     remote(move || aragonite::logout(&*vault, &Sso::new()?)).await
 }
 
+/// Vrai après une déconnexion : l'interface revient à l'écran d'accueil.
+#[tauri::command]
+#[specta::specta]
+pub async fn account_signed_out(state: State<'_, AppState>) -> IpcResult<bool> {
+    let vault = state.vault();
+    remote(move || aragonite::signed_out(&*vault)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn account_continue_guest(state: State<'_, AppState>) -> IpcResult<()> {
+    let vault = state.vault();
+    remote(move || aragonite::continue_as_guest(&*vault)).await
+}
+
 // ---------- PluralKit ----------
 
 #[tauri::command]
