@@ -1,9 +1,13 @@
 import jsQR from "jsqr";
-import { toDataURL } from "qrcode";
+import { renderSVG } from "uqr";
 
-/** QR code en image `data:` (la CSP n'autorise ni blob: ni canvas externe). */
-export function qrDataUrl(text: string): Promise<string> {
-  return toDataURL(text, { errorCorrectionLevel: "M", margin: 2, width: 280 });
+/**
+ * QR code en image `data:` (la CSP n'autorise pas blob:). Pas de `qrcode` :
+ * il réassigne `exports.toString`, ce qui plante avec `freezePrototype`.
+ */
+export async function qrDataUrl(text: string): Promise<string> {
+  const svg = renderSVG(text, { ecc: "M", border: 2, pixelSize: 8 });
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
 const MAX_SIDE = 1600;
