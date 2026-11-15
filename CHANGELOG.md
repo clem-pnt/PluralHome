@@ -1,6 +1,6 @@
 # Changelog
 
-## Non publié
+## 0.11.2 — Groupes, épingles, réponses et recherche dans les messages
 
 - Messages : groupes nommés, avec photos des membres empilées comme sur Discord ; clic droit sur un groupe pour changer son nom, sa photo et ses membres.
 - Messages : un message épinglé s'affiche en haut de la conversation, cliquer dessus y ramène. Répondre à un message avec le bouton ou un double clic, la réponse cite le message d'origine.
