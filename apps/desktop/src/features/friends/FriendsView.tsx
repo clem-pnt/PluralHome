@@ -1,9 +1,9 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { Tab, TabList, TabPanel, Tabs } from "react-aria-components";
 import { keys } from "../../app/query";
 import { api } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
-import { Button } from "../../ui/Button";
 import { AddFriendPanel } from "./AddFriend";
 import { FriendCard } from "./FriendCard";
 import { FriendError } from "./FriendError";
@@ -15,7 +15,14 @@ import { refreshFriends, useFriends } from "./useFriends";
 /** Amis : autres systèmes, ajoutés par lien ou QR code, avec qui échanger des messages. */
 export function FriendsView() {
   const account = useQuery({ queryKey: keys.account, queryFn: api.account.get });
+  // La synchro tourne seule en arrière-plan (toutes les 30 s) ; on en lance une
+  // tout de suite à l'ouverture de la page pour ne pas attendre.
   const sync = useMutation({ mutationFn: api.friends.syncNow, onSuccess: refreshFriends });
+  const signedIn = !!account.data;
+  const { mutate } = sync;
+  useEffect(() => {
+    if (signedIn) mutate();
+  }, [signedIn, mutate]);
 
   return (
     <section className="view">
@@ -24,11 +31,6 @@ export function FriendsView() {
           <h1>{m.friends_title()}</h1>
           <p className="view__lead">{m.friends_lead()}</p>
         </div>
-        {account.data && (
-          <Button variant="ghost" isDisabled={sync.isPending} onPress={() => sync.mutate()}>
-            {sync.isPending ? m.working() : m.friends_sync()}
-          </Button>
-        )}
       </header>
       <FriendError error={sync.error} />
       {account.isPending ? null : account.data ? (

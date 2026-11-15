@@ -11,6 +11,7 @@
 - Historique du front : on ne peut plus remonter avant le tout premier passage enregistré.
 - Paramètres (et toutes les pages) : on ne peut plus faire défiler la fenêtre au-delà du contenu, ce qui décalait toute l'application. La barre latérale défile seule si la fenêtre est trop basse.
 - Rattrapage : ajouter un alter au front ne fait plus croire aux alters déjà présents qu'ils viennent de revenir. La notification de retour ne liste que ce qui s'est passé pendant leur absence.
+- Amis : plus de bouton « Synchroniser », la synchronisation est automatique (en arrière-plan et à l'ouverture de la page).
 
 ## 0.12.1 — Correctif écran vide
 
