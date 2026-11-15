@@ -9,6 +9,7 @@ import { MembersView } from "../features/members/MembersView";
 import { MessagesView } from "../features/messages/MessagesView";
 import { SettingsView } from "../features/settings/SettingsView";
 import { VoteView } from "../features/vote/VoteView";
+import { api } from "../ipc";
 import { m } from "../paraglide/messages.js";
 import { Logo } from "../ui/Logo";
 import { keys, queryClient } from "./query";
@@ -61,6 +62,20 @@ function useRemoteSync() {
     };
   }, []);
 }
+
+/** Au lancement, relit le compte Aragonite (nom, photo) s'il y en a un. Silencieux hors ligne. */
+function useAccountRefresh() {
+  useEffect(() => {
+    void api.account
+      .get()
+      .then((a) => (a ? api.account.refresh() : null))
+      .then((a) => {
+        if (a) queryClient.setQueryData(keys.account, a);
+      })
+      .catch(() => undefined);
+  }, []);
+}
+
 type View = keyof typeof VIEWS;
 
 /** Sans alters, ces vues n'ont pas de sens : masquées, pas supprimées. */
@@ -75,6 +90,7 @@ export function Shell() {
   const fallback: View = kind === "system" ? "front" : "journal";
   const view = chosen && views.includes(chosen) ? chosen : fallback;
   useRemoteSync();
+  useAccountRefresh();
   const { Component } = VIEWS[view];
 
   return (

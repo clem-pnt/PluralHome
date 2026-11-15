@@ -176,12 +176,16 @@ export type Account = Account_Serialize | Account_Deserialize;
 export type Account_Deserialize = {
 	displayName: string,
 	discord?: DiscordIdentity | null,
+	/**  Photo du compte Aragonite, recadrée ici et gardée dans le coffre (URL `data:`). */
+	avatar?: string | null,
 };
 
 /**  Compte tel qu'affiché dans l'application. */
 export type Account_Serialize = {
 	displayName: string,
 	discord: DiscordIdentity | null,
+	/**  Photo du compte Aragonite, recadrée ici et gardée dans le coffre (URL `data:`). */
+	avatar: string | null,
 };
 
 export type AvatarEdit = 

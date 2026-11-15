@@ -5,6 +5,7 @@
 - Installation : on choisit d'abord si l'on est un système ou une seule personne (singlet), puis si l'on se connecte à un compte Aragonite ou si l'on continue en invité.
 - Mode singlet : le front, les membres et les votes sont masqués, sans rien supprimer. Le profil se change dans Paramètres > Système.
 - Connexion Aragonite : elle s'ouvre dans une fenêtre de l'application (session privée) au lieu du navigateur. Fermer la fenêtre annule la connexion.
+- Compte Aragonite : sa photo de profil s'affiche dans Paramètres. Elle est gardée dans le coffre chiffré et mise à jour à chaque lancement.
 
 ## 0.12.1 — Correctif écran vide
 

@@ -1,7 +1,7 @@
 //! Compte Aragonite (SSO), en client public OAuth 2 : code d'autorisation + PKCE S256,
 //! redirection vers une adresse de bouclage (RFC 8252).
 //!
-//! Le compte ne sert qu'à l'identité (nom affiché, Discord rattaché). Aucune donnée
+//! Le compte ne sert qu'à l'identité (nom affiché, photo, Discord rattaché). Aucune donnée
 //! du coffre ne part vers le SSO. Seul le jeton de renouvellement est gardé, dans le
 //! coffre chiffré ; le jeton d'accès reste en mémoire (moins d'une heure) pour la
 //! synchro chiffrée. Le SSO fait tourner les jetons de renouvellement et ferme la
@@ -15,7 +15,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use base64::Engine;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use ph_core::kv;
 use reqwest::StatusCode;
 use reqwest::blocking::Client;
@@ -53,6 +53,9 @@ fn session() -> std::sync::MutexGuard<'static, Option<(Zeroizing<String>, Instan
 pub struct Account {
     pub display_name: String,
     pub discord: Option<DiscordIdentity>,
+    /// Photo du compte Aragonite, recadrée ici et gardée dans le coffre (URL `data:`).
+    #[serde(default)]
+    pub avatar: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -114,6 +117,7 @@ struct SsoUser {
 #[serde(rename_all = "camelCase")]
 struct SsoProfile {
     display_name: Option<String>,
+    avatar_url: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -152,6 +156,7 @@ impl SsoUser {
         Account {
             display_name,
             discord,
+            avatar: None,
         }
     }
 }
@@ -188,7 +193,8 @@ impl Sso {
         }
     }
 
-    fn userinfo(&self, access: &str) -> Result<Account> {
+    /// Profil du compte. Le booléen indique une photo annoncée mais injoignable.
+    fn userinfo(&self, access: &str) -> Result<(Account, bool)> {
         let res = self
             .http
             .post(self.url("/oauth/userinfo"))
@@ -196,7 +202,14 @@ impl Sso {
             .form(&[("client_id", CLIENT_ID)])
             .send()?;
         match res.status() {
-            s if s.is_success() => Ok(res.json::<UserInfo>()?.user.into_account()),
+            s if s.is_success() => {
+                let user = res.json::<UserInfo>()?.user;
+                let url = user.profile.avatar_url.clone();
+                let mut account = user.into_account();
+                account.avatar = url.as_deref().and_then(|u| self.avatar(u));
+                let missed = url.is_some() && account.avatar.is_none();
+                Ok((account, missed))
+            }
             StatusCode::UNAUTHORIZED => Err(RemoteError::Unauthorized),
             StatusCode::TOO_MANY_REQUESTS => Err(RemoteError::RateLimited),
             s => Err(RemoteError::Http {
@@ -204,6 +217,36 @@ impl Sso {
                 message: String::new(),
             }),
         }
+    }
+
+    /// Télécharge la photo du compte (HTTPS seulement, sans jeton), la recadre et
+    /// la réencode comme une photo de membre. `None` si elle est absente ou illisible.
+    fn avatar(&self, url: &str) -> Option<String> {
+        let url = Url::parse(url).ok()?;
+        if url.scheme() != "https" && url.origin() != self.base.origin() {
+            return None;
+        }
+        let res = self.http.get(url).send().ok()?.error_for_status().ok()?;
+        if res
+            .content_length()
+            .is_some_and(|n| n > crate::avatar::MAX_DOWNLOAD)
+        {
+            return None;
+        }
+        let mut bytes = Vec::new();
+        res.take(crate::avatar::MAX_DOWNLOAD + 1)
+            .read_to_end(&mut bytes)
+            .ok()?;
+        if bytes.len() as u64 > crate::avatar::MAX_DOWNLOAD {
+            return None;
+        }
+        let img = crate::avatar::square(&bytes)?;
+        let mime = if img.starts_with(b"\x89PNG") {
+            "image/png"
+        } else {
+            "image/jpeg"
+        };
+        Some(format!("data:{mime};base64,{}", STANDARD.encode(img)))
     }
 
     fn revoke(&self, token: &str) -> Result<()> {
@@ -276,7 +319,7 @@ impl Login {
         ])?;
         store_refresh(db, &tokens.refresh_token)?;
         *session() = Some((tokens.access_token.clone(), Instant::now()));
-        let account = sso.userinfo(&tokens.access_token)?;
+        let (account, _) = sso.userinfo(&tokens.access_token)?;
         store_account(db, &account)?;
         Ok(account)
     }
@@ -430,15 +473,19 @@ pub fn invalidate() {
     *session() = None;
 }
 
-/// Relit le profil auprès du SSO (nom, Discord). Une session refusée est oubliée.
+/// Relit le profil auprès du SSO (nom, photo, Discord). Une session refusée est oubliée.
 pub fn refresh(db: &impl Db, sso: &Sso) -> Result<Account> {
-    let account = match sso.userinfo(&access_token(db, sso)?) {
+    let (mut account, missed) = match sso.userinfo(&access_token(db, sso)?) {
         Err(RemoteError::Unauthorized) => {
             invalidate();
             sso.userinfo(&access_token(db, sso)?)?
         }
         r => r?,
     };
+    // Photo injoignable cette fois : on garde la précédente plutôt que de l'effacer.
+    if missed && let Some(previous) = self::account(db)? {
+        account.avatar = previous.avatar;
+    }
     store_account(db, &account)?;
     Ok(account)
 }
@@ -498,6 +545,38 @@ mod tests {
         let a = user.into_account();
         assert_eq!(a.display_name, "Mila");
         assert_eq!(a.discord.unwrap().id, "2");
+    }
+
+    #[test]
+    fn account_photo_is_downloaded_and_squared() {
+        use std::io::Cursor;
+        let mut png = Vec::new();
+        image::RgbImage::from_pixel(400, 300, image::Rgb([200, 80, 40]))
+            .write_to(&mut Cursor::new(&mut png), image::ImageFormat::Png)
+            .unwrap();
+        let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0))).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut line = String::new();
+            BufReader::new(&stream).read_line(&mut line).unwrap();
+            assert!(line.starts_with("GET /media/avatars/a.png "));
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                png.len()
+            )
+            .unwrap();
+            stream.write_all(&png).unwrap();
+        });
+        let sso = Sso::with_base(&format!("http://127.0.0.1:{port}")).unwrap();
+        let photo = sso
+            .avatar(&format!("http://127.0.0.1:{port}/media/avatars/a.png"))
+            .unwrap();
+        server.join().unwrap();
+        assert!(photo.starts_with("data:image/jpeg;base64,"));
+        // Hors HTTPS, seule l'adresse du SSO lui-même est acceptée (tests locaux).
+        assert!(sso.avatar("http://example.com/a.png").is_none());
     }
 
     #[test]

@@ -54,7 +54,7 @@ function AccountPanel() {
       {a ? (
         <>
           <div className="identity">
-            <Avatar name={a.displayName || "?"} />
+            <Avatar name={a.displayName || "?"} src={a.avatar} />
             <div className="identity__text">
               <strong>{m.account_signed_in({ name: a.displayName })}</strong>
               <span className="muted">
