@@ -27,6 +27,8 @@ import { RolesField } from "./RolesField";
 const MAX_NAME = 100;
 const MAX_PRONOUNS = 100;
 const MAX_DESCRIPTION = 2000;
+/** Au-delà, la description reste ici même si la synchro PluralKit l'inclut. */
+const PK_MAX_DESCRIPTION = 1000;
 
 const byName = (a: Member, b: Member) => a.name.localeCompare(b.name);
 
@@ -90,6 +92,8 @@ function MemberForm({ member, onDone }: { member: Member | undefined; onDone: ()
       queryClient.setQueryData<Member[]>(keys.members, (prev = []) =>
         [...prev.filter((x) => x.id !== saved.id), saved].sort(byName),
       );
+      // Les rôles nouveaux rejoignent le catalogue du système.
+      void queryClient.invalidateQueries({ queryKey: keys.roles });
       onDone();
     },
   });
@@ -162,6 +166,9 @@ function MemberForm({ member, onDone }: { member: Member | undefined; onDone: ()
       </AriaTextField>
       <RolesField roles={roles} onChange={setRoles} />
       <p className="field__hint">{m.member_profile_local()}</p>
+      {description.trim().length > PK_MAX_DESCRIPTION && (
+        <p className="field__hint">{m.member_description_too_long_for_pk()}</p>
+      )}
       {save.isError && (
         <p className="alert" role="alert">
           {errorMessage(save.error)}

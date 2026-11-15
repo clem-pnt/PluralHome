@@ -59,6 +59,12 @@ export const api = {
       unwrap(commands.membersSetProfile(id, profile)),
     archive: (id: string) => unwrap(commands.membersArchive(id)),
   },
+  roles: {
+    list: () => unwrap(commands.rolesList()),
+    add: (name: string) => unwrap(commands.rolesAdd(name)),
+    rename: (from: string, to: string) => unwrap(commands.rolesRename(from, to)),
+    remove: (name: string) => unwrap(commands.rolesRemove(name)),
+  },
   account: {
     get: () => unwrap(commands.accountGet()),
     login: () => unwrap(commands.accountLogin()),
@@ -71,6 +77,7 @@ export const api = {
     link: (token: string) => unwrap(commands.pkLink(token)),
     unlink: () => unwrap(commands.pkUnlink()),
     syncNow: () => unwrap(commands.pkSyncNow()),
+    setSyncDescription: (enabled: boolean) => unwrap(commands.pkSetSyncDescription(enabled)),
   },
   front: {
     current: () => unwrap(commands.frontCurrent()),

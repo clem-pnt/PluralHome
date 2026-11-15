@@ -4,6 +4,7 @@ import { m } from "../../paraglide/messages.js";
 import { Avatar } from "../../ui/Avatar";
 import { Button } from "../../ui/Button";
 import { MemberDialog } from "./MemberDialog";
+import { RolesDialog } from "./RolesDialog";
 import { useMembers } from "./useMembers";
 
 export function MembersView() {
@@ -24,7 +25,15 @@ export function MembersView() {
           <h1>{m.members_title()}</h1>
           <p className="view__lead">{m.members_lead()}</p>
         </div>
-        {list.length > 0 && addButton}
+        {list.length > 0 && (
+          <div className="panel__actions">
+            <DialogTrigger>
+              <Button variant="ghost">{m.roles_manage()}</Button>
+              <RolesDialog />
+            </DialogTrigger>
+            {addButton}
+          </div>
+        )}
       </header>
 
       {members.isSuccess && list.length === 0 && (

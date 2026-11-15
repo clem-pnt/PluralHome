@@ -16,6 +16,7 @@ pub mod messages;
 mod migrations;
 pub mod outbox;
 pub mod replica;
+pub mod roles;
 mod reset;
 pub mod safety;
 mod time;

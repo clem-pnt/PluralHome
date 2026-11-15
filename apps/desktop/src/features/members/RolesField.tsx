@@ -1,5 +1,8 @@
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { TextField as AriaTextField, Input, Label } from "react-aria-components";
+import { keys } from "../../app/query";
+import { api } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
 import { Button } from "../../ui/Button";
 
@@ -28,13 +31,18 @@ export function RolesField({
   onChange: (roles: string[]) => void;
 }) {
   const [draft, setDraft] = useState("");
+  const catalog = useQuery({ queryKey: keys.roles, queryFn: api.roles.list });
   const full = roles.length >= MAX_ROLES;
   const add = (role: string) => {
     const r = role.trim();
     if (!r || full || roles.some((x) => same(x, r))) return;
     onChange([...roles, r]);
   };
-  const suggestions = SUGGESTIONS.map((s) => s()).filter((s) => !roles.some((r) => same(r, s)));
+  // Rôles courants puis ceux créés par le système, sans doublon.
+  const suggestions: string[] = [];
+  for (const s of [...SUGGESTIONS.map((f) => f()), ...(catalog.data ?? [])]) {
+    if (!roles.some((r) => same(r, s)) && !suggestions.some((x) => same(x, s))) suggestions.push(s);
+  }
 
   return (
     <div className="field">

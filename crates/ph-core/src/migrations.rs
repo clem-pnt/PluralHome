@@ -188,6 +188,21 @@ const MIGRATIONS: &[&str] = &[
             " AND OLD.key = 'safety.plan'"
         ),
     ),
+    // 9 — catalogue de rôles propre au système, partagé entre appareils. Le nom
+    // sert de clé : deux appareils qui créent le même rôle ne font qu'une ligne.
+    // Amorcé avec les rôles déjà portés par les membres.
+    concat!(
+        "CREATE TABLE role (
+            name       TEXT PRIMARY KEY NOT NULL CHECK (length(name) BETWEEN 1 AND 40),
+            created_at INTEGER NOT NULL
+        ) STRICT, WITHOUT ROWID;\n",
+        track!("role", "json_array(NEW.name)", "json_array(OLD.name)"),
+        "INSERT OR IGNORE INTO role (name, created_at)
+            SELECT DISTINCT trim(j.value), ",
+        sql_now!(),
+        " FROM member_profile p, json_each(p.roles) j
+            WHERE j.type = 'text' AND length(trim(j.value)) BETWEEN 1 AND 40;",
+    ),
 ];
 
 pub fn run(conn: &mut Connection) -> Result<()> {
@@ -307,6 +322,37 @@ mod tests {
             .query_row("SELECT count(*) FROM front_session", [], |r| r.get(0))
             .unwrap();
         assert_eq!(fronts, 0, "ON DELETE CASCADE toujours actif");
+    }
+
+    #[test]
+    fn role_catalog_is_seeded_from_member_roles() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        for sql in &MIGRATIONS[..8] {
+            conn.execute_batch(sql).unwrap();
+        }
+        conn.pragma_update(None, "user_version", 8).unwrap();
+        let id = [3u8; 16];
+        conn.execute("INSERT INTO member (id, name, color, created_at) VALUES (?1, 'Mila', '#4f8583', 0)", [id]).unwrap();
+        conn.execute(
+            r#"INSERT INTO member_profile (member_id, roles) VALUES (?1, '["Protecteur", " Petit·e ", 3]')"#,
+            [id],
+        )
+        .unwrap();
+
+        run(&mut conn).unwrap();
+        let roles: Vec<String> = conn
+            .prepare("SELECT name FROM role ORDER BY name")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert_eq!(roles, vec!["Petit·e", "Protecteur"]);
+        // Suivis pour la synchro entre appareils.
+        let tracked: i64 = conn
+            .query_row("SELECT count(*) FROM sync_state WHERE tbl = 'role'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(tracked, 2);
     }
 
     #[test]

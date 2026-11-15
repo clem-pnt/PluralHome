@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use ph_core::front::{self, FrontChange, FrontSession};
 use ph_core::journal::{self, Entry, NewEntry};
 use ph_core::members::{self, Member, NewMember, Profile};
+use ph_core::roles;
 use ph_core::messages::{self, CatchUp, Message, NewMessage};
 use ph_core::safety::{self, SafetyPlan};
 use ph_core::{CoreError, Vault, VaultStatus};
@@ -173,18 +174,68 @@ pub async fn members_update(
     Ok(m)
 }
 
-/// Profil détaillé (description, rôles, image) : reste sur l'appareil, rien n'est envoyé.
+/// Profil détaillé (description, rôles, image). Seule la description peut
+/// partir sur PluralKit, et seulement si l'option est activée.
 #[tauri::command]
 #[specta::specta]
 pub async fn members_set_profile(
     state: State<'_, AppState>,
+    rem: State<'_, Remote>,
     id: Uuid,
     profile: Profile,
 ) -> IpcResult<Member> {
-    blocking(&state, move |v| {
+    let m = blocking(&state, move |v| {
         members::set_profile(v.conn()?, id, profile)
     })
-    .await
+    .await?;
+    rem.wake(Wake::Full);
+    Ok(m)
+}
+
+/// Catalogue de rôles du système.
+#[tauri::command]
+#[specta::specta]
+pub async fn roles_list(state: State<'_, AppState>) -> IpcResult<Vec<String>> {
+    blocking(&state, |v| roles::list(v.conn()?)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn roles_add(
+    state: State<'_, AppState>,
+    rem: State<'_, Remote>,
+    name: String,
+) -> IpcResult<Vec<String>> {
+    let r = blocking(&state, move |v| roles::add(v.conn()?, &name)).await?;
+    rem.wake(Wake::Full);
+    Ok(r)
+}
+
+/// Renomme un rôle partout (catalogue et membres qui le portent).
+#[tauri::command]
+#[specta::specta]
+pub async fn roles_rename(
+    state: State<'_, AppState>,
+    rem: State<'_, Remote>,
+    from: String,
+    to: String,
+) -> IpcResult<Vec<String>> {
+    let r = blocking(&state, move |v| roles::rename(v.conn_mut()?, &from, &to)).await?;
+    rem.wake(Wake::Full);
+    Ok(r)
+}
+
+/// Supprime un rôle du catalogue et le retire à tous les membres.
+#[tauri::command]
+#[specta::specta]
+pub async fn roles_remove(
+    state: State<'_, AppState>,
+    rem: State<'_, Remote>,
+    name: String,
+) -> IpcResult<Vec<String>> {
+    let r = blocking(&state, move |v| roles::remove(v.conn_mut()?, &name)).await?;
+    rem.wake(Wake::Full);
+    Ok(r)
 }
 
 /// Archive : le membre disparaît des listes, son historique reste.
@@ -335,6 +386,10 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         members_update,
         members_set_profile,
         members_archive,
+        roles_list,
+        roles_add,
+        roles_rename,
+        roles_remove,
         front_current,
         front_change,
         front_history,
@@ -359,6 +414,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         remote::pk_link,
         remote::pk_unlink,
         remote::pk_sync_now,
+        remote::pk_set_sync_description,
         remote::cloud_status,
         remote::cloud_probe,
         remote::cloud_enable,

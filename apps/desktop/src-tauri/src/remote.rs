@@ -298,6 +298,24 @@ pub async fn pk_sync_now(state: State<'_, AppState>, rem: State<'_, Remote>) -> 
     .await
 }
 
+/// Active ou coupe l'envoi des descriptions sur PluralKit (propre à l'appareil).
+#[tauri::command]
+#[specta::specta]
+pub async fn pk_set_sync_description(
+    state: State<'_, AppState>,
+    rem: State<'_, Remote>,
+    enabled: bool,
+) -> IpcResult<Status> {
+    let vault = state.vault();
+    let r = remote(move || {
+        sync::set_sync_description(&*vault, enabled)?;
+        sync::status(&*vault)
+    })
+    .await?;
+    rem.wake(Wake::Full);
+    Ok(r)
+}
+
 // ---------- synchro chiffrée ----------
 
 #[tauri::command]

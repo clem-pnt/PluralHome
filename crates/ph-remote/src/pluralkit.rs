@@ -40,9 +40,11 @@ pub struct PkMember {
     /// Adresse de la photo de profil : lue seulement, jamais écrite.
     #[serde(default)]
     pub avatar_url: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
-/// Champs écrits par PluralHome ; les autres (avatar, description…) ne sont jamais touchés.
+/// Champs écrits par PluralHome ; les autres (avatar, anniversaire…) ne sont jamais touchés.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct PkMemberPatch {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -52,12 +54,21 @@ pub struct PkMemberPatch {
     pub pronouns: Option<Option<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
+    /// Seulement si la synchro des descriptions est activée. `Some(None)` l'efface.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<Option<String>>,
 }
+
+/// Longueur maximale d'une description sur PluralKit.
+pub const PK_MAX_DESCRIPTION: usize = 1000;
 
 impl PkMemberPatch {
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.name.is_none() && self.pronouns.is_none() && self.color.is_none()
+        self.name.is_none()
+            && self.pronouns.is_none()
+            && self.color.is_none()
+            && self.description.is_none()
     }
 }
 

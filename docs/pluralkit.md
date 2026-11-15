@@ -24,7 +24,8 @@ intermédiaire ni de webhook : un serveur qui reçoit les événements PluralKit
 
 ### Ce qui est partagé
 
-Noms, pronoms, couleurs des membres et switchs. Rien d'autre (messages, notes, historique détaillé) ne
+Noms, pronoms, couleurs des membres et switchs ; les descriptions en plus si l'option est activée sur
+l'appareil (`kv pluralkit.sync_description`, propre à l'appareil, effacée en déliant). Rien d'autre (messages, notes, historique détaillé) ne
 quitte l'appareil. L'écran de liaison rappelle que PluralKit stocke ces données sans chiffrement de bout en bout.
 
 ### Membres
@@ -34,8 +35,12 @@ quitte l'appareil. L'écran de liaison rappelle que PluralKit stocke ces donnée
 - À la liaison, un membre présent des deux côtés sous le même nom (sans casse) prend les valeurs de PluralKit.
 - Membre créé ici : créé sur PluralKit. Membre créé sur PluralKit : créé ici.
 - Supprimé sur PluralKit : délié, jamais effacé ici. Archivé ici : plus touché par la synchro.
-- Couleur absente sur PluralKit : pas d'avis, la couleur locale est gardée. Champs PluralKit non gérés
-  (avatar, description…) : jamais modifiés.
+- Couleur absente sur PluralKit : pas d'avis, la couleur locale est gardée. Autres champs PluralKit
+  (nom d'affichage, bannière, confidentialité…) : jamais modifiés.
+- Description (depuis 0.11.0, option désactivée par défaut) : même fusion à trois voies. Au premier
+  contact (pas encore de valeur mémorisée), une description vide prend celle de l'autre côté, et si les
+  deux diffèrent la locale l'emporte. Au-delà de 1000 caractères (limite PluralKit), elle reste ici et
+  n'est pas comparée. Option coupée : rien n'est lu ni écrit.
 - Photo de profil, à sens unique (depuis 0.10.1) : la photo PluralKit est téléchargée (HTTPS, sans le jeton,
   8 Mio au plus), recadrée en 256 px, réencodée puis rangée dans le coffre chiffré, seulement si le membre
   n'a pas de photo ici. Une photo locale n'est jamais remplacée ; chaque adresse n'est tentée qu'une fois

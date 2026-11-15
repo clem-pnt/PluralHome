@@ -1,6 +1,14 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Dialog, DialogTrigger, Form, Heading, Modal, ModalOverlay } from "react-aria-components";
+import {
+  Dialog,
+  DialogTrigger,
+  Form,
+  Heading,
+  Modal,
+  ModalOverlay,
+  Switch,
+} from "react-aria-components";
 import { keys, queryClient } from "../../app/query";
 import { codeMessage, errorMessage } from "../../i18n/errors";
 import { formatWhen } from "../../i18n/format";
@@ -141,6 +149,7 @@ function PluralKitPanel() {
             )}
           </ul>
           <p className="note">{m.pk_rules()}</p>
+          <DescriptionSwitch enabled={s.syncDescription} onDone={afterChange} />
           <div className="panel__actions">
             <Button isDisabled={syncNow.isPending} onPress={() => syncNow.mutate()}>
               {syncNow.isPending ? m.working() : m.pk_sync_now()}
@@ -150,6 +159,34 @@ function PluralKitPanel() {
         </>
       ) : (
         status.isSuccess && <LinkForm onDone={afterChange} />
+      )}
+    </div>
+  );
+}
+
+function DescriptionSwitch({ enabled, onDone }: { enabled: boolean; onDone: () => void }) {
+  const set = useMutation({
+    mutationFn: api.pluralkit.setSyncDescription,
+    onSuccess: (next) => {
+      queryClient.setQueryData(keys.pkStatus, next);
+      onDone();
+    },
+  });
+  return (
+    <div className="field">
+      <Switch
+        className="choice"
+        isSelected={enabled}
+        isDisabled={set.isPending}
+        onChange={(on) => set.mutate(on)}
+      >
+        {enabled ? m.pk_sync_description_on() : m.pk_sync_description_off()}
+      </Switch>
+      <span className="field__hint">{m.pk_sync_description_hint()}</span>
+      {set.isError && (
+        <p className="alert" role="alert">
+          {errorMessage(set.error)}
+        </p>
       )}
     </div>
   );

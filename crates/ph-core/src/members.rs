@@ -9,7 +9,7 @@ use crate::{CoreError, Result};
 /// Mêmes limites que PluralKit, pour que la synchro ne tronque jamais rien.
 pub const MAX_NAME: usize = 100;
 pub const MAX_PRONOUNS: usize = 100;
-/// Profil local (non synchronisé).
+/// Profil. PluralKit limite les descriptions à 1000 caractères : au-delà, elles restent ici.
 pub const MAX_DESCRIPTION: usize = 2000;
 pub const MAX_ROLES: usize = 12;
 pub const MAX_ROLE: usize = 40;
@@ -195,7 +195,8 @@ pub fn create(conn: &Connection, input: NewMember) -> Result<Member> {
     })
 }
 
-/// Profil détaillé d'un membre. Local à l'appareil : la synchro PluralKit ne le lit jamais.
+/// Profil détaillé d'un membre. Rien n'en part vers PluralKit, sauf la description
+/// si la synchro des descriptions est activée.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
@@ -269,6 +270,7 @@ impl Profile {
 pub fn set_profile(conn: &Connection, id: Uuid, profile: Profile) -> Result<Member> {
     let (description, roles, avatar) = profile.validated()?;
     ensure_active(conn, &[id])?;
+    let validated_roles = roles.clone();
     let roles = serde_json::to_string(&roles).map_err(|_| CoreError::Invalid("roles"))?;
     let current: Option<Vec<u8>> = conn
         .query_row(
@@ -285,7 +287,34 @@ pub fn set_profile(conn: &Connection, id: Uuid, profile: Profile) -> Result<Memb
             description = excluded.description, roles = excluded.roles, avatar = excluded.avatar",
         params![id.as_bytes(), description, roles, avatar],
     )?;
+    // Un rôle nouveau rejoint le catalogue du système (sans doublon de casse).
+    let known: Vec<String> = crate::roles::list(conn)?
+        .into_iter()
+        .map(|r| r.to_lowercase())
+        .collect();
+    let mut room = crate::roles::MAX_CATALOG.saturating_sub(known.len());
+    for r in &validated_roles {
+        if room > 0 && !known.contains(&r.to_lowercase()) {
+            crate::roles::add(conn, r)?;
+            room -= 1;
+        }
+    }
     get(conn, id)
+}
+
+/// Remplace la seule description d'un membre (synchro PluralKit), sans toucher au reste du profil.
+pub fn set_description(conn: &Connection, id: Uuid, description: Option<&str>) -> Result<()> {
+    let description = description.map(str::trim).filter(|d| !d.is_empty());
+    if description.is_some_and(|d| d.chars().count() > MAX_DESCRIPTION) {
+        return Err(CoreError::Invalid("description"));
+    }
+    ensure_active(conn, &[id])?;
+    conn.execute(
+        "INSERT INTO member_profile (member_id, description) VALUES (?1, ?2)
+         ON CONFLICT (member_id) DO UPDATE SET description = excluded.description",
+        params![id.as_bytes(), description],
+    )?;
+    Ok(())
 }
 
 /// Vérifie que tous les identifiants désignent des membres actifs.

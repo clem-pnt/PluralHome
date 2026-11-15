@@ -38,6 +38,11 @@ const TABLES: &[Spec] = &[
         only_key: None,
     },
     Spec {
+        name: "role",
+        pk: &[("name", Text)],
+        only_key: None,
+    },
+    Spec {
         name: "journal_entry",
         pk: &[("id", Blob)],
         only_key: None,

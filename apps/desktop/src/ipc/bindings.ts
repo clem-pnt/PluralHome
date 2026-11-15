@@ -19,10 +19,20 @@ export const commands = {
 	membersList: () => typedError<Member_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("members_list")),
 	membersCreate: (input: NewMember_Deserialize) => typedError<Member_Serialize, IpcError_Serialize>(__TAURI_INVOKE("members_create", { input })),
 	membersUpdate: (id: string, input: NewMember_Deserialize) => typedError<Member_Serialize, IpcError_Serialize>(__TAURI_INVOKE("members_update", { id, input })),
-	/**  Profil détaillé (description, rôles, image) : reste sur l'appareil, rien n'est envoyé. */
+	/**
+	 *  Profil détaillé (description, rôles, image). Seule la description peut
+	 *  partir sur PluralKit, et seulement si l'option est activée.
+	 */
 	membersSetProfile: (id: string, profile: Profile_Deserialize) => typedError<Member_Serialize, IpcError_Serialize>(__TAURI_INVOKE("members_set_profile", { id, profile })),
 	/**  Archive : le membre disparaît des listes, son historique reste. */
 	membersArchive: (id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("members_archive", { id })),
+	/**  Catalogue de rôles du système. */
+	rolesList: () => typedError<string[], IpcError_Serialize>(__TAURI_INVOKE("roles_list")),
+	rolesAdd: (name: string) => typedError<string[], IpcError_Serialize>(__TAURI_INVOKE("roles_add", { name })),
+	/**  Renomme un rôle partout (catalogue et membres qui le portent). */
+	rolesRename: (from: string, to: string) => typedError<string[], IpcError_Serialize>(__TAURI_INVOKE("roles_rename", { from, to })),
+	/**  Supprime un rôle du catalogue et le retire à tous les membres. */
+	rolesRemove: (name: string) => typedError<string[], IpcError_Serialize>(__TAURI_INVOKE("roles_remove", { name })),
 	frontCurrent: () => typedError<FrontSession_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("front_current")),
 	frontChange: (change: FrontChange) => typedError<FrontSession_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("front_change", { change })),
 	/**  Bornes en millisecondes Unix, `[from, to)`. */
@@ -50,6 +60,8 @@ export const commands = {
 	pkUnlink: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("pk_unlink")),
 	/**  Synchro complète immédiate ; renvoie l'état à jour (erreur comprise). */
 	pkSyncNow: () => typedError<Status_Serialize, IpcError_Serialize>(__TAURI_INVOKE("pk_sync_now")),
+	/**  Active ou coupe l'envoi des descriptions sur PluralKit (propre à l'appareil). */
+	pkSetSyncDescription: (enabled: boolean) => typedError<Status_Serialize, IpcError_Serialize>(__TAURI_INVOKE("pk_set_sync_description", { enabled })),
 	cloudStatus: () => typedError<CloudStatus_Serialize, IpcError_Serialize>(__TAURI_INVOKE("cloud_status")),
 	/**  Indique si une synchro existe déjà sur ce compte (il faut alors la rejoindre). */
 	cloudProbe: () => typedError<Remote, IpcError_Serialize>(__TAURI_INVOKE("cloud_probe")),
@@ -344,17 +356,26 @@ export type PkSystem_Serialize = {
 	name: string | null,
 };
 
-/**  Profil détaillé d'un membre. Local à l'appareil : la synchro PluralKit ne le lit jamais. */
+/**
+ *  Profil détaillé d'un membre. Rien n'en part vers PluralKit, sauf la description
+ *  si la synchro des descriptions est activée.
+ */
 export type Profile = Profile_Serialize | Profile_Deserialize;
 
-/**  Profil détaillé d'un membre. Local à l'appareil : la synchro PluralKit ne le lit jamais. */
+/**
+ *  Profil détaillé d'un membre. Rien n'en part vers PluralKit, sauf la description
+ *  si la synchro des descriptions est activée.
+ */
 export type Profile_Deserialize = {
 	description?: string | null,
 	roles: string[],
 	avatar: AvatarEdit,
 };
 
-/**  Profil détaillé d'un membre. Local à l'appareil : la synchro PluralKit ne le lit jamais. */
+/**
+ *  Profil détaillé d'un membre. Rien n'en part vers PluralKit, sauf la description
+ *  si la synchro des descriptions est activée.
+ */
 export type Profile_Serialize = {
 	description: string | null,
 	roles: string[],
@@ -403,6 +424,8 @@ export type Status_Deserialize = {
 	lastError?: string | null,
 	/**  Switchs locaux pas encore envoyés. */
 	pending: number | null,
+	/**  Les descriptions sont synchronisées avec PluralKit. */
+	syncDescription: boolean,
 };
 
 export type Status_Serialize = {
@@ -414,6 +437,8 @@ export type Status_Serialize = {
 	lastError: string | null,
 	/**  Switchs locaux pas encore envoyés. */
 	pending: number | null,
+	/**  Les descriptions sont synchronisées avec PluralKit. */
+	syncDescription: boolean,
 };
 
 export type VaultStatus = "uninitialized" | 

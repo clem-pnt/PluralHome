@@ -6,6 +6,11 @@
 //!   propagé ; changé des deux côtés, la version locale l'emporte. À la liaison,
 //!   un membre présent des deux côtés sous le même nom prend les valeurs de
 //!   PluralKit. Un membre supprimé sur PluralKit est délié, jamais effacé ici.
+//! - Descriptions : seulement si l'option est activée sur cet appareil (une
+//!   description PluralKit peut être publique). Même fusion ; au premier
+//!   contact, une description vide prend celle de l'autre côté, et si les deux
+//!   diffèrent la locale l'emporte. Plus longue que la limite PluralKit, elle
+//!   reste ici sans être synchronisée.
 //! - Switchs : les changements locaux partent par la file d'envoi, dans l'ordre ;
 //!   les switchs PluralKit plus récents que le dernier changement local sont
 //!   appliqués ici. Chaque switch connu est mémorisé par son identifiant : aucun
@@ -23,7 +28,7 @@ use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use crate::db::Db;
-use crate::pluralkit::{PkApi, PkMember, PkMemberPatch, PkSwitch, PkSystem};
+use crate::pluralkit::{PK_MAX_DESCRIPTION, PkApi, PkMember, PkMemberPatch, PkSwitch, PkSystem};
 use crate::{RemoteError, Result};
 
 pub const K_ENABLED: &str = "pluralkit.enabled";
@@ -32,6 +37,8 @@ const K_SYSTEM: &str = "pluralkit.system";
 const K_LINKED_AT: &str = "pluralkit.linked_at";
 const K_LAST_SYNC: &str = "pluralkit.last_sync";
 const K_LAST_ERROR: &str = "pluralkit.last_error";
+/// Option propre à l'appareil : les descriptions partent-elles sur PluralKit ?
+const K_SYNC_DESCRIPTION: &str = "pluralkit.sync_description";
 
 /// Couleurs attribuées aux membres importés sans couleur (mêmes que l'interface).
 const PALETTE: [&str; 10] = [
@@ -48,6 +55,10 @@ struct Snapshot {
     /// une photo retirée ici n'est jamais réimportée, sauf si elle change là-bas.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     avatar: Option<String>,
+    /// Dernière description synchronisée ; `None` = jamais comparée (option
+    /// désactivée, ou description trop longue pour PluralKit).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -80,6 +91,8 @@ pub struct Status {
     /// Switchs locaux pas encore envoyés.
     #[cfg_attr(feature = "specta", specta(type = f64))]
     pub pending: i64,
+    /// Les descriptions sont synchronisées avec PluralKit.
+    pub sync_description: bool,
 }
 
 // ---------- stockage ----------
@@ -105,6 +118,7 @@ fn load_links(c: &Connection) -> ph_core::Result<Vec<Link>> {
             pronouns: None,
             color: None,
             avatar: None,
+            description: None,
         });
         out.push(Link {
             member_id,
@@ -152,13 +166,19 @@ fn default_color(seed: &str) -> &'static str {
     PALETTE[h % PALETTE.len()]
 }
 
-fn snapshot_of_local(m: &Member) -> Snapshot {
+fn snapshot_of_local(m: &Member, description: Option<String>) -> Snapshot {
     Snapshot {
         name: m.name.clone(),
         pronouns: m.pronouns.clone(),
         color: Some(m.color.clone()),
         avatar: None,
+        description,
     }
+}
+
+/// Description comparable : sans espaces autour, vide si absente.
+fn desc(d: Option<&str>) -> String {
+    d.map_or("", str::trim).to_owned()
 }
 
 fn snapshot_of_remote(r: &PkMember) -> Snapshot {
@@ -167,6 +187,7 @@ fn snapshot_of_remote(r: &PkMember) -> Snapshot {
         pronouns: r.pronouns.clone().filter(|p| !p.trim().is_empty()),
         color: pk_color(r.color.as_deref()),
         avatar: None,
+        description: None,
     }
 }
 
@@ -198,8 +219,21 @@ pub fn status(db: &impl Db) -> Result<Status> {
             last_sync: int(c, K_LAST_SYNC)?,
             last_error: kv::get(c, K_LAST_ERROR)?,
             pending: outbox::count(c, PK_SWITCH_TOPIC)?,
+            sync_description: kv::flag(c, K_SYNC_DESCRIPTION)?,
         })
     })?)
+}
+
+/// Active ou coupe la synchro des descriptions sur cet appareil.
+pub fn set_sync_description(db: &impl Db, on: bool) -> Result<()> {
+    db.with(|c| {
+        if on {
+            kv::set(c, K_SYNC_DESCRIPTION, "1")
+        } else {
+            kv::delete(c, K_SYNC_DESCRIPTION)
+        }
+    })?;
+    Ok(())
 }
 
 pub fn token(db: &impl Db) -> Result<Option<Zeroizing<String>>> {
@@ -247,6 +281,7 @@ pub fn unlink(db: &impl Db) -> Result<()> {
             K_LINKED_AT,
             K_LAST_SYNC,
             K_LAST_ERROR,
+            K_SYNC_DESCRIPTION,
         ] {
             kv::delete(&tx, k)?;
         }
@@ -279,6 +314,7 @@ fn merge_linked(
     local: &Member,
     r: &PkMember,
     link: &Link,
+    with_desc: bool,
 ) -> ph_core::Result<(bool, Option<PushPlan>)> {
     let theirs = snapshot_of_remote(r);
     let snap = &link.snapshot;
@@ -288,6 +324,12 @@ fn merge_linked(
     let their_color = theirs.color.clone().or_else(|| snap.color.clone());
     let (color, s_col) = merge(&Some(local.color.clone()), &their_color, &snap.color);
     let color = color.unwrap_or_else(|| local.color.clone());
+
+    let (description, s_desc) = if with_desc {
+        merge_description(tx, local, r, link.snapshot.description.as_deref())?
+    } else {
+        (None, Side::Same)
+    };
 
     let pulled = [&s_name, &s_pro, &s_col].contains(&&Side::Pull);
     if pulled {
@@ -305,7 +347,10 @@ fn merge_linked(
         name: (s_name == Side::Push).then(|| name.clone()),
         pronouns: (s_pro == Side::Push).then(|| pronouns.clone()),
         color: (s_col == Side::Push).then(|| color.trim_start_matches('#').to_owned()),
+        description: (s_desc == Side::Push)
+            .then(|| description.clone().filter(|d| !d.is_empty())),
     };
+    let pulled = pulled || s_desc == Side::Pull;
     let mut next = link.clone();
     next.pk_hid.clone_from(&r.id);
     next.snapshot = Snapshot {
@@ -313,6 +358,7 @@ fn merge_linked(
         pronouns,
         color: Some(color),
         avatar: link.snapshot.avatar.clone(),
+        description,
     };
     if patch.is_empty() {
         save_link(tx, &next)?;
@@ -322,8 +368,39 @@ fn merge_linked(
     }
 }
 
+/// Fusion de la description d'un membre lié ; la description reçue est appliquée
+/// ici aussitôt. Renvoie la valeur à mémoriser (`None` = pas comparée).
+fn merge_description(
+    tx: &Connection,
+    local: &Member,
+    r: &PkMember,
+    snap: Option<&str>,
+) -> ph_core::Result<(Option<String>, Side)> {
+    let mine = desc(local.description.as_deref());
+    let theirs = desc(r.description.as_deref());
+    if mine.chars().count() > PK_MAX_DESCRIPTION {
+        return Ok((None, Side::Same));
+    }
+    let (value, side) = match snap {
+        Some(s) => merge(&mine, &theirs, &s.to_owned()),
+        None if mine == theirs => (mine, Side::Same),
+        // Premier contact : une description vide prend l'autre ; sinon la locale gagne.
+        None if mine.is_empty() => (theirs, Side::Pull),
+        None => (mine, Side::Push),
+    };
+    if side == Side::Pull {
+        members::set_description(tx, local.id, Some(&value))?;
+    }
+    Ok((Some(value), side))
+}
+
 /// Crée ici un membre venu de PluralKit (ou adopte celui de même nom) et le lie.
-fn adopt_remote(tx: &Connection, r: &PkMember, existing: Option<&Member>) -> ph_core::Result<Uuid> {
+fn adopt_remote(
+    tx: &Connection,
+    r: &PkMember,
+    existing: Option<&Member>,
+    with_desc: bool,
+) -> ph_core::Result<Uuid> {
     let theirs = snapshot_of_remote(r);
     let fallback = existing.map_or_else(|| default_color(&r.uuid).to_owned(), |m| m.color.clone());
     let color = theirs.color.clone().unwrap_or(fallback);
@@ -337,6 +414,21 @@ fn adopt_remote(tx: &Connection, r: &PkMember, existing: Option<&Member>) -> ph_
         Some(m) => members::update(tx, m.id, input)?.id,
         None => members::create(tx, input)?.id,
     };
+    let description = if with_desc {
+        let theirs = desc(r.description.as_deref());
+        let mine = desc(existing.and_then(|m| m.description.as_deref()));
+        if !theirs.is_empty() {
+            members::set_description(tx, member_id, Some(&theirs))?;
+            Some(theirs)
+        } else if mine.is_empty() {
+            Some(String::new())
+        } else {
+            // La nôtre partira au prochain passage (premier contact).
+            None
+        }
+    } else {
+        None
+    };
     save_link(
         tx,
         &Link {
@@ -345,6 +437,7 @@ fn adopt_remote(tx: &Connection, r: &PkMember, existing: Option<&Member>) -> ph_
             pk_hid: r.id.clone(),
             snapshot: Snapshot {
                 color: Some(color),
+                description,
                 ..theirs
             },
         },
@@ -353,6 +446,7 @@ fn adopt_remote(tx: &Connection, r: &PkMember, existing: Option<&Member>) -> ph_
 }
 
 struct Plan {
+    with_desc: bool,
     pulled: usize,
     pushes: Vec<PushPlan>,
     creates: Vec<Member>,
@@ -362,6 +456,7 @@ struct Plan {
 /// est local, et prépare les écritures distantes.
 fn reconcile(c: &mut Connection, remote: &[PkMember]) -> ph_core::Result<Plan> {
     let tx = c.transaction()?;
+    let with_desc = kv::flag(&tx, K_SYNC_DESCRIPTION)?;
     let links = load_links(&tx)?;
     let locals: HashMap<Uuid, Member> =
         members::list(&tx)?.into_iter().map(|m| (m.id, m)).collect();
@@ -374,6 +469,7 @@ fn reconcile(c: &mut Connection, remote: &[PkMember]) -> ph_core::Result<Plan> {
         .collect();
 
     let mut plan = Plan {
+        with_desc,
         pulled: 0,
         pushes: Vec::new(),
         creates: Vec::new(),
@@ -384,14 +480,14 @@ fn reconcile(c: &mut Connection, remote: &[PkMember]) -> ph_core::Result<Plan> {
             let Some(local) = locals.get(&link.member_id) else {
                 continue;
             };
-            let (pulled, push) = merge_linked(&tx, local, r, link)?;
+            let (pulled, push) = merge_linked(&tx, local, r, link, with_desc)?;
             plan.pulled += usize::from(pulled);
             plan.pushes.extend(push);
         } else {
             let existing = by_name
                 .remove(&r.name.trim().to_lowercase())
                 .and_then(|id| locals.get(&id));
-            linked.insert(adopt_remote(&tx, r, existing)?);
+            linked.insert(adopt_remote(&tx, r, existing, with_desc)?);
             plan.pulled += 1;
         }
     }
@@ -428,16 +524,20 @@ pub fn sync_members(db: &impl Db, api: &impl PkApi) -> Result<(usize, usize)> {
         written += 1;
     }
     for m in plan.creates {
+        let mine = desc(m.description.as_deref());
+        let description =
+            (plan.with_desc && mine.chars().count() <= PK_MAX_DESCRIPTION).then_some(mine);
         let made = api.create_member(&PkMemberPatch {
             name: Some(m.name.clone()),
             pronouns: m.pronouns.clone().map(Some),
             color: Some(m.color.trim_start_matches('#').to_owned()),
+            description: description.clone().filter(|d| !d.is_empty()).map(Some),
         })?;
         let link = Link {
             member_id: m.id,
             pk_uuid: made.uuid,
             pk_hid: made.id,
-            snapshot: snapshot_of_local(&m),
+            snapshot: snapshot_of_local(&m, description),
         };
         db.with(|c| save_link(c, &link))?;
         written += 1;
