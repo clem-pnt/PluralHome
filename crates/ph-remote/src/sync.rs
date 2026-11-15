@@ -347,8 +347,7 @@ fn merge_linked(
         name: (s_name == Side::Push).then(|| name.clone()),
         pronouns: (s_pro == Side::Push).then(|| pronouns.clone()),
         color: (s_col == Side::Push).then(|| color.trim_start_matches('#').to_owned()),
-        description: (s_desc == Side::Push)
-            .then(|| description.clone().filter(|d| !d.is_empty())),
+        description: (s_desc == Side::Push).then(|| description.clone().filter(|d| !d.is_empty())),
     };
     let pulled = pulled || s_desc == Side::Pull;
     let mut next = link.clone();

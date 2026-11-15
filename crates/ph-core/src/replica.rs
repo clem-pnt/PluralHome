@@ -43,6 +43,11 @@ const TABLES: &[Spec] = &[
         only_key: None,
     },
     Spec {
+        name: "folder",
+        pk: &[("id", Blob)],
+        only_key: None,
+    },
+    Spec {
         name: "journal_entry",
         pk: &[("id", Blob)],
         only_key: None,
@@ -75,6 +80,11 @@ const TABLES: &[Spec] = &[
     Spec {
         name: "journal_author",
         pk: &[("entry_id", Blob), ("member_id", Blob)],
+        only_key: None,
+    },
+    Spec {
+        name: "folder_member",
+        pk: &[("folder_id", Blob), ("member_id", Blob)],
         only_key: None,
     },
     Spec {
@@ -455,7 +465,8 @@ fn sweep_orphans(conn: &Connection) -> Result<()> {
          DELETE FROM catchup_ack WHERE member_id NOT IN (SELECT id FROM member);
          DELETE FROM member_profile WHERE member_id NOT IN (SELECT id FROM member);
          DELETE FROM pk_member WHERE member_id NOT IN (SELECT id FROM member);
-         DELETE FROM journal_author WHERE member_id NOT IN (SELECT id FROM member) OR entry_id NOT IN (SELECT id FROM journal_entry);",
+         DELETE FROM journal_author WHERE member_id NOT IN (SELECT id FROM member) OR entry_id NOT IN (SELECT id FROM journal_entry);
+         DELETE FROM folder_member WHERE member_id NOT IN (SELECT id FROM member) OR folder_id NOT IN (SELECT id FROM folder);",
     )?;
     Ok(())
 }

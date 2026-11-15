@@ -11,7 +11,6 @@ pub const MAX_NAME: usize = 100;
 pub const MAX_PRONOUNS: usize = 100;
 /// Profil. PluralKit limite les descriptions à 1000 caractères : au-delà, elles restent ici.
 pub const MAX_DESCRIPTION: usize = 2000;
-pub const MAX_ROLES: usize = 12;
 pub const MAX_ROLE: usize = 40;
 pub const MAX_AVATAR_BYTES: usize = 256 * 1024;
 
@@ -24,6 +23,7 @@ pub struct Member {
     pub pronouns: Option<String>,
     pub color: String,
     pub description: Option<String>,
+    /// Le premier est le rôle principal, seul affiché dans la liste des membres.
     pub roles: Vec<String>,
     /// Image en adresse `data:` (PNG, JPEG ou WebP), prête pour `<img src>`.
     pub avatar: Option<String>,
@@ -246,9 +246,6 @@ impl Profile {
             }
             roles.push(r);
         }
-        if roles.len() > MAX_ROLES {
-            return Err(CoreError::Invalid("roles"));
-        }
         let avatar = match self.avatar {
             AvatarEdit::Keep => None,
             AvatarEdit::Remove => Some(None),
@@ -292,11 +289,9 @@ pub fn set_profile(conn: &Connection, id: Uuid, profile: Profile) -> Result<Memb
         .into_iter()
         .map(|r| r.to_lowercase())
         .collect();
-    let mut room = crate::roles::MAX_CATALOG.saturating_sub(known.len());
     for r in &validated_roles {
-        if room > 0 && !known.contains(&r.to_lowercase()) {
+        if !known.contains(&r.to_lowercase()) {
             crate::roles::add(conn, r)?;
-            room -= 1;
         }
     }
     get(conn, id)

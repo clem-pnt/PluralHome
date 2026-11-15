@@ -7,6 +7,7 @@ export type {
   CloudStatus_Serialize as CloudStatus,
   Contact_Serialize as Contact,
   Entry_Serialize as Entry,
+  Folder,
   FrontChange,
   FrontSession_Serialize as FrontSession,
   Member_Serialize as Member,
@@ -64,6 +65,15 @@ export const api = {
     add: (name: string) => unwrap(commands.rolesAdd(name)),
     rename: (from: string, to: string) => unwrap(commands.rolesRename(from, to)),
     remove: (name: string) => unwrap(commands.rolesRemove(name)),
+  },
+  folders: {
+    list: () => unwrap(commands.foldersList()),
+    create: (name: string) => unwrap(commands.foldersCreate(name)),
+    rename: (id: string, name: string) => unwrap(commands.foldersRename(id, name)),
+    remove: (id: string) => unwrap(commands.foldersRemove(id)),
+    setMembers: (id: string, members: string[]) => unwrap(commands.foldersSetMembers(id, members)),
+    setForMember: (member: string, folders: string[]) =>
+      unwrap(commands.foldersSetForMember(member, folders)),
   },
   account: {
     get: () => unwrap(commands.accountGet()),

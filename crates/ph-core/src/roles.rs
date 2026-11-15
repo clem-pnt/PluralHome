@@ -7,8 +7,6 @@ use rusqlite::{Connection, params};
 use crate::members::MAX_ROLE;
 use crate::{CoreError, Result, time};
 
-pub const MAX_CATALOG: usize = 100;
-
 fn clean(name: &str) -> Result<String> {
     let name = name.trim().to_owned();
     if !(1..=MAX_ROLE).contains(&name.chars().count()) {
@@ -34,9 +32,6 @@ fn existing(conn: &Connection, name: &str) -> Result<Option<String>> {
 pub fn add(conn: &Connection, name: &str) -> Result<Vec<String>> {
     let name = clean(name)?;
     if existing(conn, &name)?.is_none() {
-        if list(conn)?.len() >= MAX_CATALOG {
-            return Err(CoreError::Invalid("roles"));
-        }
         conn.execute(
             "INSERT OR IGNORE INTO role (name, created_at) VALUES (?1, ?2)",
             params![name, time::now_ms()?],
@@ -94,7 +89,13 @@ pub fn rename(conn: &mut Connection, from: &str, to: &str) -> Result<Vec<String>
         tx.execute("DELETE FROM role WHERE name = ?1", [from])?;
         tx.execute(
             "INSERT OR IGNORE INTO role (name, created_at) VALUES (?1, ?2)",
-            params![target, match created { Some(t) => t, None => time::now_ms()? }],
+            params![
+                target,
+                match created {
+                    Some(t) => t,
+                    None => time::now_ms()?,
+                }
+            ],
         )?;
         rewrite_members(&tx, from, Some(&target))?;
     }

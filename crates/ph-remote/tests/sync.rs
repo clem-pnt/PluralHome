@@ -602,7 +602,8 @@ fn description_of(db: &Mutex<Vault>, id: Uuid) -> Option<String> {
 }
 
 fn describe(db: &Mutex<Vault>, id: Uuid, d: &str) {
-    db.with(|c| members::set_description(c, id, Some(d))).unwrap();
+    db.with(|c| members::set_description(c, id, Some(d)))
+        .unwrap();
 }
 
 #[test]
@@ -622,7 +623,11 @@ fn descriptions_only_with_the_option() {
         .find(|m| m.name == "Mila")
         .unwrap()
         .id;
-    assert_eq!(description_of(&db, mila), None, "option coupée : rien ne bouge");
+    assert_eq!(
+        description_of(&db, mila),
+        None,
+        "option coupée : rien ne bouge"
+    );
     let lou_pk = pk
         .st()
         .members
@@ -638,7 +643,10 @@ fn descriptions_only_with_the_option() {
     sync::set_sync_description(&db, true).unwrap();
     assert!(sync::status(&db).unwrap().sync_description);
     sync::sync_members(&db, &pk).unwrap();
-    assert_eq!(description_of(&db, mila).as_deref(), Some("Venue de Discord"));
+    assert_eq!(
+        description_of(&db, mila).as_deref(),
+        Some("Venue de Discord")
+    );
     assert_eq!(
         pk.member(&lou_pk).description.as_deref(),
         Some("Protège le système")
@@ -652,7 +660,10 @@ fn descriptions_only_with_the_option() {
         description_of(&db, mila).as_deref(),
         Some("Modifiée sur Discord")
     );
-    assert_eq!(pk.member(&lou_pk).description.as_deref(), Some("Modifiée ici"));
+    assert_eq!(
+        pk.member(&lou_pk).description.as_deref(),
+        Some("Modifiée ici")
+    );
 
     // Effacée ici : effacée là-bas.
     db.with(|c| members::set_description(c, lou, None)).unwrap();
@@ -664,7 +675,10 @@ fn descriptions_only_with_the_option() {
     let writes = pk.st().writes;
     sync::sync_members(&db, &pk).unwrap();
     assert_eq!(pk.st().writes, writes);
-    assert_eq!(pk.member(&hid).description.as_deref(), Some("Modifiée sur Discord"));
+    assert_eq!(
+        pk.member(&hid).description.as_deref(),
+        Some("Modifiée sur Discord")
+    );
     assert_eq!(description_of(&db, mila).unwrap().len(), 1200);
 
     // Une passe de plus ne fait rien.
@@ -681,7 +695,10 @@ fn new_member_carries_its_description() {
     let lou = local(&db, "Lou");
     describe(&db, lou, "Arrivée récemment");
     sync::sync_members(&db, &pk).unwrap();
-    assert_eq!(pk.st().members[0].description.as_deref(), Some("Arrivée récemment"));
+    assert_eq!(
+        pk.st().members[0].description.as_deref(),
+        Some("Arrivée récemment")
+    );
     let writes = pk.st().writes;
     sync::sync_members(&db, &pk).unwrap();
     assert_eq!(pk.st().writes, writes, "pas de renvoi");

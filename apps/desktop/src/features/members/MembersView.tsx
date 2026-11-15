@@ -1,16 +1,32 @@
-import { Button as AriaButton, DialogTrigger } from "react-aria-components";
+import { useState } from "react";
+import {
+  Button as AriaButton,
+  DialogTrigger,
+  Label,
+  Radio,
+  RadioGroup,
+} from "react-aria-components";
 import type { Member } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
 import { Avatar } from "../../ui/Avatar";
 import { Button } from "../../ui/Button";
+import { FoldersDialog } from "./FoldersDialog";
 import { MemberDialog } from "./MemberDialog";
+import { MemberProfileDialog } from "./MemberProfile";
 import { RolesDialog } from "./RolesDialog";
+import { useFolders } from "./useFolders";
 import { useMembers } from "./useMembers";
+
+const ALL = "all";
 
 export function MembersView() {
   const members = useMembers();
   const { list } = members;
-
+  const folders = useFolders();
+  const [filter, setFilter] = useState(ALL);
+  // Un dossier supprimé (ici ou ailleurs) ramène à tous les membres.
+  const folder = folders.list.find((f) => f.id === filter);
+  const shown = folder ? list.filter((x) => folder.members.includes(x.id)) : list;
   const addButton = (
     <DialogTrigger>
       <Button variant="primary">{m.members_add()}</Button>
@@ -28,6 +44,10 @@ export function MembersView() {
         {list.length > 0 && (
           <div className="panel__actions">
             <DialogTrigger>
+              <Button variant="ghost">{m.folders_manage()}</Button>
+              <FoldersDialog />
+            </DialogTrigger>
+            <DialogTrigger>
               <Button variant="ghost">{m.roles_manage()}</Button>
               <RolesDialog />
             </DialogTrigger>
@@ -44,9 +64,32 @@ export function MembersView() {
         </div>
       )}
 
-      {list.length > 0 && (
+      {list.length > 0 && folders.list.length > 0 && (
+        <RadioGroup
+          className="field folders__filter"
+          value={folder ? folder.id : ALL}
+          onChange={setFilter}
+          orientation="horizontal"
+        >
+          <Label className="sr-only">{m.folders_filter()}</Label>
+          <div className="choices">
+            <Radio value={ALL} className="choice">
+              {m.folders_all({ count: list.length })}
+            </Radio>
+            {folders.list.map((f) => (
+              <Radio key={f.id} value={f.id} className="choice">
+                {f.name} ({f.members.length})
+              </Radio>
+            ))}
+          </div>
+        </RadioGroup>
+      )}
+
+      {folder && shown.length === 0 && <p className="muted">{m.folders_empty_folder()}</p>}
+
+      {shown.length > 0 && (
         <ul className="members">
-          {list.map((member) => (
+          {shown.map((member) => (
             <MemberCard key={member.id} member={member} />
           ))}
         </ul>
@@ -56,23 +99,19 @@ export function MembersView() {
 }
 
 function MemberCard({ member }: { member: Member }) {
+  const main = member.roles[0];
   return (
     <li>
       <DialogTrigger>
-        <AriaButton className="member" aria-label={`${m.member_edit()} ${member.name}`}>
+        <AriaButton className="member" aria-label={`${m.member_profile_open()} ${member.name}`}>
           <Avatar name={member.name} src={member.avatar} size={48} />
           <span className="member__text">
             <span className="member__name">{member.name}</span>
             {member.pronouns && <span className="member__pronouns">{member.pronouns}</span>}
-            {member.roles.length > 0 && (
-              <span className="member__roles">{member.roles.join(" · ")}</span>
-            )}
-            {member.description && (
-              <span className="member__description">{member.description}</span>
-            )}
+            {main && <span className="member__roles">{main}</span>}
           </span>
         </AriaButton>
-        <MemberDialog member={member} />
+        <MemberProfileDialog member={member} />
       </DialogTrigger>
     </li>
   );

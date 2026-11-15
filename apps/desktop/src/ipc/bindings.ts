@@ -33,6 +33,15 @@ export const commands = {
 	rolesRename: (from: string, to: string) => typedError<string[], IpcError_Serialize>(__TAURI_INVOKE("roles_rename", { from, to })),
 	/**  Supprime un rôle du catalogue et le retire à tous les membres. */
 	rolesRemove: (name: string) => typedError<string[], IpcError_Serialize>(__TAURI_INVOKE("roles_remove", { name })),
+	/**  Dossiers de rangement des membres. */
+	foldersList: () => typedError<Folder[], IpcError_Serialize>(__TAURI_INVOKE("folders_list")),
+	foldersCreate: (name: string) => typedError<Folder[], IpcError_Serialize>(__TAURI_INVOKE("folders_create", { name })),
+	foldersRename: (id: string, name: string) => typedError<Folder[], IpcError_Serialize>(__TAURI_INVOKE("folders_rename", { id, name })),
+	/**  Supprime le dossier ; les membres ne sont pas touchés. */
+	foldersRemove: (id: string) => typedError<Folder[], IpcError_Serialize>(__TAURI_INVOKE("folders_remove", { id })),
+	foldersSetMembers: (id: string, members: string[]) => typedError<Folder[], IpcError_Serialize>(__TAURI_INVOKE("folders_set_members", { id, members })),
+	/**  Remplace les dossiers d'un membre. */
+	foldersSetForMember: (member: string, folders: string[]) => typedError<Folder[], IpcError_Serialize>(__TAURI_INVOKE("folders_set_for_member", { member, folders })),
 	frontCurrent: () => typedError<FrontSession_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("front_current")),
 	frontChange: (change: FrontChange) => typedError<FrontSession_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("front_change", { change })),
 	/**  Bornes en millisecondes Unix, `[from, to)`. */
@@ -195,6 +204,13 @@ export type Entry_Serialize = {
 	updatedAt: number | null,
 };
 
+export type Folder = {
+	id: string,
+	name: string,
+	/**  Membres rangés ici (archivés exclus). */
+	members: string[],
+};
+
 /**  Nouvel état du front. Liste vide et `blurry = false` : plus personne au front. */
 export type FrontChange = {
 	members: string[],
@@ -242,6 +258,7 @@ export type Member_Deserialize = {
 	pronouns?: string | null,
 	color: string,
 	description?: string | null,
+	/**  Le premier est le rôle principal, seul affiché dans la liste des membres. */
 	roles: string[],
 	/**  Image en adresse `data:` (PNG, JPEG ou WebP), prête pour `<img src>`. */
 	avatar?: string | null,
@@ -255,6 +272,7 @@ export type Member_Serialize = {
 	pronouns: string | null,
 	color: string,
 	description: string | null,
+	/**  Le premier est le rôle principal, seul affiché dans la liste des membres. */
 	roles: string[],
 	/**  Image en adresse `data:` (PNG, JPEG ou WebP), prête pour `<img src>`. */
 	avatar: string | null,

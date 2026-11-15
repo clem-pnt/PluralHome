@@ -3,11 +3,12 @@
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
+use ph_core::folders::{self, Folder};
 use ph_core::front::{self, FrontChange, FrontSession};
 use ph_core::journal::{self, Entry, NewEntry};
 use ph_core::members::{self, Member, NewMember, Profile};
-use ph_core::roles;
 use ph_core::messages::{self, CatchUp, Message, NewMessage};
+use ph_core::roles;
 use ph_core::safety::{self, SafetyPlan};
 use ph_core::{CoreError, Vault, VaultStatus};
 use serde::Serialize;
@@ -238,6 +239,84 @@ pub async fn roles_remove(
     Ok(r)
 }
 
+/// Dossiers de rangement des membres.
+#[tauri::command]
+#[specta::specta]
+pub async fn folders_list(state: State<'_, AppState>) -> IpcResult<Vec<Folder>> {
+    blocking(&state, |v| folders::list(v.conn()?)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn folders_create(
+    state: State<'_, AppState>,
+    rem: State<'_, Remote>,
+    name: String,
+) -> IpcResult<Vec<Folder>> {
+    let r = blocking(&state, move |v| folders::create(v.conn()?, &name)).await?;
+    rem.wake(Wake::Full);
+    Ok(r)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn folders_rename(
+    state: State<'_, AppState>,
+    rem: State<'_, Remote>,
+    id: Uuid,
+    name: String,
+) -> IpcResult<Vec<Folder>> {
+    let r = blocking(&state, move |v| folders::rename(v.conn()?, id, &name)).await?;
+    rem.wake(Wake::Full);
+    Ok(r)
+}
+
+/// Supprime le dossier ; les membres ne sont pas touchés.
+#[tauri::command]
+#[specta::specta]
+pub async fn folders_remove(
+    state: State<'_, AppState>,
+    rem: State<'_, Remote>,
+    id: Uuid,
+) -> IpcResult<Vec<Folder>> {
+    let r = blocking(&state, move |v| folders::remove(v.conn()?, id)).await?;
+    rem.wake(Wake::Full);
+    Ok(r)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn folders_set_members(
+    state: State<'_, AppState>,
+    rem: State<'_, Remote>,
+    id: Uuid,
+    members: Vec<Uuid>,
+) -> IpcResult<Vec<Folder>> {
+    let r = blocking(&state, move |v| {
+        folders::set_members(v.conn_mut()?, id, &members)
+    })
+    .await?;
+    rem.wake(Wake::Full);
+    Ok(r)
+}
+
+/// Remplace les dossiers d'un membre.
+#[tauri::command]
+#[specta::specta]
+pub async fn folders_set_for_member(
+    state: State<'_, AppState>,
+    rem: State<'_, Remote>,
+    member: Uuid,
+    folders: Vec<Uuid>,
+) -> IpcResult<Vec<Folder>> {
+    let r = blocking(&state, move |v| {
+        folders::set_for_member(v.conn_mut()?, member, &folders)
+    })
+    .await?;
+    rem.wake(Wake::Full);
+    Ok(r)
+}
+
 /// Archive : le membre disparaît des listes, son historique reste.
 #[tauri::command]
 #[specta::specta]
@@ -390,6 +469,12 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         roles_add,
         roles_rename,
         roles_remove,
+        folders_list,
+        folders_create,
+        folders_rename,
+        folders_remove,
+        folders_set_members,
+        folders_set_for_member,
         front_current,
         front_change,
         front_history,

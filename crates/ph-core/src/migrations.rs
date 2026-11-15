@@ -203,6 +203,27 @@ const MIGRATIONS: &[&str] = &[
         " FROM member_profile p, json_each(p.roles) j
             WHERE j.type = 'text' AND length(trim(j.value)) BETWEEN 1 AND 40;",
     ),
+    // 10 — dossiers pour ranger les membres. Un membre peut être dans plusieurs
+    // dossiers, ou aucun ; il reste toujours dans la liste de tous les membres.
+    concat!(
+        "CREATE TABLE folder (
+            id         BLOB PRIMARY KEY NOT NULL CHECK (length(id) = 16),
+            name       TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 60),
+            created_at INTEGER NOT NULL
+        ) STRICT;
+        CREATE TABLE folder_member (
+            folder_id BLOB NOT NULL REFERENCES folder (id) ON DELETE CASCADE,
+            member_id BLOB NOT NULL REFERENCES member (id) ON DELETE CASCADE,
+            PRIMARY KEY (folder_id, member_id)
+        ) STRICT, WITHOUT ROWID;
+        CREATE INDEX folder_by_member ON folder_member (member_id, folder_id);\n",
+        track!("folder", "json_array(hex(NEW.id))", "json_array(hex(OLD.id))"),
+        track!(
+            "folder_member",
+            "json_array(hex(NEW.folder_id), hex(NEW.member_id))",
+            "json_array(hex(OLD.folder_id), hex(OLD.member_id))"
+        ),
+    ),
 ];
 
 pub fn run(conn: &mut Connection) -> Result<()> {
@@ -332,7 +353,11 @@ mod tests {
         }
         conn.pragma_update(None, "user_version", 8).unwrap();
         let id = [3u8; 16];
-        conn.execute("INSERT INTO member (id, name, color, created_at) VALUES (?1, 'Mila', '#4f8583', 0)", [id]).unwrap();
+        conn.execute(
+            "INSERT INTO member (id, name, color, created_at) VALUES (?1, 'Mila', '#4f8583', 0)",
+            [id],
+        )
+        .unwrap();
         conn.execute(
             r#"INSERT INTO member_profile (member_id, roles) VALUES (?1, '["Protecteur", " Petit·e ", 3]')"#,
             [id],
@@ -350,7 +375,11 @@ mod tests {
         assert_eq!(roles, vec!["Petit·e", "Protecteur"]);
         // Suivis pour la synchro entre appareils.
         let tracked: i64 = conn
-            .query_row("SELECT count(*) FROM sync_state WHERE tbl = 'role'", [], |r| r.get(0))
+            .query_row(
+                "SELECT count(*) FROM sync_state WHERE tbl = 'role'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(tracked, 2);
     }

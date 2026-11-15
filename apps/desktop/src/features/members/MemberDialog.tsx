@@ -2,6 +2,8 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   TextField as AriaTextField,
+  Checkbox,
+  CheckboxGroup,
   Dialog,
   DialogTrigger,
   FileTrigger,
@@ -22,6 +24,7 @@ import { TextField } from "../../ui/TextField";
 import { squareAvatar } from "./image";
 import { MEMBER_COLORS } from "./palette";
 import { RolesField } from "./RolesField";
+import { foldersOf, setFolders, useFolders } from "./useFolders";
 
 /** Limites du cœur, alignées sur PluralKit. */
 const MAX_NAME = 100;
@@ -45,7 +48,24 @@ export function MemberDialog({ member }: { member?: Member }) {
   );
 }
 
-function MemberForm({ member, onDone }: { member: Member | undefined; onDone: () => void }) {
+/**
+ * `onDone` après l'enregistrement ; `onCancel` remplace la fermeture par
+ * Annuler ; `onClose` ferme tout (après l'archivage).
+ */
+export function MemberForm({
+  member,
+  onDone,
+  onCancel,
+  onClose = onDone,
+}: {
+  member: Member | undefined;
+  onDone: () => void;
+  onCancel?: () => void;
+  onClose?: () => void;
+}) {
+  const folders = useFolders();
+  const initialFolders = member ? foldersOf(folders.list, member.id).map((f) => f.id) : [];
+  const [inFolders, setInFolders] = useState<string[]>(initialFolders);
   const [name, setName] = useState(member?.name ?? "");
   const [pronouns, setPronouns] = useState(member?.pronouns ?? "");
   // La couleur n'est plus choisie ni affichée (la photo la remplace) ; on la garde
@@ -82,11 +102,16 @@ function MemberForm({ member, onDone }: { member: Member | undefined; onDone: ()
       const saved = member
         ? await api.members.update(member.id, input)
         : await api.members.create(input);
-      return api.members.setProfile(saved.id, {
+      const withProfile = await api.members.setProfile(saved.id, {
         description: description.trim() || null,
         roles,
         avatar: avatarEdit,
       });
+      const changed =
+        inFolders.length !== initialFolders.length ||
+        inFolders.some((f) => !initialFolders.includes(f));
+      if (changed) setFolders(await api.folders.setForMember(saved.id, inFolders));
+      return withProfile;
     },
     onSuccess: (saved) => {
       queryClient.setQueryData<Member[]>(keys.members, (prev = []) =>
@@ -165,6 +190,19 @@ function MemberForm({ member, onDone }: { member: Member | undefined; onDone: ()
         <span className="field__hint">{m.member_description_hint()}</span>
       </AriaTextField>
       <RolesField roles={roles} onChange={setRoles} />
+      {folders.list.length > 0 && (
+        <CheckboxGroup className="field" value={inFolders} onChange={setInFolders}>
+          <Label className="field__label">{m.member_folders()}</Label>
+          <div className="choices">
+            {folders.list.map((f) => (
+              <Checkbox key={f.id} value={f.id} className="choice">
+                {f.name}
+              </Checkbox>
+            ))}
+          </div>
+          <span className="field__hint">{m.member_folders_hint()}</span>
+        </CheckboxGroup>
+      )}
       <p className="field__hint">{m.member_profile_local()}</p>
       {description.trim().length > PK_MAX_DESCRIPTION && (
         <p className="field__hint">{m.member_description_too_long_for_pk()}</p>
@@ -177,12 +215,18 @@ function MemberForm({ member, onDone }: { member: Member | undefined; onDone: ()
       <div className="dialog__actions">
         {member && (
           <span className="dialog__aside">
-            <ArchiveButton member={member} onDone={onDone} />
+            <ArchiveButton member={member} onDone={onClose} />
           </span>
         )}
-        <Button variant="ghost" slot="close">
-          {m.cancel()}
-        </Button>
+        {onCancel ? (
+          <Button variant="ghost" onPress={onCancel}>
+            {m.cancel()}
+          </Button>
+        ) : (
+          <Button variant="ghost" slot="close">
+            {m.cancel()}
+          </Button>
+        )}
         <Button type="submit" isDisabled={save.isPending}>
           {member ? m.member_update() : m.member_save()}
         </Button>

@@ -1,5 +1,12 @@
 # Changelog
 
+## Non publié — Profils et dossiers
+
+- La liste des membres n'affiche plus que le rôle principal (le premier), sans aperçu de description.
+- Un clic sur un membre ouvre son profil complet : tous ses rôles, ses dossiers et toute sa description. Le bouton « Modifier » ouvre la fiche d'édition.
+- Plus de limite au nombre de rôles. Sur la fiche, la flèche d'un rôle en fait le rôle principal.
+- Dossiers pour ranger les membres : bouton « Gérer les dossiers » dans l'écran Membres, filtre par dossier au-dessus de la liste. Un membre peut être dans plusieurs dossiers et reste toujours dans « Tous ». Les dossiers suivent la synchro entre appareils.
+
 ## 0.10.2 — Rôles et descriptions
 
 - Chaque système a son propre catalogue de rôles : bouton « Gérer les rôles » dans l'écran Membres pour en créer, renommer ou supprimer. Renommer ou supprimer un rôle le change chez tous les membres qui le portent.

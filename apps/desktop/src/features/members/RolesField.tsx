@@ -6,7 +6,6 @@ import { api } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
 import { Button } from "../../ui/Button";
 
-const MAX_ROLES = 12;
 const MAX_ROLE = 40;
 
 /** Libellés courants ; chacun reste libre d'écrire les siens. */
@@ -32,10 +31,9 @@ export function RolesField({
 }) {
   const [draft, setDraft] = useState("");
   const catalog = useQuery({ queryKey: keys.roles, queryFn: api.roles.list });
-  const full = roles.length >= MAX_ROLES;
   const add = (role: string) => {
     const r = role.trim();
-    if (!r || full || roles.some((x) => same(x, r))) return;
+    if (!r || roles.some((x) => same(x, r))) return;
     onChange([...roles, r]);
   };
   // Rôles courants puis ceux créés par le système, sans doublon.
@@ -51,9 +49,21 @@ export function RolesField({
       </span>
       {roles.length > 0 && (
         <ul className="chips" aria-labelledby="roles-label">
-          {roles.map((r) => (
-            <li key={r} className="chip">
+          {roles.map((r, i) => (
+            <li key={r} className={i === 0 ? "chip chip--main" : "chip"}>
               {r}
+              {i === 0 && roles.length > 1 && (
+                <small className="chip__tag">{m.member_role_main()}</small>
+              )}
+              {i > 0 && (
+                <Button
+                  variant="ghost"
+                  aria-label={m.member_role_make_main({ role: r })}
+                  onPress={() => onChange([r, ...roles.filter((x) => x !== r)])}
+                >
+                  {m.member_role_make_main_short()}
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 aria-label={m.member_role_remove({ role: r })}
@@ -65,38 +75,37 @@ export function RolesField({
           ))}
         </ul>
       )}
-      {!full && (
-        <div className="roles__add">
-          <AriaTextField
-            className="field roles__input"
-            maxLength={MAX_ROLE}
-            value={draft}
-            onChange={setDraft}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                // Entrée ajoute le rôle au lieu d'envoyer le formulaire.
-                e.preventDefault();
-                add(draft);
-                setDraft("");
-              }
-            }}
-          >
-            <Label className="sr-only">{m.member_role_new()}</Label>
-            <Input className="input" placeholder={m.member_role_placeholder()} />
-          </AriaTextField>
-          <Button
-            variant="ghost"
-            isDisabled={!draft.trim()}
-            onPress={() => {
+      {roles.length > 1 && <span className="field__hint">{m.member_roles_hint()}</span>}
+      <div className="roles__add">
+        <AriaTextField
+          className="field roles__input"
+          maxLength={MAX_ROLE}
+          value={draft}
+          onChange={setDraft}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              // Entrée ajoute le rôle au lieu d'envoyer le formulaire.
+              e.preventDefault();
               add(draft);
               setDraft("");
-            }}
-          >
-            {m.member_role_add()}
-          </Button>
-        </div>
-      )}
-      {!full && suggestions.length > 0 && (
+            }
+          }}
+        >
+          <Label className="sr-only">{m.member_role_new()}</Label>
+          <Input className="input" placeholder={m.member_role_placeholder()} />
+        </AriaTextField>
+        <Button
+          variant="ghost"
+          isDisabled={!draft.trim()}
+          onPress={() => {
+            add(draft);
+            setDraft("");
+          }}
+        >
+          {m.member_role_add()}
+        </Button>
+      </div>
+      {suggestions.length > 0 && (
         <div className="chips chips--suggest">
           {suggestions.map((s) => (
             <Button key={s} variant="ghost" onPress={() => add(s)}>

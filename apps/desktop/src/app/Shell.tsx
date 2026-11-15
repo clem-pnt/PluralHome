@@ -28,7 +28,14 @@ const EVENT_CLOUD = "cloud://synced";
 function useRemoteSync() {
   useEffect(() => {
     const off = listen(EVENT_SYNCED, () => {
-      for (const queryKey of [keys.members, keys.roles, ["front"], ["catch-up"], keys.pkStatus]) {
+      for (const queryKey of [
+        keys.members,
+        keys.roles,
+        keys.folders,
+        ["front"],
+        ["catch-up"],
+        keys.pkStatus,
+      ]) {
         void queryClient.invalidateQueries({ queryKey });
       }
     });
