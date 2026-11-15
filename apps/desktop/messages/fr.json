@@ -348,5 +348,8 @@
   "sort_in": "dans {folder}",
   "sort_move": "sera rangé dans {folder}",
   "folders_all_in": "Tout « {folder} » ({count})",
-  "members_none_found": "Aucun membre ne correspond à cette recherche."
+  "members_none_found": "Aucun membre ne correspond à cette recherche.",
+  "roles_count": "{count} membre(s)",
+  "search_roles": "Rechercher un rôle",
+  "roles_none_found": "Aucun rôle ne correspond."
 }

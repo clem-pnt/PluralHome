@@ -5,6 +5,7 @@ import { keys } from "../../app/query";
 import { api } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
 import { Button } from "../../ui/Button";
+import { IconButton } from "../../ui/IconButton";
 
 const MAX_ROLE = 40;
 
@@ -59,21 +60,17 @@ export function RolesField({
                 <small className="chip__tag">{m.member_role_main()}</small>
               )}
               {i > 0 && (
-                <Button
-                  variant="ghost"
-                  aria-label={m.member_role_make_main({ role: r })}
+                <IconButton
+                  icon="star"
+                  label={m.member_role_make_main({ role: r })}
                   onPress={() => onChange([r, ...roles.filter((x) => x !== r)])}
-                >
-                  {m.member_role_make_main_short()}
-                </Button>
+                />
               )}
-              <Button
-                variant="ghost"
-                aria-label={m.member_role_remove({ role: r })}
+              <IconButton
+                icon="close"
+                label={m.member_role_remove({ role: r })}
                 onPress={() => onChange(roles.filter((x) => x !== r))}
-              >
-                ×
-              </Button>
+              />
             </li>
           ))}
         </ul>
