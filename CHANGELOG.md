@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.12.1 — Correctif écran vide
+
+- L'application restait blanche au démarrage depuis la 0.12.0 : la bibliothèque de QR codes plantait à cause d'une protection de sécurité de l'app. Elle est remplacée ; la création et la lecture des QR codes d'amis fonctionnent.
+
 ## 0.12.0 — Amis et messages entre systèmes
 
 - Amis : ajout d'autres systèmes par lien ou QR code (caméra ou image), avec demandes à accepter, refuser ou bloquer, et un code à comparer de vive voix. Les invitations peuvent expirer (24 h, 7 jours ou jamais), servir une seule fois et être révoquées. Le compte Aragonite sert d'identité, mais son identifiant n'est jamais affiché. Tout est chiffré de bout en bout.
