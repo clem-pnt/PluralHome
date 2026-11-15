@@ -15,6 +15,7 @@ export type {
   Message_Serialize as Message,
   NewEntry_Deserialize as NewEntry,
   NewMember_Serialize as NewMember,
+  NewMessage,
   PairPoll,
   PendingDevice,
   PkSystem_Serialize as PkSystem,
@@ -129,9 +130,13 @@ export const api = {
     syncNow: () => unwrap(commands.cloudSyncNow()),
   },
   messages: {
-    list: (before: string | null, limit: number) => unwrap(commands.messagesList(before, limit)),
+    list: (before: string | null, limit: number, unreadOnly: boolean) =>
+      unwrap(commands.messagesList(before, limit, unreadOnly)),
     post: (input: Parameters<typeof commands.messagesPost>[0]) =>
       unwrap(commands.messagesPost(input)),
+    update: (id: string, input: Parameters<typeof commands.messagesPost>[0]) =>
+      unwrap(commands.messagesUpdate(id, input)),
+    markReadBy: (id: string, members: string[]) => unwrap(commands.messagesMarkReadBy(id, members)),
     setPinned: (id: string, pinned: boolean) => unwrap(commands.messagesSetPinned(id, pinned)),
     remove: (id: string) => unwrap(commands.messagesDelete(id)),
     catchUp: (memberId: string) => unwrap(commands.catchUp(memberId)),

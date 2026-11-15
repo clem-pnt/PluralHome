@@ -53,3 +53,7 @@ export function formatDuration(ms: number): string {
   const min = total % 60;
   return h > 0 ? m.duration_hm({ h, m: String(min).padStart(2, "0") }) : m.duration_m({ m: min });
 }
+
+const list = new Intl.ListFormat(getLocale(), { type: "conjunction" });
+/** « Alice, Lou et Noa ». */
+export const formatList = (items: string[]) => list.format(items);

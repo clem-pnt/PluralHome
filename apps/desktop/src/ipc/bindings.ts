@@ -54,8 +54,10 @@ export const commands = {
 	 */
 	frontQuick: () => typedError<[string[], boolean], IpcError_Serialize>(__TAURI_INVOKE("front_quick")),
 	frontSetFavorites: (members: string[]) => typedError<string[], IpcError_Serialize>(__TAURI_INVOKE("front_set_favorites", { members })),
-	messagesList: (before: string | null, limit: number) => typedError<Message_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("messages_list", { before, limit })),
-	messagesPost: (input: NewMessage_Deserialize) => typedError<Message_Serialize, IpcError_Serialize>(__TAURI_INVOKE("messages_post", { input })),
+	messagesList: (before: string | null, limit: number, unreadOnly: boolean) => typedError<Message_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("messages_list", { before, limit, unreadOnly })),
+	messagesPost: (input: NewMessage) => typedError<Message_Serialize, IpcError_Serialize>(__TAURI_INVOKE("messages_post", { input })),
+	messagesUpdate: (id: string, input: NewMessage) => typedError<Message_Serialize, IpcError_Serialize>(__TAURI_INVOKE("messages_update", { id, input })),
+	messagesMarkReadBy: (id: string, members: string[]) => typedError<Message_Serialize, IpcError_Serialize>(__TAURI_INVOKE("messages_mark_read_by", { id, members })),
 	messagesSetPinned: (id: string, pinned: boolean) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("messages_set_pinned", { id, pinned })),
 	messagesDelete: (id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("messages_delete", { id })),
 	catchUp: (memberId: string) => typedError<CatchUp_Serialize, IpcError_Serialize>(__TAURI_INVOKE("catch_up", { memberId })),
@@ -329,22 +331,30 @@ export type Message = Message_Serialize | Message_Deserialize;
 
 export type Message_Deserialize = {
 	id: string,
-	authorId?: string | null,
-	/**  `None` : pour tout le système. */
-	recipientId?: string | null,
+	/**  Vide : auteur inconnu ou supprimé. */
+	authorIds: string[],
+	/**  Vide : pour tout le système. */
+	recipientIds: string[],
 	body: string,
 	pinned: boolean,
 	createdAt: number | null,
+	editedAt?: number | null,
+	/**  Membres qui l'ont marqué comme lu. */
+	readBy: string[],
 };
 
 export type Message_Serialize = {
 	id: string,
-	authorId: string | null,
-	/**  `None` : pour tout le système. */
-	recipientId: string | null,
+	/**  Vide : auteur inconnu ou supprimé. */
+	authorIds: string[],
+	/**  Vide : pour tout le système. */
+	recipientIds: string[],
 	body: string,
 	pinned: boolean,
 	createdAt: number | null,
+	editedAt: number | null,
+	/**  Membres qui l'ont marqué comme lu. */
+	readBy: string[],
 };
 
 export type NewEntry = NewEntry_Serialize | NewEntry_Deserialize;
@@ -377,17 +387,10 @@ export type NewMember_Serialize = {
 	color: string,
 };
 
-export type NewMessage = NewMessage_Serialize | NewMessage_Deserialize;
-
-export type NewMessage_Deserialize = {
-	authorId?: string | null,
-	recipientId?: string | null,
-	body: string,
-};
-
-export type NewMessage_Serialize = {
-	authorId: string | null,
-	recipientId: string | null,
+export type NewMessage = {
+	authorIds: string[],
+	/**  Vide : pour tout le système. */
+	recipientIds: string[],
 	body: string,
 };
 

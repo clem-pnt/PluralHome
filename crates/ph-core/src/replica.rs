@@ -111,6 +111,11 @@ const TABLES: &[Spec] = &[
         only_key: None,
     },
     Spec {
+        name: "message_recipient",
+        pk: &[("message_id", Blob), ("member_id", Blob)],
+        only_key: None,
+    },
+    Spec {
         name: "poll_vote",
         pk: &[("option_id", Blob), ("member_id", Blob)],
         only_key: None,
@@ -497,6 +502,7 @@ fn sweep_orphans(conn: &Connection) -> Result<()> {
          DELETE FROM folder_member WHERE member_id NOT IN (SELECT id FROM member) OR folder_id NOT IN (SELECT id FROM folder);
          DELETE FROM folder WHERE parent_id IS NOT NULL AND parent_id NOT IN (SELECT id FROM folder);
          DELETE FROM message_author WHERE member_id NOT IN (SELECT id FROM member) OR message_id NOT IN (SELECT id FROM message);
+         DELETE FROM message_recipient WHERE member_id NOT IN (SELECT id FROM member) OR message_id NOT IN (SELECT id FROM message);
          UPDATE poll SET author_id = NULL WHERE author_id IS NOT NULL AND author_id NOT IN (SELECT id FROM member);
          DELETE FROM poll_option WHERE poll_id NOT IN (SELECT id FROM poll);
          DELETE FROM poll_vote WHERE member_id NOT IN (SELECT id FROM member) OR option_id NOT IN (SELECT id FROM poll_option);",

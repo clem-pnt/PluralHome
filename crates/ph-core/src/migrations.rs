@@ -238,6 +238,11 @@ const MIGRATIONS: &[&str] = &[
             member_id  BLOB NOT NULL REFERENCES member (id) ON DELETE CASCADE,
             PRIMARY KEY (message_id, member_id)
         ) STRICT, WITHOUT ROWID;
+        CREATE TABLE message_recipient (
+            message_id BLOB NOT NULL REFERENCES message (id) ON DELETE CASCADE,
+            member_id  BLOB NOT NULL REFERENCES member (id) ON DELETE CASCADE,
+            PRIMARY KEY (message_id, member_id)
+        ) STRICT, WITHOUT ROWID;
         CREATE TABLE poll (
             id         BLOB PRIMARY KEY NOT NULL CHECK (length(id) = 16),
             question   TEXT NOT NULL CHECK (length(question) BETWEEN 1 AND 300),
@@ -259,11 +264,18 @@ const MIGRATIONS: &[&str] = &[
             voted_at  INTEGER NOT NULL,
             PRIMARY KEY (option_id, member_id)
         ) STRICT, WITHOUT ROWID;
+        INSERT INTO message_author SELECT id, author_id FROM message WHERE author_id IS NOT NULL;
+        INSERT INTO message_recipient SELECT id, recipient_id FROM message WHERE recipient_id IS NOT NULL;
         DROP TRIGGER sync_kv_ins;
         DROP TRIGGER sync_kv_upd;
         DROP TRIGGER sync_kv_del;\n",
         track!(
             "message_author",
+            "json_array(hex(NEW.message_id), hex(NEW.member_id))",
+            "json_array(hex(OLD.message_id), hex(OLD.member_id))"
+        ),
+        track!(
+            "message_recipient",
             "json_array(hex(NEW.message_id), hex(NEW.member_id))",
             "json_array(hex(OLD.message_id), hex(OLD.member_id))"
         ),

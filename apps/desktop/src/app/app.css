@@ -404,7 +404,7 @@
   }
   .composer__route {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: var(--space-3);
   }
   .composer__actions {
@@ -429,6 +429,75 @@
   .message[data-pinned] {
     border-color: color-mix(in oklab, var(--accent) 45%, transparent);
   }
+  /* Ce qui concerne les personnes au front : écrit par elles ou pour elles. */
+  .message[data-from-front],
+  .message[data-to-front] {
+    border-inline-start: 4px solid var(--accent);
+  }
+  .message[data-to-front] {
+    background: color-mix(in oklab, var(--accent-soft) 55%, var(--surface));
+  }
+  .message__read {
+    font-size: 12px;
+  }
+  .messages__mode {
+    justify-self: start;
+  }
+  .tag--accent {
+    background: var(--accent-soft);
+    border-color: color-mix(in oklab, var(--accent) 40%, transparent);
+    color: var(--accent);
+  }
+
+  .people-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-block-size: 42px;
+    padding: var(--space-1) var(--space-3);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    color: var(--ink);
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+    min-inline-size: 0;
+  }
+  .people-btn[data-hovered] {
+    border-color: color-mix(in oklab, var(--accent) 50%, var(--line));
+  }
+  .people-btn[data-focus-visible] {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .people-btn__faces {
+    display: flex;
+    flex: none;
+  }
+  .people-btn__faces > * + * {
+    margin-inline-start: -8px;
+  }
+  .people-btn__faces > * {
+    box-shadow: 0 0 0 2px var(--surface);
+    border-radius: 999px;
+  }
+  .people-btn__faces--none {
+    color: var(--ink-muted);
+  }
+  .people-btn__text {
+    flex: 1;
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .people-btn__change {
+    flex: none;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+  }
   .message__content {
     display: grid;
     gap: var(--space-1);
@@ -451,6 +520,10 @@
     display: flex;
     gap: var(--space-2);
     margin-block-start: var(--space-2);
+  }
+  .message__actions .icon-btn {
+    inline-size: 32px;
+    block-size: 32px;
   }
   .message__actions .btn {
     block-size: 30px;
@@ -475,14 +548,14 @@
   }
 
   @media (hover: hover) {
-    .message__actions {
-      opacity: 0;
+    .message__actions > :not(.icon-btn--accent) {
+      opacity: 0.45;
       transition: opacity 140ms var(--ease);
     }
-    .message:hover .message__actions,
-    .message:focus-within .message__actions,
-    .entry:hover .message__actions,
-    .entry:focus-within .message__actions {
+    .message:hover .message__actions > *,
+    .message:focus-within .message__actions > *,
+    .entry:hover .message__actions > *,
+    .entry:focus-within .message__actions > * {
       opacity: 1;
     }
   }

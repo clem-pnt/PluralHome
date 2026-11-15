@@ -3,35 +3,29 @@ import { Form, Label, TextArea, TextField } from "react-aria-components";
 import { errorMessage } from "../../i18n/errors";
 import { m } from "../../paraglide/messages.js";
 import { Button } from "../../ui/Button";
-import { Select } from "../../ui/Select";
 import { useFrontCurrent } from "../front/useFront";
 import { useMembers } from "../members/useMembers";
+import { PeopleField } from "./PeopleField";
+import { fronting } from "./people";
 import { usePostMessage } from "./useMessages";
 
-const NONE = "__none__";
-const MAX = 4000;
+export const MAX_BODY = 4000;
 
 export function Composer() {
   const members = useMembers();
   const front = useFrontCurrent();
   const post = usePostMessage();
 
-  // Par défaut, l'auteur est la personne au front si elle est seule.
-  const solo = front.data?.length === 1 ? (front.data[0]?.memberId ?? null) : null;
-  const [author, setAuthor] = useState<string | null>(null);
-  const [recipient, setRecipient] = useState<string>(NONE);
+  // Par défaut, ce sont les personnes au front qui écrivent, tant qu'on n'a pas choisi.
+  const [authors, setAuthors] = useState<string[] | null>(null);
+  const [recipients, setRecipients] = useState<string[]>([]);
   const [body, setBody] = useState("");
-  const from = author ?? solo ?? NONE;
+  const from = authors ?? fronting(front.data);
 
-  const people = members.list.map((x) => ({ id: x.id, label: x.name }));
   const send = () => {
     if (!body.trim() || post.isPending) return;
     post.mutate(
-      {
-        authorId: from === NONE ? null : from,
-        recipientId: recipient === NONE ? null : recipient,
-        body,
-      },
+      { authorIds: from, recipientIds: recipients, body },
       { onSuccess: () => setBody("") },
     );
   };
@@ -45,20 +39,28 @@ export function Composer() {
       }}
     >
       <div className="composer__route">
-        <Select
+        <PeopleField
           label={m.messages_from()}
-          options={[{ id: NONE, label: m.messages_someone() }, ...people]}
+          title={m.messages_pick_authors()}
+          lead={m.messages_pick_authors_lead()}
+          emptyLabel={m.messages_pick_none_author()}
+          members={members.list}
+          byId={members.byId}
           value={from}
-          onChange={setAuthor}
+          onChange={setAuthors}
         />
-        <Select
+        <PeopleField
           label={m.messages_to()}
-          options={[{ id: NONE, label: m.messages_everyone() }, ...people]}
-          value={recipient}
-          onChange={setRecipient}
+          title={m.messages_pick_recipients()}
+          lead={m.messages_pick_recipients_lead()}
+          emptyLabel={m.messages_everyone()}
+          members={members.list}
+          byId={members.byId}
+          value={recipients}
+          onChange={setRecipients}
         />
       </div>
-      <TextField className="field" value={body} onChange={setBody} maxLength={MAX}>
+      <TextField className="field" value={body} onChange={setBody} maxLength={MAX_BODY}>
         <Label className="field__label">{m.messages_body()}</Label>
         <TextArea
           className="input textarea"

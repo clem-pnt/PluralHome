@@ -393,14 +393,41 @@ pub async fn messages_list(
     state: State<'_, AppState>,
     before: Option<Uuid>,
     limit: u32,
+    unread_only: bool,
 ) -> IpcResult<Vec<Message>> {
-    blocking(&state, move |v| messages::list(v.conn()?, before, limit)).await
+    blocking(&state, move |v| {
+        messages::list(v.conn()?, before, limit, unread_only)
+    })
+    .await
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn messages_post(state: State<'_, AppState>, input: NewMessage) -> IpcResult<Message> {
-    blocking(&state, move |v| messages::post(v.conn()?, &input)).await
+    blocking(&state, move |v| messages::post(v.conn_mut()?, &input)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn messages_update(
+    state: State<'_, AppState>,
+    id: Uuid,
+    input: NewMessage,
+) -> IpcResult<Message> {
+    blocking(&state, move |v| messages::update(v.conn_mut()?, id, &input)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn messages_mark_read_by(
+    state: State<'_, AppState>,
+    id: Uuid,
+    members: Vec<Uuid>,
+) -> IpcResult<Message> {
+    blocking(&state, move |v| {
+        messages::mark_read_by(v.conn_mut()?, id, &members)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -515,6 +542,8 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         front_set_favorites,
         messages_list,
         messages_post,
+        messages_update,
+        messages_mark_read_by,
         messages_set_pinned,
         messages_delete,
         catch_up,
