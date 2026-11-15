@@ -49,9 +49,8 @@
   "front_quick": "Switch rapide",
   "front_quick_hint": "Vos favoris, en un geste.",
   "front_dialog_title": "Qui est au front ?",
-  "front_dialog_lead": "Cochez qui est là, puis précisez pour chacun : au front, en co-front ou co-conscient.",
+  "front_dialog_lead": "Cochez qui est là, puis précisez pour chacun : au front, en co-front ou co-conscient. Si c'est flou, cochez « Flou ».",
   "front_save": "Enregistrer",
-  "front_clear": "Personne",
   "front_today": "Aujourd'hui",
   "front_today_empty": "Rien d'enregistré aujourd'hui.",
   "front_no_members": "Ajoutez d'abord des membres pour suivre le front.",
@@ -482,5 +481,6 @@
   "newcomer_section_remove": "Supprimer « {title} »",
   "newcomer_section_add": "Ajouter une catégorie",
   "newcomer_section_up": "Monter",
-  "newcomer_section_down": "Descendre"
+  "newcomer_section_down": "Descendre",
+  "front_create_member": "Créer un alter"
 }

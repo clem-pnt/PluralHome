@@ -50,7 +50,7 @@ export function MemberDialog({ member }: { member?: Member }) {
 }
 
 /**
- * `onDone` après l'enregistrement ; `onCancel` remplace la fermeture par
+ * `onDone(membre)` après l'enregistrement ; `onCancel` remplace la fermeture par
  * Annuler ; `onClose` ferme tout (après l'archivage).
  */
 export function MemberForm({
@@ -60,7 +60,7 @@ export function MemberForm({
   onClose = onDone,
 }: {
   member: Member | undefined;
-  onDone: () => void;
+  onDone: (saved?: Member) => void;
   onCancel?: () => void;
   onClose?: () => void;
 }) {
@@ -120,7 +120,7 @@ export function MemberForm({
       );
       // Les rôles nouveaux rejoignent le catalogue du système.
       void queryClient.invalidateQueries({ queryKey: keys.roles });
-      onDone();
+      onDone(saved);
     },
   });
 

@@ -16,6 +16,7 @@ import { Avatar } from "../../ui/Avatar";
 import { Button } from "../../ui/Button";
 import { IconButton } from "../../ui/IconButton";
 import { matches, Search } from "../../ui/Search";
+import { MemberForm } from "../members/MemberDialog";
 import { PAGE } from "../members/MemberPicker";
 import { useMembers } from "../members/useMembers";
 import { STATUSES, statusLabel, useFrontChange } from "./useFront";
@@ -45,10 +46,12 @@ function FrontForm({ current, onDone }: { current: FrontSession[]; onDone: () =>
       current.flatMap((s) => (s.memberId ? [[s.memberId, s.status] as const] : [])),
     ),
   );
+  const [creating, setCreating] = useState(false);
   const [q, setQ] = useState("");
   const [limit, setLimit] = useState(PAGE);
   const found = useMemo(() => members.list.filter((x) => matches(q, x)), [members.list, q]);
   const present = selected.filter((id) => id !== BLURRY && members.byId.has(id));
+  const blurry = selected.includes(BLURRY);
 
   const save = (values: string[]) => {
     const ids = values.filter((v) => v !== BLURRY);
@@ -62,6 +65,26 @@ function FrontForm({ current, onDone }: { current: FrontSession[]; onDone: () =>
     );
   };
 
+  if (creating) {
+    return (
+      <>
+        <Heading slot="title">{m.front_create_member()}</Heading>
+        <MemberForm
+          member={undefined}
+          onDone={(saved) => {
+            if (saved) {
+              setSelected((s) => [...new Set([...s, saved.id])]);
+              setStatuses((st) => ({ ...st, [saved.id]: "front" }));
+            }
+            setCreating(false);
+          }}
+          onCancel={() => setCreating(false)}
+          onClose={() => setCreating(false)}
+        />
+      </>
+    );
+  }
+
   return (
     <>
       <div>
@@ -69,10 +92,25 @@ function FrontForm({ current, onDone }: { current: FrontSession[]; onDone: () =>
         <p className="muted">{m.front_dialog_lead()}</p>
       </div>
 
-      {present.length > 0 && (
-        <section className="present" aria-label={m.front_present({ count: present.length })}>
-          <h3 className="present__title">{m.front_present({ count: present.length })}</h3>
+      {selected.length > 0 && (
+        <section className="present" aria-label={m.front_present({ count: selected.length })}>
+          <h3 className="present__title">{m.front_present({ count: selected.length })}</h3>
           <ul className="present__list">
+            {blurry && (
+              <li className="present__row">
+                <span
+                  className="avatar avatar--blurry"
+                  style={{ "--size": "28px" } as React.CSSProperties}
+                  aria-hidden
+                />
+                <span className="present__name">{m.front_blurry()}</span>
+                <IconButton
+                  icon="close"
+                  label={m.action_remove()}
+                  onPress={() => setSelected((s) => s.filter((x) => x !== BLURRY))}
+                />
+              </li>
+            )}
             {present.map((id) => {
               const member = members.byId.get(id);
               if (!member) return null;
@@ -124,25 +162,23 @@ function FrontForm({ current, onDone }: { current: FrontSession[]; onDone: () =>
           // Le groupe garde aussi les membres cochés que la recherche masque.
           onChange={(ids) => setSelected([...new Set(ids)])}
         >
+          <Checkbox value={BLURRY} className="pick">
+            <span
+              className="avatar avatar--blurry"
+              style={{ "--size": "32px" } as React.CSSProperties}
+              aria-hidden
+            />
+            <span className="pick__name">
+              {m.front_blurry()}
+              <small className="muted">{m.front_blurry_hint()}</small>
+            </span>
+          </Checkbox>
           {found.slice(0, limit).map((member) => (
             <Checkbox key={member.id} value={member.id} className="pick">
               <Avatar name={member.name} src={member.avatar} size={32} />
               <span className="pick__name">{member.name}</span>
             </Checkbox>
           ))}
-          {!q.trim() && (
-            <Checkbox value={BLURRY} className="pick">
-              <span
-                className="avatar avatar--blurry"
-                style={{ "--size": "32px" } as React.CSSProperties}
-                aria-hidden
-              />
-              <span className="pick__name">
-                {m.front_blurry()}
-                <small className="muted">{m.front_blurry_hint()}</small>
-              </span>
-            </Checkbox>
-          )}
         </CheckboxGroup>
         {found.length === 0 && <p className="muted">{m.search_none()}</p>}
         {found.length > limit && (
@@ -158,14 +194,17 @@ function FrontForm({ current, onDone }: { current: FrontSession[]; onDone: () =>
         </p>
       )}
       <div className="dialog__actions">
-        <Button variant="ghost" onPress={() => save([])} isDisabled={change.isPending}>
-          {m.front_clear()}
+        <Button variant="ghost" onPress={() => setCreating(true)}>
+          {m.front_create_member()}
         </Button>
         <span style={{ flex: 1 }} />
         <Button variant="ghost" slot="close">
           {m.cancel()}
         </Button>
-        <Button onPress={() => save(selected)} isDisabled={change.isPending}>
+        <Button
+          onPress={() => save(selected)}
+          isDisabled={change.isPending || selected.length === 0}
+        >
           {m.front_save()}
         </Button>
       </div>
