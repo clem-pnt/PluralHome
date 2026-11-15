@@ -6,6 +6,7 @@ export type {
   CatchUp_Serialize as CatchUp,
   CloudStatus_Serialize as CloudStatus,
   Contact_Serialize as Contact,
+  ContactChannel_Serialize as ContactChannel,
   Entry_Serialize as Entry,
   Folder,
   FrontChange,
@@ -21,10 +22,12 @@ export type {
   PairPoll,
   PendingDevice,
   PkSystem_Serialize as PkSystem,
+  PlanSection_Serialize as PlanSection,
   Poll_Serialize as Poll,
   PollOption,
   SafetyPlan_Serialize as SafetyPlan,
   Status_Serialize as PkStatus,
+  TrustedContact_Serialize as TrustedContact,
   VaultStatus,
 } from "./bindings";
 

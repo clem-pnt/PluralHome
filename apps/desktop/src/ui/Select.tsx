@@ -19,8 +19,10 @@ export function Select({
   options,
   value,
   onChange,
+  hideLabel,
 }: {
   label: string;
+  hideLabel?: boolean;
   options: Option[];
   value: string;
   onChange: (id: string) => void;
@@ -31,7 +33,7 @@ export function Select({
       selectedKey={value}
       onSelectionChange={(k) => k !== null && onChange(String(k))}
     >
-      <Label className="field__label">{label}</Label>
+      <Label className={hideLabel ? "sr-only" : "field__label"}>{label}</Label>
       <Button className="input select__trigger">
         <SelectValue />
         <span aria-hidden className="select__chevron" />

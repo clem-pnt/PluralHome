@@ -8,17 +8,18 @@ const LINES = [
   { number: "114", name: m.line_114, detail: m.line_114_detail },
 ] as const;
 
+/** Le nom et l'usage d'abord : on cherche « qui appeler », puis le numéro. */
 export function CrisisLines() {
   return (
     <ul className="lines">
       {LINES.map((l) => (
         <li key={l.number} className="line">
-          <span className="line__number" data-selectable>
-            {l.number}
-          </span>
           <span className="line__text">
             <strong>{l.name()}</strong>
             <span className="muted">{l.detail()}</span>
+          </span>
+          <span className="line__number" data-selectable>
+            {l.number}
           </span>
         </li>
       ))}

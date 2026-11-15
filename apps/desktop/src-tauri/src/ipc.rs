@@ -8,10 +8,10 @@ use ph_core::front::{self, FrontChange, FrontSession};
 use ph_core::journal::{self, Entry, NewEntry};
 use ph_core::members::{self, Member, NewMember, Profile};
 use ph_core::messages::{self, CatchUp, Message, NewMessage};
-use ph_core::newcomer::{self, NewcomerPlan};
+use ph_core::newcomer::{self, NewcomerPlan, TrustedContact};
 use ph_core::polls::{self, NewPoll, Poll};
 use ph_core::roles;
-use ph_core::safety::{self, Contact, SafetyPlan};
+use ph_core::safety::{self, SafetyPlan};
 use ph_core::{CoreError, Vault, VaultStatus};
 use serde::Serialize;
 use tauri::State;
@@ -538,7 +538,7 @@ pub async fn newcomer_set(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn trusted_get(state: State<'_, AppState>) -> IpcResult<Option<Contact>> {
+pub async fn trusted_get(state: State<'_, AppState>) -> IpcResult<Option<TrustedContact>> {
     blocking(&state, |v| newcomer::get_trusted(v.conn()?)).await
 }
 
@@ -546,8 +546,8 @@ pub async fn trusted_get(state: State<'_, AppState>) -> IpcResult<Option<Contact
 #[specta::specta]
 pub async fn trusted_set(
     state: State<'_, AppState>,
-    contact: Option<Contact>,
-) -> IpcResult<Option<Contact>> {
+    contact: Option<TrustedContact>,
+) -> IpcResult<Option<TrustedContact>> {
     blocking(&state, move |v| newcomer::set_trusted(v.conn()?, contact)).await
 }
 

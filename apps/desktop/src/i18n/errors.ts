@@ -40,6 +40,10 @@ export function errorMessage(e: unknown): string {
     if (e.field === "basics") return m.error_invalid_basics();
     if (e.field === "safe") return m.error_invalid_safe();
     if (e.field === "steps") return m.error_invalid_steps();
+    if (e.field === "section_title") return m.error_invalid_section_title();
+    if (e.field === "sections") return m.error_invalid_sections();
+    if (e.field === "channel") return m.error_invalid_channel();
+    if (e.field === "channels") return m.error_invalid_channels();
     if (e.field === "question") return m.error_invalid_question();
     if (e.field === "options") return m.error_invalid_options();
     if (e.field === "closed") return m.error_poll_closed();

@@ -75,8 +75,8 @@ export const commands = {
 	safetySet: (plan: SafetyPlan_Deserialize) => typedError<SafetyPlan_Serialize, IpcError_Serialize>(__TAURI_INVOKE("safety_set", { plan })),
 	newcomerGet: () => typedError<NewcomerPlan_Serialize, IpcError_Serialize>(__TAURI_INVOKE("newcomer_get")),
 	newcomerSet: (plan: NewcomerPlan_Deserialize) => typedError<NewcomerPlan_Serialize, IpcError_Serialize>(__TAURI_INVOKE("newcomer_set", { plan })),
-	trustedGet: () => typedError<Contact_Serialize | null, IpcError_Serialize>(__TAURI_INVOKE("trusted_get")),
-	trustedSet: (contact: Contact_Deserialize | null) => typedError<Contact_Serialize | null, IpcError_Serialize>(__TAURI_INVOKE("trusted_set", { contact })),
+	trustedGet: () => typedError<TrustedContact_Serialize | null, IpcError_Serialize>(__TAURI_INVOKE("trusted_get")),
+	trustedSet: (contact: TrustedContact_Deserialize | null) => typedError<TrustedContact_Serialize | null, IpcError_Serialize>(__TAURI_INVOKE("trusted_set", { contact })),
 	accountGet: () => typedError<Account_Serialize | null, IpcError_Serialize>(__TAURI_INVOKE("account_get")),
 	/**  Ouvre le navigateur sur la page de connexion et attend son retour (5 min au plus). */
 	accountLogin: () => typedError<Account_Serialize, IpcError_Serialize>(__TAURI_INVOKE("account_login")),
@@ -180,6 +180,30 @@ export type CloudStatus_Serialize = {
 };
 
 export type Contact = Contact_Serialize | Contact_Deserialize;
+
+/**
+ *  Un moyen de joindre la personne : `kind` parmi [`CHANNEL_KINDS`], `value` le
+ *  numéro, le pseudo ou l'adresse.
+ */
+export type ContactChannel = ContactChannel_Serialize | ContactChannel_Deserialize;
+
+/**
+ *  Un moyen de joindre la personne : `kind` parmi [`CHANNEL_KINDS`], `value` le
+ *  numéro, le pseudo ou l'adresse.
+ */
+export type ContactChannel_Deserialize = {
+	kind?: string,
+	value?: string,
+};
+
+/**
+ *  Un moyen de joindre la personne : `kind` parmi [`CHANNEL_KINDS`], `value` le
+ *  numéro, le pseudo ou l'adresse.
+ */
+export type ContactChannel_Serialize = {
+	kind: string,
+	value: string,
+};
 
 export type Contact_Deserialize = {
 	name?: string,
@@ -424,23 +448,15 @@ export type NewcomerPlan = NewcomerPlan_Serialize | NewcomerPlan_Deserialize;
 export type NewcomerPlan_Deserialize = {
 	/**  Mot d'accueil, lu en premier. */
 	welcome?: string,
-	/**  Repères : où on est, quelle année, qui on est. */
-	basics?: string[],
-	/**  Personnes et lieux sûrs. */
-	safe?: string[],
-	/**  Premières choses à faire. */
-	steps?: string[],
+	/**  Catégories libres, dans l'ordre d'affichage. */
+	sections?: PlanSection_Deserialize[],
 };
 
 export type NewcomerPlan_Serialize = {
 	/**  Mot d'accueil, lu en premier. */
 	welcome: string,
-	/**  Repères : où on est, quelle année, qui on est. */
-	basics: string[],
-	/**  Personnes et lieux sûrs. */
-	safe: string[],
-	/**  Premières choses à faire. */
-	steps: string[],
+	/**  Catégories libres, dans l'ordre d'affichage. */
+	sections: PlanSection_Serialize[],
 };
 
 export type PairPoll = 
@@ -469,6 +485,21 @@ export type PkSystem_Serialize = {
 	id: string,
 	uuid: string,
 	name: string | null,
+};
+
+/**  Une catégorie du plan, nommée par le système. */
+export type PlanSection = PlanSection_Serialize | PlanSection_Deserialize;
+
+/**  Une catégorie du plan, nommée par le système. */
+export type PlanSection_Deserialize = {
+	title?: string,
+	items?: string[],
+};
+
+/**  Une catégorie du plan, nommée par le système. */
+export type PlanSection_Serialize = {
+	title: string,
+	items: string[],
 };
 
 export type Poll = Poll_Serialize | Poll_Deserialize;
@@ -587,6 +618,18 @@ export type Status_Serialize = {
 	pending: number | null,
 	/**  Les descriptions sont synchronisées avec PluralKit. */
 	syncDescription: boolean,
+};
+
+export type TrustedContact = TrustedContact_Serialize | TrustedContact_Deserialize;
+
+export type TrustedContact_Deserialize = {
+	name?: string,
+	channels?: ContactChannel_Deserialize[],
+};
+
+export type TrustedContact_Serialize = {
+	name: string,
+	channels: ContactChannel_Serialize[],
 };
 
 export type VaultStatus = "uninitialized" | 

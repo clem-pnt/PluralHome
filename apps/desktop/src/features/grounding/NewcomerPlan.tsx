@@ -6,14 +6,15 @@ import { errorMessage } from "../../i18n/errors";
 import { api, type NewcomerPlan as Plan } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
 import { Button } from "../../ui/Button";
+import { IconButton } from "../../ui/IconButton";
+import { TextField } from "../../ui/TextField";
 
-const LISTS = [
-  { key: "basics", title: m.newcomer_basics, hint: m.newcomer_basics_hint },
-  { key: "safe", title: m.newcomer_safe, hint: m.newcomer_safe_hint },
-  { key: "steps", title: m.newcomer_steps, hint: m.newcomer_steps_hint },
-] as const;
+const MAX_SECTIONS = 20;
 
-const isEmpty = (p: Plan) => !p.welcome && p.basics.length + p.safe.length + p.steps.length === 0;
+const isEmpty = (p: Plan) => !p.welcome && p.sections.length === 0;
+
+/** Catégories proposées à la première préparation, toutes renommables. */
+const starters = () => [m.newcomer_basics(), m.newcomer_safe(), m.newcomer_steps()];
 
 /** Ce qu'un alter qui arrive au front pour la première fois a besoin de lire. */
 export function NewcomerPlan() {
@@ -34,21 +35,21 @@ export function NewcomerPlan() {
               {plan.data.welcome}
             </p>
           )}
-          {LISTS.map(
-            (l) =>
-              plan.data[l.key].length > 0 && (
-                <section key={l.key} className="plan__section">
-                  <h3>{l.title()}</h3>
-                  <ul>
-                    {plan.data[l.key].map((item) => (
-                      <li key={item} data-selectable>
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              ),
-          )}
+          {plan.data.sections.map((s, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: deux catégories peuvent porter le même titre.
+            <section key={i} className="plan__section">
+              <h3>{s.title}</h3>
+              {s.items.length > 0 && (
+                <ul>
+                  {s.items.map((item) => (
+                    <li key={item} data-selectable>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          ))}
         </>
       )}
       <div>
@@ -60,16 +61,21 @@ export function NewcomerPlan() {
   );
 }
 
-const toText = (items: string[]) => items.join("\n");
-const toItems = (text: string) => text.split("\n");
+type Draft = { key: number; title: string; text: string };
+let nextKey = 0;
+const draft = (title: string, items: string[] = []): Draft => ({
+  key: nextKey++,
+  title,
+  text: items.join("\n"),
+});
 
 function PlanForm({ plan, onDone }: { plan: Plan; onDone: () => void }) {
   const [welcome, setWelcome] = useState(plan.welcome);
-  const [lists, setLists] = useState({
-    basics: toText(plan.basics),
-    safe: toText(plan.safe),
-    steps: toText(plan.steps),
-  });
+  const [sections, setSections] = useState<Draft[]>(() =>
+    isEmpty(plan)
+      ? starters().map((t) => draft(t))
+      : plan.sections.map((s) => draft(s.title, s.items)),
+  );
   const save = useMutation({
     mutationFn: api.newcomer.set,
     onSuccess: (saved) => {
@@ -77,6 +83,15 @@ function PlanForm({ plan, onDone }: { plan: Plan; onDone: () => void }) {
       onDone();
     },
   });
+  const patch = (key: number, p: Partial<Draft>) =>
+    setSections((ss) => ss.map((s) => (s.key === key ? { ...s, ...p } : s)));
+  const move = (index: number, by: number) =>
+    setSections((ss) => {
+      const next = [...ss];
+      const [s] = next.splice(index, 1);
+      if (s) next.splice(index + by, 0, s);
+      return next;
+    });
 
   return (
     <Form
@@ -85,9 +100,7 @@ function PlanForm({ plan, onDone }: { plan: Plan; onDone: () => void }) {
         e.preventDefault();
         save.mutate({
           welcome,
-          basics: toItems(lists.basics),
-          safe: toItems(lists.safe),
-          steps: toItems(lists.steps),
+          sections: sections.map((s) => ({ title: s.title, items: s.text.split("\n") })),
         });
       }}
     >
@@ -96,18 +109,55 @@ function PlanForm({ plan, onDone }: { plan: Plan; onDone: () => void }) {
         <TextArea className="input input--area" rows={4} />
         <span className="field__hint">{m.newcomer_welcome_hint()}</span>
       </AriaTextField>
-      {LISTS.map((l) => (
-        <AriaTextField
-          key={l.key}
-          className="field"
-          value={lists[l.key]}
-          onChange={(v) => setLists((s) => ({ ...s, [l.key]: v }))}
-        >
-          <Label className="field__label">{l.title()}</Label>
-          <TextArea className="input input--area" rows={3} />
-          <span className="field__hint">{l.hint()}</span>
-        </AriaTextField>
+      {sections.map((s, i) => (
+        <fieldset key={s.key} className="plan__section-edit">
+          <div className="plan__section-head">
+            <TextField
+              label={m.newcomer_section_title()}
+              maxLength={100}
+              value={s.title}
+              onChange={(title) => patch(s.key, { title })}
+            />
+            <IconButton
+              icon="close"
+              label={m.newcomer_section_remove({ title: s.title || m.newcomer_section_untitled() })}
+              onPress={() => setSections((ss) => ss.filter((x) => x.key !== s.key))}
+            />
+          </div>
+          <AriaTextField
+            className="field"
+            value={s.text}
+            onChange={(text) => patch(s.key, { text })}
+            aria-label={m.newcomer_section_items({
+              title: s.title || m.newcomer_section_untitled(),
+            })}
+          >
+            <TextArea className="input input--area" rows={3} />
+            <span className="field__hint">{m.newcomer_section_hint()}</span>
+          </AriaTextField>
+          {sections.length > 1 && (
+            <div className="plan__section-move">
+              <Button variant="ghost" isDisabled={i === 0} onPress={() => move(i, -1)}>
+                {m.newcomer_section_up()}
+              </Button>
+              <Button
+                variant="ghost"
+                isDisabled={i === sections.length - 1}
+                onPress={() => move(i, 1)}
+              >
+                {m.newcomer_section_down()}
+              </Button>
+            </div>
+          )}
+        </fieldset>
       ))}
+      {sections.length < MAX_SECTIONS && (
+        <div>
+          <Button variant="ghost" onPress={() => setSections((ss) => [...ss, draft("")])}>
+            {m.newcomer_section_add()}
+          </Button>
+        </div>
+      )}
       {save.isError && (
         <p className="alert" role="alert">
           {errorMessage(save.error)}
