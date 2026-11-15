@@ -24,5 +24,7 @@ export const keys = {
   cloudDevices: ["cloud", "devices"] as const,
   pkStatus: ["pluralkit", "status"] as const,
   safetyPlan: ["safety-plan"] as const,
+  newcomerPlan: ["newcomer-plan"] as const,
+  trusted: ["trusted"] as const,
   journal: (author: string | null) => ["journal", author] as const,
 };

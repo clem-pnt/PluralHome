@@ -1502,3 +1502,35 @@
     padding: 0;
   }
 }
+
+@layer views {
+  .line--trusted {
+    border-color: var(--accent);
+    margin-block-end: var(--space-4);
+  }
+  .line--trusted .line__text {
+    flex: 1;
+  }
+  .line--empty {
+    border-style: dashed;
+  }
+  .trusted-form {
+    display: grid;
+    gap: var(--space-3);
+    margin-block-end: var(--space-4);
+  }
+  .trusted-form h3 {
+    font-family: var(--font-display);
+    font-size: 18px;
+  }
+  .plan__welcome {
+    padding: var(--space-4);
+    border-radius: var(--radius-m);
+    background: var(--accent-soft);
+    color: var(--ink);
+    border-left: 3px solid var(--accent);
+    font-size: 17px;
+    line-height: 1.5;
+    white-space: pre-line;
+  }
+}

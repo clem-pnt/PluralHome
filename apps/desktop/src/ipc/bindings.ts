@@ -73,6 +73,10 @@ export const commands = {
 	journalDelete: (id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("journal_delete", { id })),
 	safetyGet: () => typedError<SafetyPlan_Serialize, IpcError_Serialize>(__TAURI_INVOKE("safety_get")),
 	safetySet: (plan: SafetyPlan_Deserialize) => typedError<SafetyPlan_Serialize, IpcError_Serialize>(__TAURI_INVOKE("safety_set", { plan })),
+	newcomerGet: () => typedError<NewcomerPlan_Serialize, IpcError_Serialize>(__TAURI_INVOKE("newcomer_get")),
+	newcomerSet: (plan: NewcomerPlan_Deserialize) => typedError<NewcomerPlan_Serialize, IpcError_Serialize>(__TAURI_INVOKE("newcomer_set", { plan })),
+	trustedGet: () => typedError<Contact_Serialize | null, IpcError_Serialize>(__TAURI_INVOKE("trusted_get")),
+	trustedSet: (contact: Contact_Deserialize | null) => typedError<Contact_Serialize | null, IpcError_Serialize>(__TAURI_INVOKE("trusted_set", { contact })),
 	accountGet: () => typedError<Account_Serialize | null, IpcError_Serialize>(__TAURI_INVOKE("account_get")),
 	/**  Ouvre le navigateur sur la page de connexion et attend son retour (5 min au plus). */
 	accountLogin: () => typedError<Account_Serialize, IpcError_Serialize>(__TAURI_INVOKE("account_login")),
@@ -413,6 +417,30 @@ export type NewPoll_Serialize = {
 	authorId: string | null,
 	multi: boolean,
 	options: string[],
+};
+
+export type NewcomerPlan = NewcomerPlan_Serialize | NewcomerPlan_Deserialize;
+
+export type NewcomerPlan_Deserialize = {
+	/**  Mot d'accueil, lu en premier. */
+	welcome?: string,
+	/**  Repères : où on est, quelle année, qui on est. */
+	basics?: string[],
+	/**  Personnes et lieux sûrs. */
+	safe?: string[],
+	/**  Premières choses à faire. */
+	steps?: string[],
+};
+
+export type NewcomerPlan_Serialize = {
+	/**  Mot d'accueil, lu en premier. */
+	welcome: string,
+	/**  Repères : où on est, quelle année, qui on est. */
+	basics: string[],
+	/**  Personnes et lieux sûrs. */
+	safe: string[],
+	/**  Premières choses à faire. */
+	steps: string[],
 };
 
 export type PairPoll = 

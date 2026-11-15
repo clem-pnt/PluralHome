@@ -4,10 +4,11 @@ import { Breathing } from "./Breathing";
 import { CrisisLines } from "./CrisisLines";
 import { FiveSenses } from "./FiveSenses";
 import { HereNow } from "./HereNow";
-import { SafetyPlan } from "./SafetyPlan";
+import { NewcomerPlan } from "./NewcomerPlan";
+import { TrustedContact } from "./TrustedContact";
 
 /**
- * Outils d'ancrage. `withPlan` : coffre ouvert, le plan de crise personnel est proposé.
+ * Outils d'ancrage. `withPlan` : coffre ouvert, le plan nouveaux alters et la personne de confiance sont proposés.
  * Sans lui, tout reste utilisable coffre verrouillé : rien ici ne lit de donnée chiffrée.
  */
 export function Grounding({ withPlan }: { withPlan: boolean }) {
@@ -25,7 +26,7 @@ export function Grounding({ withPlan }: { withPlan: boolean }) {
         </Tab>
         {withPlan && (
           <Tab id="plan" className="tab">
-            {m.grounding_plan()}
+            {m.grounding_newcomer()}
           </Tab>
         )}
         <Tab id="help" className="tab">
@@ -43,10 +44,11 @@ export function Grounding({ withPlan }: { withPlan: boolean }) {
       </TabPanel>
       {withPlan && (
         <TabPanel id="plan" className="grounding__panel">
-          <SafetyPlan />
+          <NewcomerPlan />
         </TabPanel>
       )}
       <TabPanel id="help" className="grounding__panel">
+        {withPlan && <TrustedContact />}
         <p className="muted">{m.lines_lead()}</p>
         <CrisisLines />
       </TabPanel>

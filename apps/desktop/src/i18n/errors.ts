@@ -36,6 +36,10 @@ export function errorMessage(e: unknown): string {
     if (e.field === "description") return m.error_invalid_description();
     if (e.field === "title") return m.error_invalid_title();
     if (e.field === "contacts") return m.error_invalid_contacts();
+    if (e.field === "welcome") return m.error_invalid_welcome();
+    if (e.field === "basics") return m.error_invalid_basics();
+    if (e.field === "safe") return m.error_invalid_safe();
+    if (e.field === "steps") return m.error_invalid_steps();
     if (e.field === "question") return m.error_invalid_question();
     if (e.field === "options") return m.error_invalid_options();
     if (e.field === "closed") return m.error_poll_closed();

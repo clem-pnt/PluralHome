@@ -15,6 +15,7 @@ pub mod kv;
 pub mod members;
 pub mod messages;
 mod migrations;
+pub mod newcomer;
 pub mod outbox;
 pub mod polls;
 pub mod replica;

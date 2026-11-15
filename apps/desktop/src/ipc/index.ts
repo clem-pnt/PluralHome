@@ -13,6 +13,7 @@ export type {
   FrontStatus,
   Member_Serialize as Member,
   Message_Serialize as Message,
+  NewcomerPlan_Serialize as NewcomerPlan,
   NewEntry_Deserialize as NewEntry,
   NewMember_Serialize as NewMember,
   NewMessage,
@@ -112,6 +113,15 @@ export const api = {
     update: (id: string, input: Parameters<typeof commands.journalUpdate>[1]) =>
       unwrap(commands.journalUpdate(id, input)),
     remove: (id: string) => unwrap(commands.journalDelete(id)),
+  },
+  newcomer: {
+    get: () => unwrap(commands.newcomerGet()),
+    set: (plan: Parameters<typeof commands.newcomerSet>[0]) => unwrap(commands.newcomerSet(plan)),
+  },
+  trusted: {
+    get: () => unwrap(commands.trustedGet()),
+    set: (contact: Parameters<typeof commands.trustedSet>[0]) =>
+      unwrap(commands.trustedSet(contact)),
   },
   safety: {
     get: () => unwrap(commands.safetyGet()),

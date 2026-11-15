@@ -36,7 +36,7 @@ pub struct Contact {
     pub phone: Option<String>,
 }
 
-fn clean_list(items: Vec<String>, field: &'static str) -> Result<Vec<String>> {
+pub(crate) fn clean_list(items: Vec<String>, field: &'static str) -> Result<Vec<String>> {
     let items: Vec<String> = items
         .into_iter()
         .map(|s| s.trim().to_owned())
@@ -48,7 +48,7 @@ fn clean_list(items: Vec<String>, field: &'static str) -> Result<Vec<String>> {
     Ok(items)
 }
 
-fn clean_contact(c: Contact) -> Result<Option<Contact>> {
+pub(crate) fn clean_contact(c: Contact) -> Result<Option<Contact>> {
     let name = c.name.trim().to_owned();
     let phone = c
         .phone

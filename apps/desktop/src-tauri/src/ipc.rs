@@ -8,9 +8,10 @@ use ph_core::front::{self, FrontChange, FrontSession};
 use ph_core::journal::{self, Entry, NewEntry};
 use ph_core::members::{self, Member, NewMember, Profile};
 use ph_core::messages::{self, CatchUp, Message, NewMessage};
+use ph_core::newcomer::{self, NewcomerPlan};
 use ph_core::polls::{self, NewPoll, Poll};
 use ph_core::roles;
-use ph_core::safety::{self, SafetyPlan};
+use ph_core::safety::{self, Contact, SafetyPlan};
 use ph_core::{CoreError, Vault, VaultStatus};
 use serde::Serialize;
 use tauri::State;
@@ -522,6 +523,36 @@ pub async fn safety_set(state: State<'_, AppState>, plan: SafetyPlan) -> IpcResu
 
 #[tauri::command]
 #[specta::specta]
+pub async fn newcomer_get(state: State<'_, AppState>) -> IpcResult<NewcomerPlan> {
+    blocking(&state, |v| newcomer::get_plan(v.conn()?)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn newcomer_set(
+    state: State<'_, AppState>,
+    plan: NewcomerPlan,
+) -> IpcResult<NewcomerPlan> {
+    blocking(&state, move |v| newcomer::set_plan(v.conn()?, plan)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn trusted_get(state: State<'_, AppState>) -> IpcResult<Option<Contact>> {
+    blocking(&state, |v| newcomer::get_trusted(v.conn()?)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn trusted_set(
+    state: State<'_, AppState>,
+    contact: Option<Contact>,
+) -> IpcResult<Option<Contact>> {
+    blocking(&state, move |v| newcomer::set_trusted(v.conn()?, contact)).await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn journal_list(
     state: State<'_, AppState>,
     before: Option<Uuid>,
@@ -602,6 +633,10 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         journal_delete,
         safety_get,
         safety_set,
+        newcomer_get,
+        newcomer_set,
+        trusted_get,
+        trusted_set,
         remote::account_get,
         remote::account_login,
         remote::account_login_cancel,
