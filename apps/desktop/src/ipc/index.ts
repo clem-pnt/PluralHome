@@ -92,6 +92,8 @@ export const api = {
     list: () => unwrap(commands.groupsList()),
     create: (input: Parameters<typeof commands.groupsCreate>[0]) =>
       unwrap(commands.groupsCreate(input)),
+    createFrom: (input: Parameters<typeof commands.groupsCreate>[0], messageIds: string[]) =>
+      unwrap(commands.groupsCreateFrom(input, messageIds)),
     update: (id: string, input: Parameters<typeof commands.groupsUpdate>[1]) =>
       unwrap(commands.groupsUpdate(id, input)),
     remove: (id: string) => unwrap(commands.groupsDelete(id)),

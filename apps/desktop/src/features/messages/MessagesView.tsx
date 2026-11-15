@@ -20,7 +20,7 @@ import { IconButton } from "../../ui/IconButton";
 import { matches, Search } from "../../ui/Search";
 import { useFrontCurrent } from "../front/useFront";
 import { useMembers } from "../members/useMembers";
-import { GroupForm } from "./GroupForm";
+import { GroupForm, type GroupSeed } from "./GroupForm";
 import { MessageActions } from "./MessageCard";
 import { type Draft, NewConversation } from "./NewConversation";
 import { PeopleField } from "./PeopleField";
@@ -102,6 +102,8 @@ export function MessagesView() {
   const [focusId, setFocusId] = useState<string | null>(null);
   const [replying, setReplying] = useState<Message | null>(null);
   const [editing, setEditing] = useState<ChatGroup | null>(null);
+  /** Discussion privée en train de devenir un groupe. */
+  const [seed, setSeed] = useState<GroupSeed | null>(null);
 
   // L'historique d'un système reste petit : on le charge en entier pour regrouper.
   useEffect(() => {
@@ -216,6 +218,20 @@ export function MessagesView() {
     />
   );
 
+  /** Modifier une conversation : son groupe, ou la discussion qui en deviendra un. */
+  const edit = (conv: Conversation) => {
+    if (conv.group) return setEditing(conv.group);
+    if (conv.key === EVERYONE) return;
+    setSeed({
+      name: title(conv),
+      memberIds: conv.ids,
+      ...(conv.friendId ? { friendId: conv.friendId } : {}),
+      remoteRefs: (conv.remote ?? []).map((r) => r.ref),
+      messageIds: conv.messages.map((x) => x.id),
+    });
+  };
+  const editable = (conv: Conversation) => conv.key !== EVERYONE;
+
   const startDiscussion = (next: Draft) => {
     // Une discussion avec les mêmes personnes existe déjà : on la rouvre.
     if (!next.friendId && next.to.length === 0) return select(EVERYONE);
@@ -282,10 +298,10 @@ export function MessagesView() {
                   <li
                     key={conv.key}
                     onContextMenu={
-                      group
+                      editable(conv)
                         ? (e) => {
                             e.preventDefault();
-                            setEditing(group);
+                            edit(conv);
                           }
                         : undefined
                     }
@@ -373,15 +389,26 @@ export function MessagesView() {
                         : names(current.group.memberIds, members.byId, 4)}
                     </span>
                   </AriaButton>
+                ) : editable(current) ? (
+                  <AriaButton
+                    className="dm__pane-title dm__pane-title--button"
+                    onPress={() => edit(current)}
+                  >
+                    <span className="dm__pane-name">{title(current)}</span>
+                  </AriaButton>
                 ) : (
                   <h2 className="dm__pane-title">{title(current)}</h2>
                 )}
-                {current.group && (
+                {editable(current) && (
                   <span className="dm__pane-tools">
                     <IconButton
                       icon="edit"
-                      label={m.group_edit_title({ name: current.group.name })}
-                      onPress={() => setEditing(current.group ?? null)}
+                      label={
+                        current.group
+                          ? m.group_edit_title({ name: current.group.name })
+                          : m.group_from_title()
+                      }
+                      onPress={() => edit(current)}
                     />
                   </span>
                 )}
@@ -424,11 +451,27 @@ export function MessagesView() {
       <ModalOverlay
         className="overlay"
         isDismissable
-        isOpen={editing !== null}
-        onOpenChange={(open) => !open && setEditing(null)}
+        isOpen={editing !== null || seed !== null}
+        onOpenChange={(open) => {
+          if (open) return;
+          setEditing(null);
+          setSeed(null);
+        }}
       >
         <Modal className="modal modal--wide">
           <Dialog className="dialog">
+            {seed && (
+              <GroupForm
+                group={null}
+                seed={seed}
+                members={members.list}
+                onCancel={() => setSeed(null)}
+                onDone={(group) => {
+                  setSeed(null);
+                  select(groupKey(group.id));
+                }}
+              />
+            )}
             {editing && (
               <GroupForm
                 group={editing}

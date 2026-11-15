@@ -528,6 +528,8 @@
   "messages_back": "Retour aux conversations",
   "messages_placeholder_everyone": "Écrire à tout le système…",
   "messages_placeholder_to": "Écrire à {names}…",
+  "group_from_title": "Modifier la discussion",
+  "group_from_hint": "La discussion devient un groupe : vous pouvez lui donner un nom, une photo et changer ses membres. Ses messages restent.",
   "group_new": "Nouveau groupe",
   "group_new_lead": "Une conversation nommée, avec les membres de votre choix.",
   "group_edit_title": "Modifier « {name} »",

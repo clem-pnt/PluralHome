@@ -13,15 +13,30 @@ import { useDeleteGroup, useSaveGroup } from "./useGroups";
 
 const MAX_NAME = 100;
 
-/** Création ou modification d'un groupe : nom, photo, membres. */
+/** Discussion privée (sans nom) à transformer en groupe, avec ses messages. */
+export interface GroupSeed {
+  name: string;
+  memberIds: string[];
+  friendId?: string;
+  /** Membres de l'ami ; vide : tout son système. */
+  remoteRefs: string[];
+  messageIds: string[];
+}
+
+/**
+ * Création ou modification d'un groupe : nom, photo, membres. Avec `seed`, une
+ * discussion existante devient un groupe et garde son historique.
+ */
 export function GroupForm({
   group,
+  seed,
   members,
   onDone,
   onCancel,
   onDeleted,
 }: {
   group: ChatGroup | null;
+  seed?: GroupSeed;
   members: Member[];
   onDone: (group: ChatGroup) => void;
   onCancel: () => void;
@@ -29,16 +44,23 @@ export function GroupForm({
 }) {
   const save = useSaveGroup();
   const remove = useDeleteGroup();
-  const [name, setName] = useState(group?.name ?? "");
-  const [ids, setIds] = useState<string[]>(group?.memberIds ?? []);
+  const [name, setName] = useState(group?.name ?? seed?.name ?? "");
+  const [ids, setIds] = useState<string[]>(group?.memberIds ?? seed?.memberIds ?? []);
   const [avatar, setAvatar] = useState<string | null>(group?.avatar ?? null);
   const [avatarEdit, setAvatarEdit] = useState<AvatarEdit>({ kind: "keep" });
   const [confirm, setConfirm] = useState(false);
   const allFriends = useFriendSystems();
-  // Le système ami d'un groupe est fixé à sa création.
-  const friends = group ? allFriends.filter((f) => f.id === group.friendId) : allFriends;
+  // Le système ami d'un groupe est fixé à sa création ; celui d'une
+  // discussion reprise, par ses messages.
+  const fixedFriend = group ? group.friendId : seed ? (seed.friendId ?? null) : undefined;
+  const friends =
+    fixedFriend === undefined ? allFriends : allFriends.filter((f) => f.id === fixedFriend);
   const [share, setShare] = useState<SystemPick | null>(
-    group?.friendId ? { system: group.friendId, ids: group.remoteMembers.map((r) => r.ref) } : null,
+    group?.friendId
+      ? { system: group.friendId, ids: group.remoteMembers.map((r) => r.ref) }
+      : seed?.friendId
+        ? { system: seed.friendId, ids: seed.remoteRefs }
+        : null,
   );
   const shared = share !== null;
   const valid = name.trim().length > 0 && (ids.length > 0 || shared);
@@ -87,14 +109,20 @@ export function GroupForm({
               friendId: share?.system ?? null,
               remoteMemberRefs: share?.ids ?? [],
             },
+            messageIds: seed?.messageIds,
           },
           { onSuccess: onDone },
         );
       }}
     >
       <Heading slot="title">
-        {group ? m.group_edit_title({ name: group.name }) : m.group_new()}
+        {group
+          ? m.group_edit_title({ name: group.name })
+          : seed
+            ? m.group_from_title()
+            : m.group_new()}
       </Heading>
+      {seed && <p className="muted">{m.group_from_hint()}</p>}
       <AvatarInput
         name={name}
         preview={avatar}
@@ -115,13 +143,13 @@ export function GroupForm({
       {shared && ids.length === 0 && <p className="field__hint">{m.group_shared_all_hint()}</p>}
       {friends.length > 0 && (
         <SystemsPicker
-          label={group ? m.group_shared_with() : m.group_share_with()}
+          label={group || seed ? m.group_shared_with() : m.group_share_with()}
           systems={friends}
           value={share}
           onChange={(v) => {
             // Une fois partagé, le groupe le reste : on ne peut que changer
             // les membres de l'ami.
-            if (group?.friendId && v === null) setShare({ system: group.friendId, ids: [] });
+            if (fixedFriend && v === null) setShare({ system: fixedFriend, ids: [] });
             else setShare(v);
           }}
         />
@@ -142,7 +170,7 @@ export function GroupForm({
           {m.cancel()}
         </Button>
         <Button type="submit" isDisabled={!valid || save.isPending}>
-          {group ? m.messages_save() : m.group_create()}
+          {group || seed ? m.messages_save() : m.group_create()}
         </Button>
       </div>
     </Form>

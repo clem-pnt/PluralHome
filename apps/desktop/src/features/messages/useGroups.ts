@@ -12,9 +12,25 @@ const upsert = (group: ChatGroup) =>
 
 export const useSaveGroup = () =>
   useMutation({
-    mutationFn: ({ id, input }: { id: string | null; input: GroupInput }) =>
-      id ? api.groups.update(id, input) : api.groups.create(input),
-    onSuccess: upsert,
+    mutationFn: ({
+      id,
+      input,
+      messageIds,
+    }: {
+      id: string | null;
+      input: GroupInput;
+      /** Messages d'une discussion qui devient ce groupe. */
+      messageIds?: string[] | undefined;
+    }) =>
+      id
+        ? api.groups.update(id, input)
+        : messageIds?.length
+          ? api.groups.createFrom(input, messageIds)
+          : api.groups.create(input),
+    onSuccess: (group, { messageIds }) => {
+      upsert(group);
+      if (messageIds?.length) void queryClient.invalidateQueries({ queryKey: keys.messages });
+    },
   });
 
 /** Supprime le groupe et ses messages. */

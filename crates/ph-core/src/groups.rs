@@ -208,6 +208,18 @@ fn share(
 }
 
 pub fn create(conn: &mut Connection, input: &GroupInput) -> Result<ChatGroup> {
+    create_from(conn, input, &[])
+}
+
+/// Crée le groupe et y range des messages déjà échangés : une discussion
+/// privée devient ainsi un groupe qu'on peut nommer, illustrer et compléter,
+/// sans perdre son historique. Seuls les messages hors groupe et du même
+/// échange (même ami, ou aucun) sont repris ; les autres sont ignorés.
+pub fn create_from(
+    conn: &mut Connection,
+    input: &GroupInput,
+    message_ids: &[Uuid],
+) -> Result<ChatGroup> {
     let friend = input.friend_id.as_deref();
     let (name, ids, avatar) = validated(input, friend.is_some())?;
     if friend.is_none() && !input.remote_member_refs.is_empty() {
@@ -230,6 +242,14 @@ pub fn create(conn: &mut Connection, input: &GroupInput) -> Result<ChatGroup> {
     if let Some(f) = friend {
         share(&tx, id, f, &name, &ids, &input.remote_member_refs)?;
     }
+    let mut adopt = tx.prepare_cached(
+        "UPDATE message SET group_id = ?1
+         WHERE id = ?2 AND group_id IS NULL AND friend_id IS ?3",
+    )?;
+    for m in message_ids {
+        adopt.execute(params![id.as_bytes(), m.as_bytes(), friend])?;
+    }
+    drop(adopt);
     let g = get(&tx, id)?;
     tx.commit()?;
     Ok(g)
@@ -376,6 +396,53 @@ mod tests {
         delete(&c, g.id).unwrap();
         assert!(messages::list(&c, None, 50, false).unwrap().is_empty());
         assert!(matches!(get(&c, g.id), Err(CoreError::NotFound)));
+    }
+
+    #[test]
+    fn conversation_becomes_group_with_its_history() {
+        let mut c = db();
+        let ana = member(&c, "Ana");
+        let bo = member(&c, "Bo");
+        let post = |c: &mut Connection, group_id| {
+            messages::post(
+                c,
+                &NewMessage {
+                    author_ids: vec![ana],
+                    recipient_ids: vec![bo],
+                    body: "salut".into(),
+                    group_id,
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+            .id
+        };
+        let old = post(&mut c, None);
+        let other = create(
+            &mut c,
+            &GroupInput {
+                name: "Autre".into(),
+                member_ids: vec![ana],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let elsewhere = post(&mut c, Some(other.id));
+        let g = create_from(
+            &mut c,
+            &GroupInput {
+                name: "Ana et Bo".into(),
+                member_ids: vec![ana, bo],
+                ..Default::default()
+            },
+            &[old, elsewhere, Uuid::now_v7()],
+        )
+        .unwrap();
+        let all = messages::list(&c, None, 50, false).unwrap();
+        let group_of = |id| all.iter().find(|m| m.id == id).unwrap().group_id;
+        assert_eq!(group_of(old), Some(g.id));
+        // Un message déjà dans un autre groupe y reste.
+        assert_eq!(group_of(elsewhere), Some(other.id));
     }
 
     #[test]

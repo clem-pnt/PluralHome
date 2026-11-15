@@ -377,6 +377,20 @@ pub async fn groups_create(state: State<'_, AppState>, input: GroupInput) -> Ipc
     blocking(&state, move |v| groups::create(v.conn_mut()?, &input)).await
 }
 
+/// Fait d'une discussion privée un groupe, avec ses messages.
+#[tauri::command]
+#[specta::specta]
+pub async fn groups_create_from(
+    state: State<'_, AppState>,
+    input: GroupInput,
+    message_ids: Vec<Uuid>,
+) -> IpcResult<ChatGroup> {
+    blocking(&state, move |v| {
+        groups::create_from(v.conn_mut()?, &input, &message_ids)
+    })
+    .await
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn groups_update(
@@ -736,6 +750,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         members_delete,
         groups_list,
         groups_create,
+        groups_create_from,
         groups_update,
         groups_delete,
         system_get,

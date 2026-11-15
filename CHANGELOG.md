@@ -14,6 +14,7 @@
 - Amis : plus de bouton « Synchroniser », la synchronisation est automatique (en arrière-plan et à l'ouverture de la page).
 - Votes : date et/ou heure de fin facultative. Le vote se clôt tout seul à l'échéance (le jour seul : fin à 23 h 59 ; l'heure seule : aujourd'hui, ou demain si elle est passée). Rouvrir un vote retire sa date de fin.
 - Votes : notification sur la page Front pour les votes en cours auxquels un membre présent n'a pas encore répondu, et pour les votes terminés dont le résultat n'a pas encore été vu. Une pastille sur « Vote » en donne le nombre. Les votes déjà clos avant la mise à jour comptent comme vus.
+- Messages : on peut modifier toutes les discussions, y compris les discussions privées et celles créées avant la mise à jour (nom, photo, membres). La discussion devient un groupe et garde ses messages. Pour une discussion avec un ami, seuls vos messages passent dans le groupe ; les siens restent dans l'ancienne discussion de son côté.
 
 ## 0.12.1 — Correctif écran vide
 

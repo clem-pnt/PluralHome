@@ -36,6 +36,8 @@ export const commands = {
 	membersDelete: (id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("members_delete", { id })),
 	groupsList: () => typedError<ChatGroup_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("groups_list")),
 	groupsCreate: (input: GroupInput_Deserialize) => typedError<ChatGroup_Serialize, IpcError_Serialize>(__TAURI_INVOKE("groups_create", { input })),
+	/**  Fait d'une discussion privée un groupe, avec ses messages. */
+	groupsCreateFrom: (input: GroupInput_Deserialize, messageIds: string[]) => typedError<ChatGroup_Serialize, IpcError_Serialize>(__TAURI_INVOKE("groups_create_from", { input, messageIds })),
 	groupsUpdate: (id: string, input: GroupInput_Deserialize) => typedError<ChatGroup_Serialize, IpcError_Serialize>(__TAURI_INVOKE("groups_update", { id, input })),
 	/**  Supprime le groupe et ses messages. */
 	groupsDelete: (id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("groups_delete", { id })),
