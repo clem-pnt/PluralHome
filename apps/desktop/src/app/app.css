@@ -86,7 +86,9 @@
   .shell {
     display: grid;
     grid-template-columns: 232px 1fr;
+    grid-template-rows: minmax(0, 1fr);
     block-size: 100%;
+    overflow: hidden;
   }
   .sidebar {
     display: flex;
@@ -95,6 +97,7 @@
     padding: var(--space-5) var(--space-4);
     border-inline-end: 1px solid var(--line);
     background: var(--surface-sunken);
+    overflow-y: auto;
   }
   .sidebar__brand {
     display: flex;
@@ -142,7 +145,10 @@
     box-shadow: var(--focus);
   }
 
+  /* position: relative garde les champs cachés de react-aria (position: absolute)
+     dans la zone qui défile, sinon ils font défiler toute la fenêtre. */
   .main {
+    position: relative;
     overflow: auto;
   }
   .view {
