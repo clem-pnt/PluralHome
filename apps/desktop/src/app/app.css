@@ -311,6 +311,25 @@
     font-weight: 400;
     font-size: 12px;
   }
+  .sort__title {
+    margin: var(--space-3) 0 0;
+    font-size: 15px;
+  }
+  .sort__group {
+    display: grid;
+    gap: var(--space-2);
+  }
+  .sort__label {
+    margin: 0;
+    font-weight: 600;
+    display: flex;
+    gap: var(--space-2);
+    align-items: baseline;
+  }
+  .sort__label small {
+    font-weight: 400;
+    font-size: 12px;
+  }
 
   .timeline {
     display: grid;

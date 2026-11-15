@@ -17,6 +17,7 @@ import { api, type Folder } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
 import { Avatar } from "../../ui/Avatar";
 import { Button } from "../../ui/Button";
+import { AutoSort } from "./AutoSortDialog";
 import { setFolders, useFolders } from "./useFolders";
 import { useMembers } from "./useMembers";
 
@@ -34,6 +35,7 @@ export function FoldersDialog() {
               <p className="muted">{m.folders_lead()}</p>
               <FoldersEditor />
               <div className="dialog__actions">
+                <AutoSort />
                 <Button variant="primary" onPress={close}>
                   {m.close()}
                 </Button>

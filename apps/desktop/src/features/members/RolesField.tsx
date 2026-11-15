@@ -11,12 +11,15 @@ const MAX_ROLE = 40;
 /** Libellés courants ; chacun reste libre d'écrire les siens. */
 const SUGGESTIONS = [
   m.role_host,
+  m.role_cohost,
   m.role_protector,
   m.role_gatekeeper,
   m.role_little,
   m.role_caretaker,
   m.role_trauma,
+  m.role_persecutor,
   m.role_introject,
+  m.role_fictive,
   m.role_fragment,
 ] as const;
 
