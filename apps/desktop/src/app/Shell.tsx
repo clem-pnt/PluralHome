@@ -1,6 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
 import { Button } from "react-aria-components";
+import { FriendsView } from "../features/friends/FriendsView";
 import { FrontView } from "../features/front/FrontView";
 import { GroundingView } from "../features/grounding/GroundingView";
 import { JournalView } from "../features/journal/JournalView";
@@ -15,6 +16,7 @@ import { keys, queryClient } from "./query";
 const VIEWS = {
   front: { label: m.nav_front, Component: FrontView },
   messages: { label: m.nav_messages, Component: MessagesView },
+  friends: { label: m.nav_friends, Component: FriendsView },
   vote: { label: m.nav_vote, Component: VoteView },
   journal: { label: m.nav_journal, Component: JournalView },
   members: { label: m.nav_members, Component: MembersView },
@@ -26,6 +28,8 @@ const VIEWS = {
 const EVENT_SYNCED = "pluralkit://synced";
 /** Émis quand la synchro chiffrée a reçu des changements d'un autre appareil. */
 const EVENT_CLOUD = "cloud://synced";
+/** Émis quand les amis, leurs fiches ou leurs messages ont changé. */
+const EVENT_FRIENDS = "friends://synced";
 
 function useRemoteSync() {
   useEffect(() => {
@@ -44,7 +48,13 @@ function useRemoteSync() {
     const offCloud = listen(EVENT_CLOUD, () => {
       void queryClient.invalidateQueries();
     });
+    const offFriends = listen(EVENT_FRIENDS, () => {
+      for (const queryKey of [keys.friends, keys.messages, keys.groups, ["catch-up"]]) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
+    });
     return () => {
+      void offFriends.then((unlisten) => unlisten());
       void off.then((unlisten) => unlisten());
       void offCloud.then((unlisten) => unlisten());
     };

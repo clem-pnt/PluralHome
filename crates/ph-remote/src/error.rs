@@ -24,6 +24,9 @@ pub enum RemoteError {
     Conflict,
     #[error("espace de synchro plein")]
     Quota,
+    /// Refus du service d'amis (code stable, pour l'interface).
+    #[error("refusé : {0}")]
+    Friend(&'static str),
     #[error(transparent)]
     Core(#[from] CoreError),
 }
@@ -42,6 +45,7 @@ impl RemoteError {
             Self::NotLinked => "remote_not_linked",
             Self::Conflict => "remote_conflict",
             Self::Quota => "remote_quota",
+            Self::Friend(code) => code,
             Self::Core(e) => e.code(),
         }
     }

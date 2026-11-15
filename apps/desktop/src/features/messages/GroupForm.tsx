@@ -7,6 +7,8 @@ import { Button } from "../../ui/Button";
 import { TextField } from "../../ui/TextField";
 import { AvatarInput } from "../members/AvatarInput";
 import { MemberPicker } from "../members/MemberPicker";
+import { useFriendSystems } from "./NewConversation";
+import { type SystemPick, SystemsPicker } from "./SystemsPicker";
 import { useDeleteGroup, useSaveGroup } from "./useGroups";
 
 const MAX_NAME = 100;
@@ -32,7 +34,14 @@ export function GroupForm({
   const [avatar, setAvatar] = useState<string | null>(group?.avatar ?? null);
   const [avatarEdit, setAvatarEdit] = useState<AvatarEdit>({ kind: "keep" });
   const [confirm, setConfirm] = useState(false);
-  const valid = name.trim().length > 0 && ids.length > 0;
+  const allFriends = useFriendSystems();
+  // Le système ami d'un groupe est fixé à sa création.
+  const friends = group ? allFriends.filter((f) => f.id === group.friendId) : allFriends;
+  const [share, setShare] = useState<SystemPick | null>(
+    group?.friendId ? { system: group.friendId, ids: group.remoteMembers.map((r) => r.ref) } : null,
+  );
+  const shared = share !== null;
+  const valid = name.trim().length > 0 && (ids.length > 0 || shared);
 
   if (confirm && group) {
     return (
@@ -71,7 +80,13 @@ export function GroupForm({
         save.mutate(
           {
             id: group?.id ?? null,
-            input: { name: name.trim(), memberIds: ids, avatar: avatarEdit },
+            input: {
+              name: name.trim(),
+              memberIds: ids,
+              avatar: avatarEdit,
+              friendId: share?.system ?? null,
+              remoteMemberRefs: share?.ids ?? [],
+            },
           },
           { onSuccess: onDone },
         );
@@ -97,6 +112,20 @@ export function GroupForm({
         maxLength={MAX_NAME}
       />
       <MemberPicker label={m.group_members()} members={members} value={ids} onChange={setIds} />
+      {shared && ids.length === 0 && <p className="field__hint">{m.group_shared_all_hint()}</p>}
+      {friends.length > 0 && (
+        <SystemsPicker
+          label={group ? m.group_shared_with() : m.group_share_with()}
+          systems={friends}
+          value={share}
+          onChange={(v) => {
+            // Une fois partagé, le groupe le reste : on ne peut que changer
+            // les membres de l'ami.
+            if (group?.friendId && v === null) setShare({ system: group.friendId, ids: [] });
+            else setShare(v);
+          }}
+        />
+      )}
       {save.isError && (
         <p className="alert" role="alert">
           {errorMessage(save.error)}

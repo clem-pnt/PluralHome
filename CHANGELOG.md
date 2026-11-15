@@ -1,5 +1,12 @@
 # Changelog
 
+## Non publié
+
+- Amis : ajout d'autres systèmes par lien ou QR code (caméra ou image), avec demandes à accepter, refuser ou bloquer, et un code à comparer de vive voix. Les invitations peuvent expirer (24 h, 7 jours ou jamais), servir une seule fois et être révoquées. Le compte Aragonite sert d'identité, mais son identifiant n'est jamais affiché. Tout est chiffré de bout en bout.
+- Amis : réglages de confidentialité par défaut, et pour chaque ami. On choisit si l'ami voit la liste des membres, leurs photos, pronoms et descriptions, ou qui est au front, et s'il peut nous écrire. Certains membres peuvent être toujours masqués. Les nouvelles demandes peuvent être fermées.
+- Messages : la nouvelle conversation et le nouveau groupe proposent une liste de systèmes, le nôtre et ceux des amis. Chacun a une liste déroulante de ses alters et un choix « Tout le système », pour les destinataires comme pour les auteurs.
+- Messages : on peut écrire à un ami, ou à certains de ses alters, au nom de tout le système ou de certains alters. Un groupe peut être partagé avec un système ami. Supprimer un message envoyé le retire aussi chez l'ami ; un message reçu ne disparaît que chez soi.
+
 ## 0.11.2 — Groupes, épingles, réponses et recherche dans les messages
 
 - Messages : groupes nommés, avec photos des membres empilées comme sur Discord ; clic droit sur un groupe pour changer son nom, sa photo et ses membres.

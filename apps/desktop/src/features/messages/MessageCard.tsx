@@ -9,6 +9,7 @@ import { IconButton } from "../../ui/IconButton";
 import { EditMessageForm } from "./EditMessageDialog";
 import { names, readersOf } from "./people";
 import { useDeleteMessage, useMarkReadBy, usePinMessage } from "./useMessages";
+import { authorFace, authorLabel, recipientLabel, useWho } from "./who";
 
 export function MessageCard({
   message,
@@ -29,9 +30,10 @@ export function MessageCard({
   const fromFront = fronters.filter((id) => authorIds.includes(id));
   const toFront = broadcast ? [] : fronters.filter((id) => recipientIds.includes(id));
 
-  const author = byId.get(authorIds[0] ?? "");
-  const from = names(authorIds, byId) || m.messages_someone();
-  const to = broadcast ? m.messages_everyone_route() : names(recipientIds, byId);
+  const who = useWho();
+  const author = authorFace(message, who);
+  const from = authorLabel(message, who);
+  const to = recipientLabel(message, who);
   const created = message.createdAt ?? 0;
 
   return (
@@ -110,7 +112,11 @@ export function MessageActions({
   const toFront = !broadcast && fronters.some((id) => recipientIds.includes(id));
   const readers = readersOf(message, fronters);
   // Un message reçu se lit et s'épingle, mais ne se modifie ni ne se supprime.
+  // Celui d'un ami ne se modifie pas non plus, mais peut s'effacer de chez nous.
+  const incoming = message.friendId != null && !message.outgoing;
   const received = toFront && !fromFront;
+  const canEdit = !incoming && !received;
+  const canDelete = incoming || !received;
 
   return (
     <div className="message__actions">
@@ -131,16 +137,16 @@ export function MessageActions({
         isDisabled={pin.isPending}
         onPress={() => pin.mutate({ id: message.id, pinned: !message.pinned })}
       />
-      {!received && (
-        <>
-          <IconButton icon="edit" label={m.messages_edit()} onPress={() => setDialog("edit")} />
-          <IconButton
-            icon="trash"
-            tone="danger"
-            label={m.messages_delete()}
-            onPress={() => setDialog("delete")}
-          />
-        </>
+      {canEdit && (
+        <IconButton icon="edit" label={m.messages_edit()} onPress={() => setDialog("edit")} />
+      )}
+      {canDelete && (
+        <IconButton
+          icon="trash"
+          tone="danger"
+          label={m.messages_delete()}
+          onPress={() => setDialog("delete")}
+        />
       )}
       <ModalOverlay
         className="overlay"
@@ -156,7 +162,13 @@ export function MessageActions({
               ) : (
                 <>
                   <Heading slot="title">{m.messages_delete_title()}</Heading>
-                  <p className="muted">{m.messages_delete_body()}</p>
+                  <p className="muted">
+                    {message.friendId
+                      ? message.outgoing
+                        ? m.messages_delete_body_sent()
+                        : m.messages_delete_body_received()
+                      : m.messages_delete_body()}
+                  </p>
                   <div className="dialog__actions">
                     <Button variant="ghost" slot="close">
                       {m.cancel()}

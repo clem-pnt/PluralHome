@@ -127,7 +127,7 @@ impl HttpCloud {
         })
     }
 
-    fn call<T: DeserializeOwned>(
+    pub(crate) fn call<T: DeserializeOwned>(
         &self,
         method: reqwest::Method,
         path: &str,
@@ -151,6 +151,9 @@ impl HttpCloud {
             .ok()
             .and_then(|v| v.get("error").and_then(Value::as_str).map(str::to_owned))
             .unwrap_or_default();
+        if let Some(c) = friend_code(&code) {
+            return Err(RemoteError::Friend(c));
+        }
         Err(match (status, code.as_str()) {
             (StatusCode::UNAUTHORIZED, _) => RemoteError::Unauthorized,
             (StatusCode::TOO_MANY_REQUESTS, _) => RemoteError::RateLimited,
@@ -166,13 +169,33 @@ impl HttpCloud {
     }
 }
 
+/// Codes d'erreur du service d'amis, traduits en codes stables pour l'interface.
+fn friend_code(code: &str) -> Option<&'static str> {
+    Some(match code {
+        "SELF" => "friend_self",
+        "ALREADY_FRIENDS" => "friend_already",
+        "BLOCKED" => "friend_blocked",
+        "INBOX_FULL" => "friend_inbox_full",
+        "TOO_MANY_REQUESTS" => "friend_too_many_requests",
+        "TOO_MANY_FRIENDS" => "friend_too_many_friends",
+        "TOO_MANY_INVITES" => "friend_too_many_invites",
+        "INVITE_INVALID" => "friend_invite_invalid",
+        "REQUEST_NOT_FOUND" => "friend_request_gone",
+        "FRIEND_NOT_FOUND" => "friend_gone",
+        "MAILBOX_FULL" => "friend_mailbox_full",
+        "IDENTITY_EXISTS" | "PUB_TAKEN" => "friend_identity_conflict",
+        "NO_IDENTITY" => "friend_no_identity",
+        _ => return None,
+    })
+}
+
 #[derive(Deserialize)]
 struct Seq {
     seq: i64,
 }
 #[derive(Deserialize)]
-struct Id {
-    id: String,
+pub(crate) struct Id {
+    pub(crate) id: String,
 }
 #[derive(Deserialize)]
 struct Requests {
@@ -183,7 +206,7 @@ struct Sealed {
     sealed: Option<String>,
 }
 #[derive(Deserialize)]
-struct Ack {}
+pub(crate) struct Ack {}
 
 impl CloudApi for HttpCloud {
     fn state(&self, token: &str) -> Result<RemoteState> {
@@ -234,7 +257,7 @@ impl CloudApi for HttpCloud {
     }
 }
 
-fn path_id(id: &str) -> Result<String> {
+pub(crate) fn path_id(id: &str) -> Result<String> {
     Uuid::parse_str(id)
         .map(|u| u.hyphenated().to_string())
         .map_err(|_| RemoteError::Decode)
@@ -264,7 +287,7 @@ impl<D: Db> Auth for SsoAuth<'_, D> {
 }
 
 /// Exécute `op` avec un jeton ; un refus déclenche un renouvellement et un seul nouvel essai.
-fn authed<T>(auth: &impl Auth, op: impl Fn(&str) -> Result<T>) -> Result<T> {
+pub(crate) fn authed<T>(auth: &impl Auth, op: impl Fn(&str) -> Result<T>) -> Result<T> {
     let token = auth.token()?;
     match op(&token) {
         Err(RemoteError::Unauthorized) => {
@@ -685,7 +708,7 @@ fn decode(key: &SyncKey, item: &Item) -> Option<Change> {
     (key.item_id(&change.t, &change.p) == item.k).then_some(change)
 }
 
-fn hex(bytes: &[u8]) -> String {
+pub(crate) fn hex(bytes: &[u8]) -> String {
     use std::fmt::Write as _;
     bytes
         .iter()
@@ -695,7 +718,7 @@ fn hex(bytes: &[u8]) -> String {
         })
 }
 
-fn unhex32(s: &str) -> Option<[u8; 32]> {
+pub(crate) fn unhex32(s: &str) -> Option<[u8; 32]> {
     if s.len() != 64 {
         return None;
     }
@@ -706,7 +729,7 @@ fn unhex32(s: &str) -> Option<[u8; 32]> {
     Some(out)
 }
 
-fn now_ms() -> i64 {
+pub(crate) fn now_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))

@@ -11,6 +11,10 @@ use ph_core::{CoreError, Vault};
 use ph_remote::RemoteError;
 use ph_remote::aragonite::{self, Account, Login, Sso};
 use ph_remote::cloud::{self, HttpCloud, PairPoll, PendingDevice, SsoAuth};
+use ph_remote::db::Db;
+use ph_remote::friends::{
+    self, Blocked, FriendsReport, Invite, InvitePreview, Requests, Settings as FriendSettings,
+};
 use ph_remote::pluralkit::{HttpPk, PkSystem};
 use ph_remote::sync::{self, Status};
 use tauri::{AppHandle, Emitter, State};
@@ -27,6 +31,8 @@ const LOGIN_TIMEOUT: Duration = Duration::from_secs(300);
 pub const EVENT_SYNCED: &str = "pluralkit://synced";
 /// Émis après une synchro chiffrée qui a reçu des données ou changé d'état.
 pub const EVENT_CLOUD: &str = "cloud://synced";
+/// Émis quand la liste des amis, leurs fiches ou leurs messages ont changé.
+pub const EVENT_FRIENDS: &str = "friends://synced";
 
 #[derive(Debug, Clone, Copy)]
 pub enum Wake {
@@ -34,6 +40,8 @@ pub enum Wake {
     Switches,
     /// Les membres ont changé ici, ou l'utilisateur demande une synchro.
     Full,
+    /// Un message pour un ami attend, ou nos réglages de confidentialité ont changé.
+    Friends,
 }
 
 #[derive(Clone)]
@@ -56,7 +64,9 @@ impl Remote {
                 loop {
                     let full = match rx.recv_timeout(SWITCH_EVERY) {
                         Ok(Wake::Full) => true,
-                        Ok(Wake::Switches) | Err(RecvTimeoutError::Timeout) => false,
+                        Ok(Wake::Switches | Wake::Friends) | Err(RecvTimeoutError::Timeout) => {
+                            false
+                        }
                         Err(RecvTimeoutError::Disconnected) => return,
                     };
                     let full = full || last_members.is_none_or(|t| t.elapsed() >= MEMBERS_EVERY);
@@ -68,6 +78,9 @@ impl Remote {
                             let _ = app.emit(EVENT_CLOUD, ());
                         }
                         Ok(_) => {}
+                    }
+                    if let Ok(Some(true)) = run_friends(&vault) {
+                        let _ = app.emit(EVENT_FRIENDS, ());
                     }
                     match run_sync(&vault, full) {
                         Ok(Some(changed)) => {
@@ -132,6 +145,33 @@ fn run_cloud(vault: &Mutex<Vault>) -> ph_remote::Result<Option<bool>> {
         Ok(r) => Ok(Some(r.pulled > 0)),
         Err(e) => {
             tracing::warn!(code = e.code(), "synchro chiffrée échouée");
+            Err(e)
+        }
+    }
+}
+
+/// Le système a commencé à utiliser les amis (identité créée ici ou reçue par la
+/// synchro) et un compte Aragonite est connecté.
+fn friends_active(vault: &Mutex<Vault>) -> ph_remote::Result<bool> {
+    match aragonite::account(vault) {
+        Ok(Some(_)) => {}
+        Ok(None) | Err(RemoteError::Core(CoreError::Locked | CoreError::NotInitialized)) => {
+            return Ok(false);
+        }
+        Err(e) => return Err(e),
+    }
+    Ok(vault.with(|c| ph_core::friends::has_identity(c))?)
+}
+
+/// `Ok(None)` : amis inactifs. `Ok(Some(changed))` sinon.
+fn run_friends(vault: &Mutex<Vault>) -> ph_remote::Result<Option<bool>> {
+    if !friends_active(vault)? {
+        return Ok(None);
+    }
+    match with_cloud(vault, |api, auth| friends::sync(vault, api, auth)) {
+        Ok(r) => Ok(Some(r.changed || r.received > 0)),
+        Err(e) => {
+            tracing::warn!(code = e.code(), "synchro des amis échouée");
             Err(e)
         }
     }
@@ -486,4 +526,264 @@ pub async fn cloud_sync_now(
         cloud::status(&*vault)
     })
     .await
+}
+
+// ---- Amis ----
+
+/// Appel réseau des amis, avec le client et le jeton du compte.
+async fn friends_call<T: Send + 'static>(
+    state: &AppState,
+    f: impl FnOnce(&Mutex<Vault>, &HttpCloud, &SsoAuth<'_, Mutex<Vault>>) -> ph_remote::Result<T>
+    + Send
+    + 'static,
+) -> IpcResult<T> {
+    let vault = state.vault();
+    remote(move || with_cloud(&vault, |api, auth| f(&vault, api, auth))).await
+}
+
+/// Lecture ou écriture locale, sans réseau.
+async fn friends_local<T: Send + 'static>(
+    state: &AppState,
+    f: impl FnOnce(&mut ph_core::rusqlite::Connection) -> ph_core::Result<T> + Send + 'static,
+) -> IpcResult<T> {
+    let vault = state.vault();
+    remote(move || Ok(vault.with(f)?)).await
+}
+
+/// Amis connus de cet appareil (fiches déchiffrées).
+#[tauri::command]
+#[specta::specta]
+pub async fn friends_list(state: State<'_, AppState>) -> IpcResult<Vec<ph_core::friends::Friend>> {
+    friends_local(&state, |c| {
+        if ph_core::friends::has_identity(c)? {
+            ph_core::friends::list(c)
+        } else {
+            Ok(Vec::new())
+        }
+    })
+    .await
+}
+
+/// Réglages par défaut : ce que voient les amis sans réglage propre.
+#[tauri::command]
+#[specta::specta]
+pub async fn friends_privacy_get(
+    state: State<'_, AppState>,
+) -> IpcResult<ph_core::friends::Privacy> {
+    friends_local(&state, |c| ph_core::friends::privacy(c)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn friends_privacy_set(
+    state: State<'_, AppState>,
+    rem: State<'_, Remote>,
+    privacy: ph_core::friends::Privacy,
+) -> IpcResult<()> {
+    friends_local(&state, move |c| ph_core::friends::set_privacy(c, &privacy)).await?;
+    rem.wake(Wake::Friends);
+    Ok(())
+}
+
+/// Surnom et réglages propres à un ami (`None` : réglages par défaut).
+#[tauri::command]
+#[specta::specta]
+pub async fn friends_set_pref(
+    state: State<'_, AppState>,
+    rem: State<'_, Remote>,
+    id: String,
+    nickname: Option<String>,
+    privacy: Option<ph_core::friends::Privacy>,
+) -> IpcResult<()> {
+    friends_local(&state, move |c| {
+        ph_core::friends::set_pref(c, &id, nickname.as_deref(), privacy.as_ref())
+    })
+    .await?;
+    rem.wake(Wake::Friends);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn friends_settings(state: State<'_, AppState>) -> IpcResult<FriendSettings> {
+    friends_call(&state, |v, api, auth| friends::settings(v, api, auth)).await
+}
+
+/// Accepter ou non les nouvelles demandes.
+#[tauri::command]
+#[specta::specta]
+pub async fn friends_set_open(state: State<'_, AppState>, open: bool) -> IpcResult<()> {
+    friends_call(&state, move |v, api, auth| {
+        friends::set_open(v, api, auth, open)
+    })
+    .await
+}
+
+/// `ttl` en millisecondes ; `None` : sans limite de durée.
+#[tauri::command]
+#[specta::specta]
+pub async fn friends_invite_create(
+    state: State<'_, AppState>,
+    ttl: Option<f64>,
+    once: bool,
+) -> IpcResult<Invite> {
+    #[allow(clippy::cast_possible_truncation)] // borné juste après, côté client réseau
+    let ttl = ttl.map(|t| t as i64);
+    friends_call(&state, move |v, api, auth| {
+        friends::create_invite(v, api, auth, ttl, once)
+    })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn friends_invites(state: State<'_, AppState>) -> IpcResult<Vec<Invite>> {
+    friends_call(&state, |v, api, auth| friends::invites(v, api, auth)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn friends_invite_revoke(state: State<'_, AppState>, id: String) -> IpcResult<()> {
+    friends_call(&state, move |v, api, auth| {
+        friends::revoke_invite(v, api, auth, &id)
+    })
+    .await
+}
+
+/// Lit un lien ou un QR code reçu, sans encore rien envoyer.
+#[tauri::command]
+#[specta::specta]
+pub async fn friends_preview(state: State<'_, AppState>, text: String) -> IpcResult<InvitePreview> {
+    friends_call(&state, move |v, api, auth| {
+        friends::preview_invite(v, api, auth, &text)
+    })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn friends_request_send(state: State<'_, AppState>, text: String) -> IpcResult<String> {
+    friends_call(&state, move |v, api, auth| {
+        friends::send_request(v, api, auth, &text)
+    })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn friends_requests(state: State<'_, AppState>) -> IpcResult<Requests> {
+    friends_call(&state, |v, api, auth| friends::requests(v, api, auth)).await
+}
+
+/// Accepte une demande reçue ; renvoie l'identifiant du nouvel ami.
+#[tauri::command]
+#[specta::specta]
+pub async fn friends_accept(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+) -> IpcResult<String> {
+    let r = friends_call(&state, move |v, api, auth| {
+        let f = friends::accept(v, api, auth, &id)?;
+        friends::publish(v, api, auth)?;
+        Ok(f)
+    })
+    .await?;
+    let _ = app.emit(EVENT_FRIENDS, ());
+    Ok(r)
+}
+
+/// Refuse une demande reçue ou annule une demande envoyée.
+#[tauri::command]
+#[specta::specta]
+pub async fn friends_drop_request(state: State<'_, AppState>, id: String) -> IpcResult<()> {
+    friends_call(&state, move |v, api, auth| {
+        friends::drop_request(v, api, auth, &id)
+    })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn friends_block_request(
+    state: State<'_, AppState>,
+    id: String,
+    name: Option<String>,
+) -> IpcResult<()> {
+    friends_call(&state, move |v, api, auth| {
+        friends::block_request(v, api, auth, &id, name.as_deref())
+    })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn friends_unfriend(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+) -> IpcResult<()> {
+    friends_call(&state, move |v, api, auth| {
+        friends::unfriend(v, api, auth, &id)
+    })
+    .await?;
+    let _ = app.emit(EVENT_FRIENDS, ());
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn friends_block(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+) -> IpcResult<()> {
+    friends_call(&state, move |v, api, auth| {
+        friends::block_friend(v, api, auth, &id)
+    })
+    .await?;
+    let _ = app.emit(EVENT_FRIENDS, ());
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn friends_blocks(state: State<'_, AppState>) -> IpcResult<Vec<Blocked>> {
+    friends_call(&state, |v, api, auth| friends::blocks(v, api, auth)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn friends_unblock(state: State<'_, AppState>, id: String) -> IpcResult<()> {
+    friends_call(&state, move |v, api, auth| {
+        friends::unblock(v, api, auth, &id)
+    })
+    .await
+}
+
+/// Remplace l'identité enregistrée sur le serveur par celle de cet appareil.
+/// Toutes les amitiés existantes sont perdues.
+#[tauri::command]
+#[specta::specta]
+pub async fn friends_take_over(app: AppHandle, state: State<'_, AppState>) -> IpcResult<()> {
+    friends_call(&state, |v, api, auth| {
+        friends::take_over_identity(v, api, auth)
+    })
+    .await?;
+    let _ = app.emit(EVENT_FRIENDS, ());
+    Ok(())
+}
+
+/// Synchro immédiate des amis (active les amis au premier appel).
+#[tauri::command]
+#[specta::specta]
+pub async fn friends_sync_now(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> IpcResult<FriendsReport> {
+    let r = friends_call(&state, |v, api, auth| friends::sync(v, api, auth)).await?;
+    if r.changed || r.received > 0 {
+        let _ = app.emit(EVENT_FRIENDS, ());
+    }
+    Ok(r)
 }

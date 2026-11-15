@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { Checkbox, CheckboxGroup } from "react-aria-components";
-import type { Member } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
 import { Avatar } from "../../ui/Avatar";
 import { Button } from "../../ui/Button";
@@ -8,6 +7,9 @@ import { matches, Search } from "../../ui/Search";
 
 /** Au-delà, on n'affiche que les premiers résultats : la recherche fait le reste. */
 export const PAGE = 60;
+
+/** Ce qu'il faut pour proposer quelqu'un : nos membres comme ceux d'un ami. */
+export type Pickable = { id: string; name: string; avatar?: string | null | undefined };
 
 /**
  * Choix de plusieurs membres avec recherche. Pensé pour les systèmes de plusieurs
@@ -23,7 +25,7 @@ export function MemberPicker({
   single,
 }: {
   label: string;
-  members: Member[];
+  members: Pickable[];
   value: string[];
   onChange: (ids: string[]) => void;
   autoFocus?: boolean;

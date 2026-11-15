@@ -3,11 +3,16 @@
 //! Les messages sont un tableau partagé : adressés à un membre ou à tout le
 //! système. L'état de lecture est suivi par membre, pour qu'au retour au front
 //! chacun retrouve ce qui lui a été laissé.
+//!
+//! Un message peut aussi s'échanger avec un système ami (`friend_id`) : ses
+//! membres y figurent par leur nom et leur couleur (`message_remote`), et
+//! l'envoi, la modification ou la suppression partent chez l'ami chiffrés.
 
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::friends::{self, Envelope, RemoteRef};
 use crate::front::{self, FrontSession};
 use crate::{CoreError, Result, members};
 
@@ -35,6 +40,16 @@ pub struct Message {
     pub group_id: Option<Uuid>,
     /// Message auquel celui-ci répond (`None` s'il a été supprimé depuis).
     pub reply_to: Option<Uuid>,
+    /// Conversation avec un système ami.
+    pub friend_id: Option<String>,
+    /// Envoyé par nous (avec un ami) ; `false` : reçu de l'ami.
+    pub outgoing: bool,
+    /// Signé par le système entier plutôt que par des membres.
+    pub by_system: bool,
+    /// Auteurs chez l'ami (message reçu).
+    pub remote_authors: Vec<RemoteRef>,
+    /// Destinataires chez l'ami (message envoyé) ; vide : tout son système.
+    pub remote_recipients: Vec<RemoteRef>,
 }
 
 #[cfg_attr(feature = "specta", derive(specta::Type))]
@@ -50,6 +65,15 @@ pub struct NewMessage {
     pub group_id: Option<Uuid>,
     #[serde(default)]
     pub reply_to: Option<Uuid>,
+    /// Système ami destinataire ; pris du groupe s'il est partagé.
+    #[serde(default)]
+    pub friend_id: Option<String>,
+    /// Membres de l'ami (identifiants de sa fiche) ; vide : tout son système.
+    #[serde(default)]
+    pub remote_recipient_refs: Vec<String>,
+    /// Signé par tout le système (`author_ids` doit être vide).
+    #[serde(default)]
+    pub by_system: bool,
 }
 
 /// Ce qu'un membre a manqué depuis son dernier passage au front.
@@ -81,8 +105,20 @@ fn columns() -> String {
          (SELECT group_concat(hex(x.member_id)) FROM ({AUTHORS}) x),
          (SELECT group_concat(hex(x.member_id)) FROM ({RECIPIENTS}) x),
          (SELECT group_concat(hex(member_id)) FROM message_read WHERE message_id = m.id),
-         m.group_id, m.reply_to"
+         m.group_id, m.reply_to, m.friend_id, m.outgoing, m.by_system,
+         (SELECT json_group_array(json_object('ref', ref, 'name', name, 'color', color))
+            FROM message_remote WHERE message_id = m.id AND role = 0),
+         (SELECT json_group_array(json_object('ref', ref, 'name', name, 'color', color))
+            FROM message_remote WHERE message_id = m.id AND role = 1)"
     )
+}
+
+fn refs(json: Option<String>) -> Vec<RemoteRef> {
+    let mut out: Vec<RemoteRef> = json
+        .and_then(|j| serde_json::from_str(&j).ok())
+        .unwrap_or_default();
+    out.sort_by_key(|a| a.name.to_lowercase());
+    out
 }
 
 fn ids(list: Option<String>) -> Vec<Uuid> {
@@ -108,6 +144,11 @@ fn from_row(r: &Row<'_>) -> rusqlite::Result<Message> {
         read_by: ids(r.get(7)?),
         group_id: r.get::<_, Option<[u8; 16]>>(8)?.map(Uuid::from_bytes),
         reply_to: r.get::<_, Option<[u8; 16]>>(9)?.map(Uuid::from_bytes),
+        friend_id: r.get(10)?,
+        outgoing: r.get(11)?,
+        by_system: r.get(12)?,
+        remote_authors: refs(r.get(13)?),
+        remote_recipients: refs(r.get(14)?),
     })
 }
 
@@ -145,7 +186,54 @@ fn check(conn: &Connection, input: &NewMessage) -> Result<String> {
         .copied()
         .collect();
     members::ensure_active(conn, &people)?;
+    if input.by_system && !input.author_ids.is_empty() {
+        return Err(CoreError::Invalid("authors"));
+    }
     Ok(body)
+}
+
+/// Ami concerné par un nouveau message : celui du groupe, ou celui demandé.
+/// Avec un ami, les destinataires sont chez lui ; sans, il n'y en a pas chez lui.
+fn friend_of(conn: &Connection, input: &NewMessage) -> Result<Option<String>> {
+    let from_group = match input.group_id {
+        Some(g) => crate::groups::get(conn, g)?.friend_id,
+        None => None,
+    };
+    let friend = match (from_group, &input.friend_id) {
+        (Some(g), Some(f)) if &g != f => return Err(CoreError::Invalid("friend")),
+        (Some(g), _) => Some(g),
+        (None, Some(_)) if input.group_id.is_some() => return Err(CoreError::Invalid("friend")),
+        (None, f) => f.clone(),
+    };
+    match &friend {
+        Some(_) if !input.recipient_ids.is_empty() => Err(CoreError::Invalid("recipients")),
+        None if !input.remote_recipient_refs.is_empty() || input.by_system => {
+            Err(CoreError::Invalid("recipients"))
+        }
+        _ => Ok(friend),
+    }
+}
+
+fn friend_and_dir(conn: &Connection, id: Uuid) -> Result<(Option<String>, bool)> {
+    conn.query_row(
+        "SELECT friend_id, outgoing FROM message WHERE id = ?1",
+        [id.as_bytes()],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )
+    .optional()?
+    .ok_or(CoreError::NotFound)
+}
+
+/// Destinataires chez l'ami : validés d'après sa fiche, enregistrés, et
+/// renvoyés sous forme d'identifiants pour l'enveloppe.
+fn remote_to(conn: &Connection, id: Uuid, friend: &str, refs: &[String]) -> Result<Vec<Uuid>> {
+    friends::ensure_writable(conn, friend)?;
+    let remote = friends::friend_refs(conn, friend, refs)?;
+    friends::write_message_remote(conn, id, 1, &remote)?;
+    remote
+        .iter()
+        .map(|r| Uuid::try_parse(&r.reference).map_err(|_| CoreError::Invalid("recipients")))
+        .collect()
 }
 
 fn write_people(conn: &Connection, id: Uuid, input: &NewMessage) -> Result<()> {
@@ -168,28 +256,51 @@ fn write_people(conn: &Connection, id: Uuid, input: &NewMessage) -> Result<()> {
 pub fn post(conn: &mut Connection, input: &NewMessage) -> Result<Message> {
     let tx = conn.transaction()?;
     let body = check(&tx, input)?;
-    if let Some(g) = input.group_id {
-        crate::groups::get(&tx, g)?;
-    }
-    if let Some(parent) = input.reply_to {
-        get(&tx, parent)?;
+    let friend = friend_of(&tx, input)?;
+    if let Some(parent) = input.reply_to
+        && get(&tx, parent)?.friend_id != friend
+    {
+        return Err(CoreError::Invalid("reply_to"));
     }
     let id = Uuid::now_v7();
+    let now = crate::time::now_ms()?;
     // `author_id` garde le premier auteur pour les appareils pas encore à jour ;
     // `recipient_id` reste vide : sinon supprimer ce destinataire effacerait le message.
     tx.execute(
-        "INSERT INTO message (id, author_id, recipient_id, body, created_at, group_id, reply_to)
-         VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6)",
+        "INSERT INTO message (id, author_id, recipient_id, body, created_at, group_id, reply_to,
+                              friend_id, outgoing, by_system)
+         VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         params![
             id.as_bytes(),
             input.author_ids.first().map(|u| *u.as_bytes()),
             body,
-            crate::time::now_ms()?,
+            now,
             input.group_id.map(|u| *u.as_bytes()),
             input.reply_to.map(|u| *u.as_bytes()),
+            friend,
+            friend.is_some(),
+            input.by_system,
         ],
     )?;
     write_people(&tx, id, input)?;
+    if let Some(f) = friend.as_deref() {
+        let to = remote_to(&tx, id, f, &input.remote_recipient_refs)?;
+        let authors = friends::own_refs(&tx, &dedup(&input.author_ids))?;
+        friends::queue(
+            &tx,
+            f,
+            Envelope::Msg {
+                id,
+                authors,
+                by_system: input.by_system,
+                to,
+                body: body.clone(),
+                at: now,
+                group: input.group_id,
+                reply: input.reply_to,
+            },
+        )?;
+    }
     let m = get(&tx, id)?;
     tx.commit()?;
     Ok(m)
@@ -199,19 +310,45 @@ pub fn post(conn: &mut Connection, input: &NewMessage) -> Result<Message> {
 pub fn update(conn: &mut Connection, id: Uuid, input: &NewMessage) -> Result<Message> {
     let tx = conn.transaction()?;
     let body = check(&tx, input)?;
-    let n = tx.execute(
-        "UPDATE message SET body = ?2, author_id = ?3, recipient_id = NULL, edited_at = ?4 WHERE id = ?1",
+    let (friend, outgoing) = friend_and_dir(&tx, id)?;
+    if friend.is_some() && !outgoing {
+        return Err(CoreError::Invalid("incoming"));
+    }
+    if friend.is_some() && !input.recipient_ids.is_empty()
+        || friend.is_none() && (!input.remote_recipient_refs.is_empty() || input.by_system)
+    {
+        return Err(CoreError::Invalid("recipients"));
+    }
+    let now = crate::time::now_ms()?;
+    tx.execute(
+        "UPDATE message SET body = ?2, author_id = ?3, recipient_id = NULL, edited_at = ?4,
+                            by_system = ?5
+         WHERE id = ?1",
         params![
             id.as_bytes(),
             body,
             input.author_ids.first().map(|u| *u.as_bytes()),
-            crate::time::now_ms()?
+            now,
+            input.by_system,
         ],
     )?;
-    if n == 0 {
-        return Err(CoreError::NotFound);
-    }
     write_people(&tx, id, input)?;
+    if let Some(f) = friend.as_deref() {
+        let to = remote_to(&tx, id, f, &input.remote_recipient_refs)?;
+        let authors = friends::own_refs(&tx, &dedup(&input.author_ids))?;
+        friends::queue(
+            &tx,
+            f,
+            Envelope::Edit {
+                id,
+                authors,
+                by_system: input.by_system,
+                to,
+                body: body.clone(),
+                at: now,
+            },
+        )?;
+    }
     let m = get(&tx, id)?;
     tx.commit()?;
     Ok(m)
@@ -234,12 +371,13 @@ pub fn list(
         "SELECT {} FROM message m
          WHERE (?1 IS NULL OR (m.id < ?1 AND m.pinned = 0))
            AND (?3 = 0 OR m.pinned = 1
-                OR EXISTS (SELECT 1 FROM ({RECIPIENTS}) x
-                           WHERE x.member_id NOT IN ({AUTHORS})
-                             AND NOT EXISTS (SELECT 1 FROM message_read r
-                                             WHERE r.message_id = m.id AND r.member_id = x.member_id))
-                OR (NOT EXISTS ({RECIPIENTS})
-                    AND NOT EXISTS (SELECT 1 FROM message_read r WHERE r.message_id = m.id)))
+                OR m.outgoing = 0
+                   AND (EXISTS (SELECT 1 FROM ({RECIPIENTS}) x
+                                WHERE x.member_id NOT IN ({AUTHORS})
+                                  AND NOT EXISTS (SELECT 1 FROM message_read r
+                                                  WHERE r.message_id = m.id AND r.member_id = x.member_id))
+                        OR (NOT EXISTS ({RECIPIENTS})
+                            AND NOT EXISTS (SELECT 1 FROM message_read r WHERE r.message_id = m.id))))
          ORDER BY m.pinned DESC, m.id DESC
          LIMIT ?2",
         columns()
@@ -264,13 +402,17 @@ pub fn set_pinned(conn: &Connection, id: Uuid, pinned: bool) -> Result<()> {
     }
 }
 
+/// Supprime un message. Envoyé à un ami encore présent, il est aussi retiré
+/// chez lui ; reçu d'un ami, il ne disparaît que chez soi.
 pub fn delete(conn: &Connection, id: Uuid) -> Result<()> {
-    let n = conn.execute("DELETE FROM message WHERE id = ?1", [id.as_bytes()])?;
-    if n == 0 {
-        Err(CoreError::NotFound)
-    } else {
-        Ok(())
+    let (friend, outgoing) = friend_and_dir(conn, id)?;
+    if let Some(f) = friend.as_deref().filter(|_| outgoing)
+        && friends::get(conn, f).is_ok()
+    {
+        friends::queue(conn, f, Envelope::Del { id })?;
     }
+    conn.execute("DELETE FROM message WHERE id = ?1", [id.as_bytes()])?;
+    Ok(())
 }
 
 pub fn catch_up(conn: &Connection, member_id: Uuid) -> Result<CatchUp> {
@@ -310,6 +452,7 @@ pub fn catch_up(conn: &Connection, member_id: Uuid) -> Result<CatchUp> {
         "SELECT {} FROM message m
          WHERE (NOT EXISTS ({RECIPIENTS}) OR ?1 IN ({RECIPIENTS}))
            AND ?1 NOT IN ({AUTHORS})
+           AND m.outgoing = 0
            AND NOT EXISTS (SELECT 1 FROM message_read r WHERE r.message_id = m.id AND r.member_id = ?1)
          ORDER BY m.id",
         columns()

@@ -23,9 +23,22 @@ export function EditMessageForm({
   const [authors, setAuthors] = useState(message.authorIds);
   const [recipients, setRecipients] = useState(message.recipientIds);
   const [body, setBody] = useState(message.body);
+  const friend = message.friendId != null;
   const save = () =>
     update.mutate(
-      { id: message.id, input: { authorIds: authors, recipientIds: recipients, body } },
+      {
+        id: message.id,
+        input: friend
+          ? {
+              authorIds: authors,
+              recipientIds: [],
+              body,
+              friendId: message.friendId ?? null,
+              remoteRecipientRefs: message.remoteRecipients.map((r) => r.ref),
+              bySystem: authors.length === 0,
+            }
+          : { authorIds: authors, recipientIds: recipients, body },
+      },
       { onSuccess: onDone },
     );
 
@@ -37,22 +50,24 @@ export function EditMessageForm({
           label={m.messages_from()}
           title={m.messages_pick_authors()}
           lead={m.messages_pick_authors_lead()}
-          emptyLabel={m.messages_pick_none_author()}
+          emptyLabel={friend ? m.messages_everyone() : m.messages_pick_none_author()}
           members={members}
           byId={byId}
           value={authors}
           onChange={setAuthors}
         />
-        <PeopleField
-          label={m.messages_to()}
-          title={m.messages_pick_recipients()}
-          lead={m.messages_pick_recipients_lead()}
-          emptyLabel={m.messages_everyone()}
-          members={members}
-          byId={byId}
-          value={recipients}
-          onChange={setRecipients}
-        />
+        {!friend && (
+          <PeopleField
+            label={m.messages_to()}
+            title={m.messages_pick_recipients()}
+            lead={m.messages_pick_recipients_lead()}
+            emptyLabel={m.messages_everyone()}
+            members={members}
+            byId={byId}
+            value={recipients}
+            onChange={setRecipients}
+          />
+        )}
       </div>
       <TextField className="field" value={body} onChange={setBody} maxLength={MAX_BODY} autoFocus>
         <Label className="field__label">{m.messages_body()}</Label>

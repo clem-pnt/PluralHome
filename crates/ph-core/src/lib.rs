@@ -7,6 +7,7 @@
 pub mod cloudkey;
 pub mod error;
 pub mod folders;
+pub mod friends;
 pub mod front;
 pub mod groups;
 pub mod journal;

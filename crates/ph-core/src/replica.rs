@@ -19,6 +19,7 @@ use crate::{CoreError, Result, time};
 enum Kind {
     Blob,
     Text,
+    Int,
 }
 
 struct Spec {
@@ -28,9 +29,9 @@ struct Spec {
     only_key: Option<&'static [&'static str]>,
 }
 
-use Kind::{Blob, Text};
+use Kind::{Blob, Int, Text};
 
-/// Clés de `kv` synchronisées (mêmes que dans les déclencheurs de la migration 12).
+/// Clés de `kv` synchronisées (mêmes que dans les déclencheurs de la migration 13).
 pub const SHARED_KEYS: &[&str] = &[
     "safety.plan",
     "newcomer.plan",
@@ -39,6 +40,8 @@ pub const SHARED_KEYS: &[&str] = &[
     "system.name",
     "system.avatar",
     "pluralkit.ignored",
+    "friends.identity",
+    "friends.privacy",
 ];
 
 /// Ordre parents → enfants : les insertions le suivent, les suppressions l'inversent.
@@ -71,6 +74,11 @@ const TABLES: &[Spec] = &[
     Spec {
         name: "message",
         pk: &[("id", Blob)],
+        only_key: None,
+    },
+    Spec {
+        name: "friend_pref",
+        pk: &[("id", Text)],
         only_key: None,
     },
     Spec {
@@ -121,6 +129,16 @@ const TABLES: &[Spec] = &[
     Spec {
         name: "chat_group_member",
         pk: &[("group_id", Blob), ("member_id", Blob)],
+        only_key: None,
+    },
+    Spec {
+        name: "message_remote",
+        pk: &[("message_id", Blob), ("role", Int), ("ref", Text)],
+        only_key: None,
+    },
+    Spec {
+        name: "group_remote",
+        pk: &[("group_id", Blob), ("ref", Text)],
         only_key: None,
     },
     Spec {
@@ -224,6 +242,10 @@ fn pk_values(s: &Spec, pk: &str) -> Result<Vec<Value>> {
                 .map(Value::Blob)
                 .map_err(|_| CoreError::Invalid("sync_pk")),
             Text => Ok(Value::Text(p)),
+            Int => p
+                .parse::<i64>()
+                .map(Value::Integer)
+                .map_err(|_| CoreError::Invalid("sync_pk")),
         })
         .collect::<Result<Vec<_>>>()?;
     if let Some(only) = s.only_key
@@ -248,6 +270,7 @@ fn pk_select(s: &Spec) -> String {
             .map(|(c, k)| match k {
                 Blob => format!("hex({c})"),
                 Text => (*c).to_string(),
+                Int => format!("CAST({c} AS TEXT)"),
             })
             .collect::<Vec<_>>()
             .join(", ");

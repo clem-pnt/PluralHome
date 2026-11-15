@@ -131,6 +131,40 @@ export const commands = {
 	cloudDelete: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("cloud_delete")),
 	/**  Synchro immédiate ; renvoie l'état à jour (erreur comprise). */
 	cloudSyncNow: () => typedError<CloudStatus_Serialize, IpcError_Serialize>(__TAURI_INVOKE("cloud_sync_now")),
+	/**  Amis connus de cet appareil (fiches déchiffrées). */
+	friendsList: () => typedError<Friend_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("friends_list")),
+	/**  Réglages par défaut : ce que voient les amis sans réglage propre. */
+	friendsPrivacyGet: () => typedError<Privacy_Serialize, IpcError_Serialize>(__TAURI_INVOKE("friends_privacy_get")),
+	friendsPrivacySet: (privacy: Privacy_Deserialize) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("friends_privacy_set", { privacy })),
+	/**  Surnom et réglages propres à un ami (`None` : réglages par défaut). */
+	friendsSetPref: (id: string, nickname: string | null, privacy: Privacy_Deserialize | null) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("friends_set_pref", { id, nickname, privacy })),
+	friendsSettings: () => typedError<Settings, IpcError_Serialize>(__TAURI_INVOKE("friends_settings")),
+	/**  Accepter ou non les nouvelles demandes. */
+	friendsSetOpen: (open: boolean) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("friends_set_open", { open })),
+	/**  `ttl` en millisecondes ; `None` : sans limite de durée. */
+	friendsInviteCreate: (ttl: number | null, once: boolean) => typedError<Invite_Serialize, IpcError_Serialize>(__TAURI_INVOKE("friends_invite_create", { ttl, once })),
+	friendsInvites: () => typedError<Invite_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("friends_invites")),
+	friendsInviteRevoke: (id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("friends_invite_revoke", { id })),
+	/**  Lit un lien ou un QR code reçu, sans encore rien envoyer. */
+	friendsPreview: (text: string) => typedError<InvitePreview_Serialize, IpcError_Serialize>(__TAURI_INVOKE("friends_preview", { text })),
+	friendsRequestSend: (text: string) => typedError<string, IpcError_Serialize>(__TAURI_INVOKE("friends_request_send", { text })),
+	friendsRequests: () => typedError<Requests_Serialize, IpcError_Serialize>(__TAURI_INVOKE("friends_requests")),
+	/**  Accepte une demande reçue ; renvoie l'identifiant du nouvel ami. */
+	friendsAccept: (id: string) => typedError<string, IpcError_Serialize>(__TAURI_INVOKE("friends_accept", { id })),
+	/**  Refuse une demande reçue ou annule une demande envoyée. */
+	friendsDropRequest: (id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("friends_drop_request", { id })),
+	friendsBlockRequest: (id: string, name: string | null) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("friends_block_request", { id, name })),
+	friendsUnfriend: (id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("friends_unfriend", { id })),
+	friendsBlock: (id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("friends_block", { id })),
+	friendsBlocks: () => typedError<Blocked_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("friends_blocks")),
+	friendsUnblock: (id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("friends_unblock", { id })),
+	/**
+	 *  Remplace l'identité enregistrée sur le serveur par celle de cet appareil.
+	 *  Toutes les amitiés existantes sont perdues.
+	 */
+	friendsTakeOver: () => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("friends_take_over")),
+	/**  Synchro immédiate des amis (active les amis au premier appel). */
+	friendsSyncNow: () => typedError<FriendsReport, IpcError_Serialize>(__TAURI_INVOKE("friends_sync_now")),
 };
 
 /* Types */
@@ -154,6 +188,45 @@ export type AvatarEdit =
 { kind: "keep" } | { kind: "remove" } | 
 /**  Image encodée en base64 (PNG, JPEG ou WebP, 256 Kio au plus). */
 { kind: "set"; data: string };
+
+export type Blocked = Blocked_Serialize | Blocked_Deserialize;
+
+export type Blocked_Deserialize = {
+	id: string,
+	/**  Nom connu au moment du blocage, s'il a été bloqué depuis cet appareil. */
+	name?: string | null,
+	createdAt: number | null,
+};
+
+export type Blocked_Serialize = {
+	id: string,
+	/**  Nom connu au moment du blocage, s'il a été bloqué depuis cet appareil. */
+	name: string | null,
+	createdAt: number | null,
+};
+
+/**  Membre tel que montré à un ami. `id` est notre identifiant de membre. */
+export type CardMember = CardMember_Serialize | CardMember_Deserialize;
+
+/**  Membre tel que montré à un ami. `id` est notre identifiant de membre. */
+export type CardMember_Deserialize = {
+	id: string,
+	name: string,
+	color: string,
+	pronouns?: string | null,
+	description?: string | null,
+	avatar?: string | null,
+};
+
+/**  Membre tel que montré à un ami. `id` est notre identifiant de membre. */
+export type CardMember_Serialize = {
+	id: string,
+	name: string,
+	color: string,
+	pronouns?: string,
+	description?: string,
+	avatar?: string,
+};
 
 /**  Ce qu'un membre a manqué depuis son dernier passage au front. */
 export type CatchUp = CatchUp_Serialize | CatchUp_Deserialize;
@@ -189,6 +262,10 @@ export type ChatGroup_Deserialize = {
 	avatar?: string | null,
 	memberIds: string[],
 	createdAt: number | null,
+	/**  Système ami avec qui le groupe est partagé. */
+	friendId?: string | null,
+	/**  Membres de l'ami ; vide (groupe partagé) : tout son système. */
+	remoteMembers: RemoteRef[],
 };
 
 export type ChatGroup_Serialize = {
@@ -198,6 +275,10 @@ export type ChatGroup_Serialize = {
 	avatar: string | null,
 	memberIds: string[],
 	createdAt: number | null,
+	/**  Système ami avec qui le groupe est partagé. */
+	friendId: string | null,
+	/**  Membres de l'ami ; vide (groupe partagé) : tout son système. */
+	remoteMembers: RemoteRef[],
 };
 
 export type CloudStatus = CloudStatus_Serialize | CloudStatus_Deserialize;
@@ -308,6 +389,56 @@ export type Folder_Serialize = {
 	members: string[],
 };
 
+/**  Ami tel qu'affiché. */
+export type Friend = Friend_Serialize | Friend_Deserialize;
+
+/**  Ami tel qu'affiché. */
+export type Friend_Deserialize = {
+	id: string,
+	/**  Nom choisi par l'ami pour son système. */
+	name?: string | null,
+	/**  Surnom qu'on lui donne (prioritaire à l'affichage). */
+	nickname?: string | null,
+	avatar?: string | null,
+	members: CardMember_Deserialize[],
+	front?: string[] | null,
+	/**  L'ami accepte nos messages. */
+	acceptsMessages: boolean,
+	/**  Code de vérification à comparer de vive voix. */
+	code: string,
+	/**  Réglages propres à cet ami ; `None` : réglages par défaut. */
+	privacy?: Privacy_Deserialize | null,
+	cardAt?: number | null,
+	createdAt: number | null,
+};
+
+/**  Ami tel qu'affiché. */
+export type Friend_Serialize = {
+	id: string,
+	/**  Nom choisi par l'ami pour son système. */
+	name: string | null,
+	/**  Surnom qu'on lui donne (prioritaire à l'affichage). */
+	nickname: string | null,
+	avatar: string | null,
+	members: CardMember_Serialize[],
+	front: string[] | null,
+	/**  L'ami accepte nos messages. */
+	acceptsMessages: boolean,
+	/**  Code de vérification à comparer de vive voix. */
+	code: string,
+	/**  Réglages propres à cet ami ; `None` : réglages par défaut. */
+	privacy: Privacy_Serialize | null,
+	cardAt: number | null,
+	createdAt: number | null,
+};
+
+export type FriendsReport = {
+	/**  La liste ou les fiches des amis ont changé. */
+	changed: boolean,
+	sent: number,
+	received: number,
+};
+
 /**  Nouvel état du front. Liste vide et `blurry = false` : plus personne au front. */
 export type FrontChange = FrontChange_Serialize | FrontChange_Deserialize;
 
@@ -362,12 +493,92 @@ export type GroupInput_Deserialize = {
 	name: string,
 	memberIds: string[],
 	avatar?: AvatarEdit,
+	/**  Fixé à la création, ignoré ensuite. */
+	friendId?: string | null,
+	/**  Membres de l'ami (identifiants de sa fiche) ; vide : tout son système. */
+	remoteMemberRefs?: string[],
 };
 
 export type GroupInput_Serialize = {
 	name: string,
 	memberIds: string[],
 	avatar: AvatarEdit,
+	/**  Fixé à la création, ignoré ensuite. */
+	friendId: string | null,
+	/**  Membres de l'ami (identifiants de sa fiche) ; vide : tout son système. */
+	remoteMemberRefs: string[],
+};
+
+export type IncomingRequest = IncomingRequest_Serialize | IncomingRequest_Deserialize;
+
+export type IncomingRequest_Deserialize = {
+	id: string,
+	name?: string | null,
+	avatar?: string | null,
+	/**  Membres montrés par la fiche ; `None` si elle est illisible. */
+	members?: number | null,
+	code: string,
+	createdAt: number | null,
+};
+
+export type IncomingRequest_Serialize = {
+	id: string,
+	name: string | null,
+	avatar: string | null,
+	/**  Membres montrés par la fiche ; `None` si elle est illisible. */
+	members: number | null,
+	code: string,
+	createdAt: number | null,
+};
+
+/**  Invitation prête à partager. */
+export type Invite = Invite_Serialize | Invite_Deserialize;
+
+/**  Aperçu d'une invitation reçue, avant d'envoyer la demande. */
+export type InvitePreview = InvitePreview_Serialize | InvitePreview_Deserialize;
+
+/**  Aperçu d'une invitation reçue, avant d'envoyer la demande. */
+export type InvitePreview_Deserialize = {
+	name?: string | null,
+	avatar?: string | null,
+	/**  Code de vérification, identique chez l'autre système. */
+	code: string,
+	/**  Le lien vient de notre propre système. */
+	own: boolean,
+	/**  Déjà ami avec ce système. */
+	already: boolean,
+};
+
+/**  Aperçu d'une invitation reçue, avant d'envoyer la demande. */
+export type InvitePreview_Serialize = {
+	name: string | null,
+	avatar: string | null,
+	/**  Code de vérification, identique chez l'autre système. */
+	code: string,
+	/**  Le lien vient de notre propre système. */
+	own: boolean,
+	/**  Déjà ami avec ce système. */
+	already: boolean,
+};
+
+/**  Invitation prête à partager. */
+export type Invite_Deserialize = {
+	id: string,
+	/**  `None` si le lien a été créé sur un autre appareil (le secret n'y est pas). */
+	link?: string | null,
+	once: boolean,
+	expiresAt?: number | null,
+	createdAt: number | null,
+};
+
+/**  Invitation prête à partager. */
+export type Invite_Serialize = {
+	id: string,
+	/**  `None` si le lien a été créé sur un autre appareil (le secret n'y est pas). */
+	link: string | null,
+	once: boolean,
+	expiresAt: number | null,
+	createdAt: number | null,
 };
 
 /**  Erreur telle que vue par le front : un code stable à traduire, jamais de détail brut. */
@@ -433,6 +644,16 @@ export type Message_Deserialize = {
 	groupId?: string | null,
 	/**  Message auquel celui-ci répond (`None` s'il a été supprimé depuis). */
 	replyTo?: string | null,
+	/**  Conversation avec un système ami. */
+	friendId?: string | null,
+	/**  Envoyé par nous (avec un ami) ; `false` : reçu de l'ami. */
+	outgoing: boolean,
+	/**  Signé par le système entier plutôt que par des membres. */
+	bySystem: boolean,
+	/**  Auteurs chez l'ami (message reçu). */
+	remoteAuthors: RemoteRef[],
+	/**  Destinataires chez l'ami (message envoyé) ; vide : tout son système. */
+	remoteRecipients: RemoteRef[],
 };
 
 export type Message_Serialize = {
@@ -451,6 +672,16 @@ export type Message_Serialize = {
 	groupId: string | null,
 	/**  Message auquel celui-ci répond (`None` s'il a été supprimé depuis). */
 	replyTo: string | null,
+	/**  Conversation avec un système ami. */
+	friendId: string | null,
+	/**  Envoyé par nous (avec un ami) ; `false` : reçu de l'ami. */
+	outgoing: boolean,
+	/**  Signé par le système entier plutôt que par des membres. */
+	bySystem: boolean,
+	/**  Auteurs chez l'ami (message reçu). */
+	remoteAuthors: RemoteRef[],
+	/**  Destinataires chez l'ami (message envoyé) ; vide : tout son système. */
+	remoteRecipients: RemoteRef[],
 };
 
 export type NewEntry = NewEntry_Serialize | NewEntry_Deserialize;
@@ -493,6 +724,12 @@ export type NewMessage_Deserialize = {
 	/**  Fixés à l'envoi, ignorés à la modification. */
 	groupId?: string | null,
 	replyTo?: string | null,
+	/**  Système ami destinataire ; pris du groupe s'il est partagé. */
+	friendId?: string | null,
+	/**  Membres de l'ami (identifiants de sa fiche) ; vide : tout son système. */
+	remoteRecipientRefs?: string[],
+	/**  Signé par tout le système (`author_ids` doit être vide). */
+	bySystem?: boolean,
 };
 
 export type NewMessage_Serialize = {
@@ -503,6 +740,12 @@ export type NewMessage_Serialize = {
 	/**  Fixés à l'envoi, ignorés à la modification. */
 	groupId: string | null,
 	replyTo: string | null,
+	/**  Système ami destinataire ; pris du groupe s'il est partagé. */
+	friendId: string | null,
+	/**  Membres de l'ami (identifiants de sa fiche) ; vide : tout son système. */
+	remoteRecipientRefs: string[],
+	/**  Signé par tout le système (`author_ids` doit être vide). */
+	bySystem: boolean,
 };
 
 export type NewPoll = NewPoll_Serialize | NewPoll_Deserialize;
@@ -535,6 +778,24 @@ export type NewcomerPlan_Serialize = {
 	welcome: string,
 	/**  Catégories libres, dans l'ordre d'affichage. */
 	sections: PlanSection_Serialize[],
+};
+
+export type OutgoingRequest = OutgoingRequest_Serialize | OutgoingRequest_Deserialize;
+
+export type OutgoingRequest_Deserialize = {
+	id: string,
+	name?: string | null,
+	avatar?: string | null,
+	code?: string | null,
+	createdAt: number | null,
+};
+
+export type OutgoingRequest_Serialize = {
+	id: string,
+	name: string | null,
+	avatar: string | null,
+	code: string | null,
+	createdAt: number | null,
 };
 
 export type PairPoll = 
@@ -615,6 +876,39 @@ export type Poll_Serialize = {
 	options: PollOption[],
 };
 
+/**  Ce qu'un ami peut voir de nous et faire avec nous. */
+export type Privacy = Privacy_Serialize | Privacy_Deserialize;
+
+/**  Ce qu'un ami peut voir de nous et faire avec nous. */
+export type Privacy_Deserialize = {
+	/**  Liste des membres (sinon : seulement le nom et la photo du système). */
+	members?: boolean,
+	avatars?: boolean,
+	pronouns?: boolean,
+	descriptions?: boolean,
+	/**  Qui est au front en ce moment. */
+	front?: boolean,
+	/**  Peut nous écrire. */
+	messages?: boolean,
+	/**  Membres jamais montrés, même si la liste l'est. */
+	hidden?: string[],
+};
+
+/**  Ce qu'un ami peut voir de nous et faire avec nous. */
+export type Privacy_Serialize = {
+	/**  Liste des membres (sinon : seulement le nom et la photo du système). */
+	members: boolean,
+	avatars: boolean,
+	pronouns: boolean,
+	descriptions: boolean,
+	/**  Qui est au front en ce moment. */
+	front: boolean,
+	/**  Peut nous écrire. */
+	messages: boolean,
+	/**  Membres jamais montrés, même si la liste l'est. */
+	hidden: string[],
+};
+
 /**
  *  Profil détaillé d'un membre. Rien n'en part vers PluralKit, sauf la description
  *  si la synchro des descriptions est activée.
@@ -648,6 +942,28 @@ export type Remote =
 /**  Une synchro existe : un appareil doit la rejoindre. */
 "exists";
 
+/**
+ *  Membre d'un système ami cité dans un message ou un groupe, avec nom et
+ *  couleur gardés pour l'historique.
+ */
+export type RemoteRef = {
+	ref: string,
+	name: string,
+	color: string,
+};
+
+export type Requests = Requests_Serialize | Requests_Deserialize;
+
+export type Requests_Deserialize = {
+	incoming: IncomingRequest_Deserialize[],
+	outgoing: OutgoingRequest_Deserialize[],
+};
+
+export type Requests_Serialize = {
+	incoming: IncomingRequest_Serialize[],
+	outgoing: OutgoingRequest_Serialize[],
+};
+
 export type SafetyPlan = SafetyPlan_Serialize | SafetyPlan_Deserialize;
 
 export type SafetyPlan_Deserialize = {
@@ -670,6 +986,11 @@ export type SafetyPlan_Serialize = {
 	reasons: string[],
 	/**  Personnes à joindre. */
 	contacts: Contact_Serialize[],
+};
+
+export type Settings = {
+	/**  Accepte les nouvelles demandes (sinon, les liens existants ne marchent plus). */
+	open: boolean,
 };
 
 export type Status = Status_Serialize | Status_Deserialize;

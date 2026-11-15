@@ -33,6 +33,8 @@ export function presentIds(sessions: FrontSession[] | undefined): string[] {
  * personne au front, les destinataires directs. Jamais les auteurs.
  */
 export function readersOf(message: Message, fronters: string[]): string[] {
+  // Ce qu'on envoie à un ami se lit chez lui, pas chez nous.
+  if (message.friendId && message.outgoing) return [];
   const { authorIds, recipientIds, readBy } = message;
   const broadcast = recipientIds.length === 0;
   const list =
@@ -48,6 +50,11 @@ export function readersOf(message: Message, fronters: string[]): string[] {
 
 /** Un message ne s'affiche que s'il concerne quelqu'un de présent, ou tout le système. */
 export function concerns(message: Message, present: string[]): boolean {
+  if (message.friendId) {
+    // Avec un ami, notre côté est l'auteur (envoyé) ou le destinataire (reçu).
+    const ours = ourSide(message);
+    return ours.length === 0 || ours.some((id) => present.includes(id));
+  }
   return (
     message.recipientIds.length === 0 ||
     message.authorIds.some((id) => present.includes(id)) ||
@@ -66,10 +73,29 @@ export const groupKey = (id: string) => `g:${id}`;
  */
 export function conversationOf(message: Message): string {
   if (message.groupId) return groupKey(message.groupId);
+  if (message.friendId) return friendKey(message.friendId, ourSide(message), theirSide(message));
   if (message.recipientIds.length === 0) return EVERYONE;
   return participantsKey([...message.authorIds, ...message.recipientIds]);
 }
 
 export function participantsKey(ids: string[]): string {
   return [...new Set(ids)].sort().join(",");
+}
+
+/** Nos membres dans un échange avec un ami : vide pour tout le système. */
+export function ourSide(message: Message): string[] {
+  return message.outgoing ? message.authorIds : message.recipientIds;
+}
+
+/** Les membres de l'ami dans l'échange : vide pour tout son système. */
+export function theirSide(message: Message): string[] {
+  return (message.outgoing ? message.remoteRecipients : message.remoteAuthors).map((r) => r.ref);
+}
+
+/**
+ * Discussion avec un ami : ses participants des deux côtés. Les réponses
+ * retombent dans la même discussion, puisque les côtés s'inversent.
+ */
+export function friendKey(friendId: string, ours: string[], theirs: string[]): string {
+  return `f:${friendId}:${participantsKey(ours)}|${participantsKey(theirs)}`;
 }

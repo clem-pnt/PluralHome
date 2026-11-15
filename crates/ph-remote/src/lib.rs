@@ -6,6 +6,7 @@ pub mod avatar;
 pub mod cloud;
 pub mod db;
 pub mod error;
+pub mod friends;
 pub mod pluralkit;
 pub mod sync;
 

@@ -266,6 +266,132 @@ pub fn fingerprint(public: &[u8; 32]) -> String {
     format!("{:03} {:03}", n / 1000, n % 1000)
 }
 
+/// Identité d'amitié du système : une paire X25519 propre, distincte de la clé
+/// de synchro. Le serveur ne voit que la clé publique ; tout ce qui passe entre
+/// deux systèmes amis est chiffré avec une clé tirée de leur échange Diffie-Hellman.
+/// Pas de confidentialité persistante : qui vole cette clé lit l'historique.
+pub struct FriendIdentity(Zeroizing<[u8; 32]>);
+
+impl FriendIdentity {
+    pub fn generate() -> Result<Self> {
+        Ok(Self(Zeroizing::new(random::<32>()?)))
+    }
+
+    pub fn from_hex(s: &str) -> Result<Self> {
+        let mut raw = [0u8; 32];
+        hex::decode_to_slice(s, &mut raw).map_err(|_| CoreError::Crypto)?;
+        Ok(Self(Zeroizing::new(raw)))
+    }
+
+    #[must_use]
+    pub fn to_hex(&self) -> Zeroizing<String> {
+        Zeroizing::new(hex::encode(*self.0))
+    }
+
+    #[must_use]
+    pub fn public(&self) -> [u8; 32] {
+        *PublicKey::from(&StaticSecret::from(*self.0)).as_bytes()
+    }
+
+    fn key_with(&self, their: &[u8; 32]) -> Result<Zeroizing<[u8; 32]>> {
+        let me = self.public();
+        if *their == me {
+            return Err(CoreError::Crypto);
+        }
+        let shared = StaticSecret::from(*self.0).diffie_hellman(&PublicKey::from(*their));
+        if !shared.was_contributory() {
+            return Err(CoreError::Crypto);
+        }
+        let (lo, hi) = if me < *their {
+            (me, *their)
+        } else {
+            (*their, me)
+        };
+        let mut ikm = Zeroizing::new([0u8; 96]);
+        ikm[..32].copy_from_slice(shared.as_bytes());
+        ikm[32..64].copy_from_slice(&lo);
+        ikm[64..].copy_from_slice(&hi);
+        Ok(derive(&*ikm, b"pluralhome friend v1"))
+    }
+
+    /// Chiffre pour un système ami ; `purpose` sépare les usages (fiche, courrier…).
+    pub fn seal_for(&self, their: &[u8; 32], purpose: &str, plain: &[u8]) -> Result<Vec<u8>> {
+        let key = self.key_with(their)?;
+        seal_with(&key, &friend_aad(purpose, &self.public()), plain)
+    }
+
+    /// Déchiffre ce qu'un système ami a scellé pour nous.
+    pub fn open_from(
+        &self,
+        their: &[u8; 32],
+        purpose: &str,
+        sealed: &[u8],
+    ) -> Result<Zeroizing<Vec<u8>>> {
+        let key = self.key_with(their)?;
+        open_with(&key, &friend_aad(purpose, their), sealed)
+    }
+}
+
+fn friend_aad(purpose: &str, sender: &[u8; 32]) -> Vec<u8> {
+    let mut aad = Vec::with_capacity(purpose.len() + 33);
+    aad.extend_from_slice(purpose.as_bytes());
+    aad.push(0);
+    aad.extend_from_slice(sender);
+    aad
+}
+
+/// Code de vérification d'une amitié : identique des deux côtés, à comparer
+/// de vive voix pour s'assurer que le serveur n'a pas glissé une autre clé.
+#[must_use]
+pub fn friend_code(mine: &[u8; 32], theirs: &[u8; 32]) -> String {
+    let (lo, hi) = if mine < theirs {
+        (mine, theirs)
+    } else {
+        (theirs, mine)
+    };
+    let mut hasher = Sha256::new();
+    hasher.update(b"pluralhome friend code v1");
+    hasher.update(lo);
+    hasher.update(hi);
+    let digest = hasher.finalize();
+    let mut head = [0u8; 8];
+    head.copy_from_slice(&digest[..8]);
+    let digits = format!("{:012}", u64::from_be_bytes(head) % 1_000_000_000_000);
+    format!("{} {} {}", &digits[..4], &digits[4..8], &digits[8..])
+}
+
+/// Secret d'une invitation : il voyage dans le lien ou le QR code, jamais au serveur.
+pub struct InviteSecret(Zeroizing<[u8; 16]>);
+
+impl InviteSecret {
+    pub fn generate() -> Result<Self> {
+        Ok(Self(Zeroizing::new(random::<16>()?)))
+    }
+
+    pub fn from_hex(s: &str) -> Result<Self> {
+        let mut raw = [0u8; 16];
+        hex::decode_to_slice(s, &mut raw).map_err(|_| CoreError::Crypto)?;
+        Ok(Self(Zeroizing::new(raw)))
+    }
+
+    #[must_use]
+    pub fn to_hex(&self) -> String {
+        hex::encode(*self.0)
+    }
+
+    pub fn seal(&self, plain: &[u8]) -> Result<Vec<u8>> {
+        seal_with(&derive(&*self.0, b"pluralhome invite v1"), b"invite", plain)
+    }
+
+    pub fn open(&self, sealed: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
+        open_with(
+            &derive(&*self.0, b"pluralhome invite v1"),
+            b"invite",
+            sealed,
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -313,5 +439,31 @@ mod tests {
         let intruder = PairingSecret::generate().unwrap();
         assert!(intruder.open(&sealed, "ks").is_err());
         assert_eq!(fingerprint(&dev.public()).len(), 7);
+    }
+
+    #[test]
+    fn friend_roundtrip() {
+        let a = FriendIdentity::generate().unwrap();
+        let b = FriendIdentity::generate().unwrap();
+        let s = a.seal_for(&b.public(), "card", b"hello").unwrap();
+        assert_eq!(&*b.open_from(&a.public(), "card", &s).unwrap(), b"hello");
+        assert!(b.open_from(&a.public(), "mail", &s).is_err());
+        let c = FriendIdentity::generate().unwrap();
+        assert!(c.open_from(&a.public(), "card", &s).is_err());
+        // Ce qu'on a scellé soi-même ne se relit pas comme venant de l'autre.
+        assert!(a.open_from(&b.public(), "card", &s).is_err());
+        assert!(a.seal_for(&a.public(), "card", b"x").is_err());
+        assert!(a.seal_for(&[0u8; 32], "card", b"x").is_err());
+        let again = FriendIdentity::from_hex(&a.to_hex()).unwrap();
+        assert_eq!(again.public(), a.public());
+        let code = friend_code(&a.public(), &b.public());
+        assert_eq!(code, friend_code(&b.public(), &a.public()));
+        assert_eq!(code.len(), 14);
+
+        let inv = InviteSecret::generate().unwrap();
+        let sealed = inv.seal(b"card").unwrap();
+        let back = InviteSecret::from_hex(&inv.to_hex()).unwrap();
+        assert_eq!(&*back.open(&sealed).unwrap(), b"card");
+        assert!(InviteSecret::generate().unwrap().open(&sealed).is_err());
     }
 }

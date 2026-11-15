@@ -30,4 +30,11 @@ export const keys = {
   journal: (author: string | null) => ["journal", author] as const,
   groups: ["groups"] as const,
   system: ["system"] as const,
+  friends: ["friends"] as const,
+  friendsList: ["friends", "list"] as const,
+  friendsRequests: ["friends", "requests"] as const,
+  friendsInvites: ["friends", "invites"] as const,
+  friendsPrivacy: ["friends", "privacy"] as const,
+  friendsSettings: ["friends", "settings"] as const,
+  friendsBlocks: ["friends", "blocks"] as const,
 };

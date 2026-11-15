@@ -329,6 +329,66 @@ const MIGRATIONS: &[&str] = &[
             " AND OLD.key IN ('safety.plan', 'newcomer.plan', 'trusted.contact', 'front.favorites', 'system.name', 'system.avatar', 'pluralkit.ignored')"
         ),
     ),
+    // 13 — systèmes amis. `friend` est un cache local de la liste tenue par le
+    // serveur (chaque appareil la relit) ; `friend_pref` (surnom, confidentialité
+    // propre à un ami) se synchronise. Un message ou un groupe peut viser un
+    // système ami : ses membres y figurent par leur identifiant chez l'ami, avec
+    // nom et couleur gardés pour l'historique. `by_system` : signé par tout le système.
+    concat!(
+        "CREATE TABLE friend (
+            id         TEXT PRIMARY KEY NOT NULL CHECK (length(id) BETWEEN 1 AND 64),
+            pub        BLOB NOT NULL CHECK (length(pub) = 32),
+            card       TEXT,
+            card_at    INTEGER,
+            created_at INTEGER NOT NULL
+        ) STRICT;
+        CREATE TABLE friend_pref (
+            id       TEXT PRIMARY KEY NOT NULL CHECK (length(id) BETWEEN 1 AND 64),
+            nickname TEXT CHECK (nickname IS NULL OR length(nickname) <= 64),
+            privacy  TEXT
+        ) STRICT;
+        ALTER TABLE message ADD COLUMN friend_id TEXT;
+        ALTER TABLE message ADD COLUMN outgoing INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE message ADD COLUMN by_system INTEGER NOT NULL DEFAULT 0;
+        CREATE INDEX message_by_friend ON message (friend_id);
+        CREATE TABLE message_remote (
+            message_id BLOB NOT NULL REFERENCES message (id) ON DELETE CASCADE,
+            role       INTEGER NOT NULL CHECK (role IN (0, 1)),
+            ref        TEXT NOT NULL CHECK (length(ref) BETWEEN 1 AND 64),
+            name       TEXT NOT NULL,
+            color      TEXT NOT NULL,
+            PRIMARY KEY (message_id, role, ref)
+        ) STRICT, WITHOUT ROWID;
+        ALTER TABLE chat_group ADD COLUMN friend_id TEXT;
+        CREATE TABLE group_remote (
+            group_id BLOB NOT NULL REFERENCES chat_group (id) ON DELETE CASCADE,
+            ref      TEXT NOT NULL CHECK (length(ref) BETWEEN 1 AND 64),
+            name     TEXT NOT NULL,
+            color    TEXT NOT NULL,
+            PRIMARY KEY (group_id, ref)
+        ) STRICT, WITHOUT ROWID;
+        DROP TRIGGER sync_kv_ins;
+        DROP TRIGGER sync_kv_upd;
+        DROP TRIGGER sync_kv_del;\n",
+        track!("friend_pref", "json_array(NEW.id)", "json_array(OLD.id)"),
+        track!(
+            "message_remote",
+            "json_array(hex(NEW.message_id), CAST(NEW.role AS TEXT), NEW.ref)",
+            "json_array(hex(OLD.message_id), CAST(OLD.role AS TEXT), OLD.ref)"
+        ),
+        track!(
+            "group_remote",
+            "json_array(hex(NEW.group_id), NEW.ref)",
+            "json_array(hex(OLD.group_id), OLD.ref)"
+        ),
+        track!(
+            "kv",
+            "json_array(NEW.key)",
+            "json_array(OLD.key)",
+            " AND NEW.key IN ('safety.plan', 'newcomer.plan', 'trusted.contact', 'front.favorites', 'system.name', 'system.avatar', 'pluralkit.ignored', 'friends.identity', 'friends.privacy')",
+            " AND OLD.key IN ('safety.plan', 'newcomer.plan', 'trusted.contact', 'front.favorites', 'system.name', 'system.avatar', 'pluralkit.ignored', 'friends.identity', 'friends.privacy')"
+        ),
+    ),
 ];
 
 pub fn run(conn: &mut Connection) -> Result<()> {

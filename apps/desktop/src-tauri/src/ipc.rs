@@ -474,8 +474,17 @@ pub async fn messages_list(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn messages_post(state: State<'_, AppState>, input: NewMessage) -> IpcResult<Message> {
-    blocking(&state, move |v| messages::post(v.conn_mut()?, &input)).await
+pub async fn messages_post(
+    state: State<'_, AppState>,
+    rem: State<'_, Remote>,
+    input: NewMessage,
+) -> IpcResult<Message> {
+    let to_friend = input.friend_id.is_some();
+    let m = blocking(&state, move |v| messages::post(v.conn_mut()?, &input)).await?;
+    if to_friend {
+        rem.wake(Wake::Friends);
+    }
+    Ok(m)
 }
 
 #[tauri::command]
@@ -684,6 +693,7 @@ pub async fn open_mailto(app: tauri::AppHandle, address: String) -> IpcResult<()
         })
 }
 
+#[allow(clippy::too_many_lines)] // simple liste des commandes
 pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
     tauri_specta::Builder::<tauri::Wry>::new().commands(tauri_specta::collect_commands![
         vault_open,
@@ -767,5 +777,26 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         remote::cloud_disable,
         remote::cloud_delete,
         remote::cloud_sync_now,
+        remote::friends_list,
+        remote::friends_privacy_get,
+        remote::friends_privacy_set,
+        remote::friends_set_pref,
+        remote::friends_settings,
+        remote::friends_set_open,
+        remote::friends_invite_create,
+        remote::friends_invites,
+        remote::friends_invite_revoke,
+        remote::friends_preview,
+        remote::friends_request_send,
+        remote::friends_requests,
+        remote::friends_accept,
+        remote::friends_drop_request,
+        remote::friends_block_request,
+        remote::friends_unfriend,
+        remote::friends_block,
+        remote::friends_blocks,
+        remote::friends_unblock,
+        remote::friends_take_over,
+        remote::friends_sync_now,
     ])
 }

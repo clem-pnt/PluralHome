@@ -10,7 +10,7 @@ import {
 } from "react-aria-components";
 import { errorMessage } from "../../i18n/errors";
 import { formatWhen } from "../../i18n/format";
-import type { ChatGroup, Member, Message, SystemProfile } from "../../ipc";
+import type { ChatGroup, Friend, Member, Message, RemoteRef, SystemProfile } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
 import { Avatar } from "../../ui/Avatar";
 import { AvatarStack } from "../../ui/AvatarStack";
@@ -22,21 +22,33 @@ import { useFrontCurrent } from "../front/useFront";
 import { useMembers } from "../members/useMembers";
 import { GroupForm } from "./GroupForm";
 import { MessageActions } from "./MessageCard";
-import { NewConversation } from "./NewConversation";
+import { type Draft, NewConversation } from "./NewConversation";
 import { PeopleField } from "./PeopleField";
 import {
   concerns,
   conversationOf,
   EVERYONE,
+  friendKey,
   fronting,
   groupKey,
   names,
+  ourSide,
   participantsKey,
   presentIds,
   readersOf,
 } from "./people";
 import { useGroups, useSystem } from "./useGroups";
 import { MAX_BODY, useMarkReadBy, useMessageBoard, usePostMessage } from "./useMessages";
+import {
+  authorFace,
+  authorKey,
+  authorLabel,
+  friendLabel,
+  remoteFaces,
+  remoteNames,
+  useWho,
+  type Who,
+} from "./who";
 
 /** Nouvelle discussion, tant qu'aucun message n'y a été envoyé. */
 const DRAFT = "draft";
@@ -50,6 +62,10 @@ interface Conversation {
   /** Participants (auteurs et destinataires, ou membres du groupe) ; vide pour tout le système. */
   ids: string[];
   group?: ChatGroup;
+  /** Échange avec un système ami ; `ids` est alors notre côté. */
+  friendId?: string;
+  /** Membres de l'ami dans l'échange ; vide : tout son système. */
+  remote?: RemoteRef[];
   /** Du plus ancien au plus récent. */
   messages: Message[];
   last: number;
@@ -76,10 +92,11 @@ export function MessagesView() {
   const board = useMessageBoard(false);
   const groups = useGroups();
   const system = useSystem();
+  const who = useWho();
   const fronters = fronting(front.data);
   const present = presentIds(front.data);
   const [selected, setSelected] = useState<string | null>(null);
-  const [draftTo, setDraftTo] = useState<string[]>([]);
+  const [draft, setDraft] = useState<Draft | null>(null);
   const [query, setQuery] = useState("");
   /** Message à amener à l'écran (recherche, épinglé, citation). */
   const [focusId, setFocusId] = useState<string | null>(null);
@@ -103,6 +120,7 @@ export function MessagesView() {
         key,
         ids: group.memberIds,
         group,
+        ...(group.friendId ? { friendId: group.friendId, remote: group.remoteMembers } : {}),
         messages: [],
         last: group.createdAt ?? 0,
         unread: 0,
@@ -117,7 +135,17 @@ export function MessagesView() {
       } else {
         if (!concerns(msg, present)) continue;
         if (!conv) {
-          conv = { key, ids: key.split(","), messages: [], last: 0, unread: 0 };
+          conv = msg.friendId
+            ? {
+                key,
+                ids: ourSide(msg),
+                friendId: msg.friendId,
+                remote: msg.outgoing ? msg.remoteRecipients : msg.remoteAuthors,
+                messages: [],
+                last: 0,
+                unread: 0,
+              }
+            : { key, ids: key.split(","), messages: [], last: 0, unread: 0 };
           map.set(key, conv);
         }
       }
@@ -160,6 +188,12 @@ export function MessagesView() {
   const title = (conv: Conversation) => {
     if (conv.key === EVERYONE) return system.data?.name || m.messages_everyone();
     if (conv.group) return conv.group.name;
+    if (conv.friendId) {
+      const friend = who.friends.get(conv.friendId);
+      const list = remoteNames(conv.remote ?? [], friend);
+      const sys = friendLabel(friend);
+      return list ? m.messages_friend_people({ names: list, system: sys }) : sys;
+    }
     return names(others(conv.ids), members.byId, 3) || m.messages_someone();
   };
   // Un groupe montre deux de ses membres, de préférence absents, comme Discord.
@@ -171,20 +205,29 @@ export function MessagesView() {
   const face = (conv: Conversation, size: number) => (
     <ConvFace
       conv={conv}
-      people={peopleOf(faceIds(conv), members.byId)}
+      people={
+        conv.friendId && !conv.group
+          ? remoteFaces(conv.remote ?? [], who.friends.get(conv.friendId))
+          : peopleOf(faceIds(conv), members.byId)
+      }
+      friend={conv.friendId ? who.friends.get(conv.friendId) : undefined}
       system={system.data}
       size={size}
     />
   );
 
-  const startDiscussion = (ids: string[]) => {
+  const startDiscussion = (next: Draft) => {
     // Une discussion avec les mêmes personnes existe déjà : on la rouvre.
-    const keys = [participantsKey(ids), participantsKey([...ids, ...fronters])];
+    if (!next.friendId && next.to.length === 0) return select(EVERYONE);
+    const keys = next.friendId
+      ? [friendKey(next.friendId, next.from, next.to)]
+      : [participantsKey([...next.from, ...next.to]), participantsKey(next.to)];
     const existing = conversations.find((c) => !c.group && keys.includes(c.key));
     if (existing) return select(existing.key);
-    setDraftTo(ids);
+    setDraft(next);
     select(DRAFT);
   };
+  const draftConv = draft ? draftConversation(draft, who.friends.get(draft.friendId ?? "")) : null;
 
   const q = query.trim();
   const results = q
@@ -202,6 +245,7 @@ export function MessagesView() {
           <div className="dm__list-head">
             <NewConversation
               members={members.list}
+              fronters={fronters}
               onDiscussion={startDiscussion}
               onGroup={(group) => select(groupKey(group.id))}
             />
@@ -225,7 +269,7 @@ export function MessagesView() {
           {q ? (
             <SearchResults
               results={results}
-              byId={members.byId}
+              who={who}
               title={title}
               onOpen={(conv, msg) => select(conv.key, msg.id)}
             />
@@ -258,7 +302,9 @@ export function MessagesView() {
                           {lastMsg
                             ? lastMsg.body
                             : group
-                              ? m.group_member_count({ count: group.memberIds.length })
+                              ? group.friendId
+                                ? friendLabel(who.friends.get(group.friendId))
+                                : m.group_member_count({ count: group.memberIds.length })
                               : m.messages_conv_empty()}
                         </span>
                       </span>
@@ -280,25 +326,26 @@ export function MessagesView() {
         </nav>
 
         <div className="dm__pane">
-          {selected === DRAFT ? (
+          {selected === DRAFT && draft && draftConv ? (
             <>
               <div className="dm__pane-head">
                 <span className="dm__back">
                   <IconButton icon="back" label={m.messages_back()} onPress={() => select(null)} />
                 </span>
-                <AvatarStack people={peopleOf(draftTo, members.byId)} size={28} />
+                {face(draftConv, 28)}
                 <h2 className="dm__pane-title">
-                  {names(draftTo, members.byId, 3) || m.messages_new_discussion()}
+                  {title(draftConv) || m.messages_new_discussion()}
                 </h2>
               </div>
               <div className="dm__thread">
                 <p className="muted dm__empty">{m.messages_conv_empty()}</p>
               </div>
               <ChatComposer
-                participants={draftTo}
+                conv={draftConv}
+                title={title(draftConv)}
+                defaultFrom={draft.from}
                 members={members.list}
-                byId={members.byId}
-                fronters={fronters}
+                who={who}
                 onSent={(msg) => select(conversationOf(msg))}
               />
             </>
@@ -316,7 +363,14 @@ export function MessagesView() {
                   >
                     <span className="dm__pane-name">{current.group.name}</span>
                     <span className="muted dm__pane-sub">
-                      {names(current.group.memberIds, members.byId, 4)}
+                      {current.group.friendId
+                        ? [
+                            names(current.group.memberIds, members.byId, 3),
+                            friendLabel(who.friends.get(current.group.friendId)),
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")
+                        : names(current.group.memberIds, members.byId, 4)}
                     </span>
                   </AriaButton>
                 ) : (
@@ -335,13 +389,13 @@ export function MessagesView() {
               <PinnedBar
                 key={`pins:${current.key}`}
                 pinned={current.messages.filter((x) => x.pinned)}
-                byId={members.byId}
+                who={who}
                 onOpen={(id) => setFocusId(id)}
               />
               <Thread
                 conv={current}
                 members={members.list}
-                byId={members.byId}
+                who={who}
                 msgById={msgById}
                 fronters={fronters}
                 focusId={focusId}
@@ -350,12 +404,11 @@ export function MessagesView() {
               />
               <ChatComposer
                 key={current.key}
-                participants={current.ids}
-                groupId={current.group?.id ?? null}
-                groupName={current.group?.name}
+                conv={current}
+                title={title(current)}
+                defaultFrom={current.friendId && !current.group ? current.ids : fronters}
                 members={members.list}
-                byId={members.byId}
-                fronters={fronters}
+                who={who}
                 replyTo={replying}
                 onCancelReply={() => setReplying(null)}
                 onSent={(msg) => {
@@ -399,11 +452,13 @@ export function MessagesView() {
 function ConvFace({
   conv,
   people,
+  friend,
   system,
   size,
 }: {
   conv: Conversation;
   people: Person[];
+  friend: Friend | undefined;
   system: SystemProfile | undefined;
   size: number;
 }) {
@@ -422,17 +477,21 @@ function ConvFace({
   if (conv.group?.avatar) {
     return <Avatar name={conv.group.name} src={conv.group.avatar} size={size} />;
   }
+  // Avec tout le système d'un ami : son avatar de système.
+  if (conv.friendId && !conv.group && people.length === 0) {
+    return <Avatar name={friendLabel(friend)} src={friend?.avatar} size={size} />;
+  }
   return <AvatarStack people={people} size={size} />;
 }
 
 function SearchResults({
   results,
-  byId,
+  who,
   title,
   onOpen,
 }: {
   results: { conv: Conversation; msg: Message }[];
-  byId: Map<string, Member>;
+  who: Who;
   title: (conv: Conversation) => string;
   onOpen: (conv: Conversation, msg: Message) => void;
 }) {
@@ -454,12 +513,10 @@ function SearchResults({
           return (
             <li key={msg.id}>
               <AriaButton className="dm__conv dm__result" onPress={() => onOpen(conv, msg)}>
-                <AvatarStack people={peopleOf(msg.authorIds.slice(0, 1), byId)} size={32} />
+                <AuthorAvatar message={msg} who={who} size={32} />
                 <span className="dm__conv-text">
                   <span className="dm__result-meta">
-                    <span className="dm__conv-name">
-                      {names(msg.authorIds, byId, 2) || m.messages_someone()}
-                    </span>
+                    <span className="dm__conv-name">{authorLabel(msg, who, 2)}</span>
                     <span className="muted">
                       {title(conv)} · {formatWhen(created)}
                     </span>
@@ -481,11 +538,11 @@ function SearchResults({
  */
 function PinnedBar({
   pinned,
-  byId,
+  who,
   onOpen,
 }: {
   pinned: Message[];
-  byId: Map<string, Member>;
+  who: Who;
   onOpen: (id: string) => void;
 }) {
   const [step, setStep] = useState(0);
@@ -506,7 +563,7 @@ function PinnedBar({
         <span className="dm__pinned-label">
           {n > 1 ? m.messages_pinned_index({ index: index + 1, count: n }) : m.messages_pinned()}
           {" · "}
-          {names(msg.authorIds, byId, 2) || m.messages_someone()}
+          {authorLabel(msg, who, 2)}
         </span>
         <span className="dm__pinned-body">{msg.body}</span>
       </span>
@@ -517,7 +574,7 @@ function PinnedBar({
 function Thread({
   conv,
   members,
-  byId,
+  who,
   msgById,
   fronters,
   focusId,
@@ -526,7 +583,7 @@ function Thread({
 }: {
   conv: Conversation;
   members: Member[];
-  byId: Map<string, Member>;
+  who: Who;
   msgById: Map<string, Message>;
   fronters: string[];
   focusId: string | null;
@@ -571,7 +628,7 @@ function Thread({
         const head =
           !prev ||
           msg.replyTo != null ||
-          prev.authorIds.join() !== msg.authorIds.join() ||
+          authorKey(prev) !== authorKey(msg) ||
           (msg.createdAt ?? 0) - (prev.createdAt ?? 0) > GROUP_MS;
         return (
           <ChatMessage
@@ -580,7 +637,7 @@ function Thread({
             parent={msg.replyTo ? (msgById.get(msg.replyTo) ?? null) : null}
             head={head}
             members={members}
-            byId={byId}
+            who={who}
             fronters={fronters}
             onReply={() => onReply(msg)}
             onOpenParent={onFocus}
@@ -597,7 +654,7 @@ function ChatMessage({
   parent,
   head,
   members,
-  byId,
+  who,
   fronters,
   onReply,
   onOpenParent,
@@ -606,12 +663,11 @@ function ChatMessage({
   parent: Message | null;
   head: boolean;
   members: Member[];
-  byId: Map<string, Member>;
+  who: Who;
   fronters: string[];
   onReply: () => void;
   onOpenParent: (id: string) => void;
 }) {
-  const author = byId.get(message.authorIds[0] ?? "");
   const created = message.createdAt ?? 0;
   const unread = readersOf(message, fronters).length > 0;
   return (
@@ -628,21 +684,14 @@ function ChatMessage({
         onReply();
       }}
     >
-      {message.replyTo && <ReplyQuote parent={parent} byId={byId} onOpen={onOpenParent} />}
+      {message.replyTo && <ReplyQuote parent={parent} who={who} onOpen={onOpenParent} />}
       <div className="chat-msg__gutter">
-        {head &&
-          (author ? (
-            <Avatar name={author.name} src={author.avatar} size={36} />
-          ) : (
-            <AvatarStack people={[]} size={36} />
-          ))}
+        {head && <AuthorAvatar message={message} who={who} size={36} />}
       </div>
       <div className="chat-msg__content">
         {head && (
           <header className="chat-msg__meta">
-            <span className="chat-msg__author">
-              {names(message.authorIds, byId) || m.messages_someone()}
-            </span>
+            <span className="chat-msg__author">{authorLabel(message, who)}</span>
             <time className="muted" dateTime={new Date(created).toISOString()}>
               {formatWhen(created)}
             </time>
@@ -658,7 +707,7 @@ function ChatMessage({
           {message.pinned && <span className="tag">{m.messages_pinned()}</span>}
           {message.readBy.length > 0 && (
             <span className="muted">
-              {m.messages_read_by({ names: names(message.readBy, byId, 4) })}
+              {m.messages_read_by({ names: names(message.readBy, who.byId, 4) })}
             </span>
           )}
         </div>
@@ -666,7 +715,7 @@ function ChatMessage({
       <div className="chat-msg__tools">
         <MessageActions
           message={message}
-          byId={byId}
+          byId={who.byId}
           members={members}
           fronters={fronters}
           onReply={onReply}
@@ -679,11 +728,11 @@ function ChatMessage({
 /** Citation du message auquel on répond, au-dessus de la réponse, comme sur Discord. */
 function ReplyQuote({
   parent,
-  byId,
+  who,
   onOpen,
 }: {
   parent: Message | null;
-  byId: Map<string, Member>;
+  who: Who;
   onOpen: (id: string) => void;
 }) {
   if (!parent) {
@@ -693,42 +742,63 @@ function ReplyQuote({
       </div>
     );
   }
-  const author = byId.get(parent.authorIds[0] ?? "");
+  const author = authorFace(parent, who);
+  const name = authorLabel(parent, who, 2);
   return (
     <AriaButton
       className="chat-msg__reply"
-      aria-label={m.messages_reply_open({
-        name: names(parent.authorIds, byId, 2) || m.messages_someone(),
-      })}
+      aria-label={m.messages_reply_open({ name })}
       onPress={() => onOpen(parent.id)}
     >
       {author && <Avatar name={author.name} src={author.avatar} size={16} />}
-      <span className="chat-msg__reply-author">
-        {names(parent.authorIds, byId, 2) || m.messages_someone()}
-      </span>
+      <span className="chat-msg__reply-author">{name}</span>
       <span className="chat-msg__reply-body muted">{parent.body}</span>
     </AriaButton>
   );
 }
 
+/** Avatar de la signature d'un message, de notre côté ou de celui d'un ami. */
+function AuthorAvatar({ message, who, size }: { message: Message; who: Who; size: number }) {
+  const face = authorFace(message, who);
+  return face ? (
+    <Avatar name={face.name} src={face.avatar} size={size} />
+  ) : (
+    <AvatarStack people={[]} size={size} />
+  );
+}
+
+/** Conversation pas encore commencée, pour l'en-tête et la saisie. */
+function draftConversation(draft: Draft, friend: Friend | undefined): Conversation {
+  const base = { key: DRAFT, messages: [], last: 0, unread: 0 };
+  if (!draft.friendId) return { ...base, ids: [...new Set([...draft.from, ...draft.to])] };
+  return {
+    ...base,
+    ids: draft.from,
+    friendId: draft.friendId,
+    remote: draft.to.map((ref) => {
+      const card = friend?.members.find((x) => x.id === ref);
+      return { ref, name: card?.name ?? "", color: card?.color ?? "" };
+    }),
+  };
+}
+
 /** Saisie en bas du fil. Entrée envoie, Maj+Entrée va à la ligne. */
 function ChatComposer({
-  participants,
-  groupId = null,
-  groupName,
+  conv,
+  title,
+  defaultFrom,
   members,
-  byId,
-  fronters,
+  who,
   replyTo = null,
   onCancelReply,
   onSent,
 }: {
-  participants: string[];
-  groupId?: string | null;
-  groupName?: string | undefined;
+  conv: Conversation;
+  title: string;
+  /** Qui signe par défaut : les personnes au front, ou notre côté de l'échange. */
+  defaultFrom: string[];
   members: Member[];
-  byId: Map<string, Member>;
-  fronters: string[];
+  who: Who;
   replyTo?: Message | null;
   onCancelReply?: () => void;
   onSent: (message: Message) => void;
@@ -737,28 +807,53 @@ function ChatComposer({
   const [authors, setAuthors] = useState<string[] | null>(null);
   const [body, setBody] = useState("");
   const input = useRef<HTMLTextAreaElement>(null);
-  // Par défaut, ce sont les personnes au front qui écrivent.
-  const from = authors ?? fronters;
+  const from = authors ?? defaultFrom;
+  const participants = conv.key === EVERYONE ? [] : conv.ids;
+  const groupId = conv.group?.id ?? null;
+  const friend = conv.friendId ? who.friends.get(conv.friendId) : undefined;
 
   // Répondre ramène le curseur dans la saisie.
   useEffect(() => {
     if (replyTo) input.current?.focus();
   }, [replyTo]);
 
+  // L'ami a été retiré, ou n'accepte plus nos messages : on ne peut que relire.
+  if (conv.friendId && !friend?.acceptsMessages) {
+    return (
+      <p className="muted dm__composer dm__composer--closed" role="status">
+        {m.error_friend_closed()}
+      </p>
+    );
+  }
+
   const send = () => {
     if (!body.trim() || post.isPending) return;
-    // Les destinataires : les autres participants (tous, si on s'écrit à soi-même).
-    const others = participants.filter((id) => !from.includes(id));
-    const recipientIds = participants.length === 0 ? [] : others.length > 0 ? others : participants;
-    post.mutate(
-      { authorIds: from, recipientIds, body, groupId, replyTo: replyTo?.id ?? null },
-      {
-        onSuccess: (msg) => {
-          setBody("");
-          onSent(msg);
-        },
+    const common = { body, groupId, replyTo: replyTo?.id ?? null };
+    const payload = conv.friendId
+      ? {
+          ...common,
+          // Personne de choisi : c'est tout le système qui signe.
+          authorIds: from,
+          bySystem: from.length === 0,
+          recipientIds: [],
+          friendId: conv.friendId,
+          remoteRecipientRefs: groupId ? [] : (conv.remote ?? []).map((r) => r.ref),
+        }
+      : {
+          ...common,
+          authorIds: from,
+          // Les destinataires : les autres participants (tous, si on s'écrit à soi-même).
+          recipientIds: (() => {
+            const others = participants.filter((id) => !from.includes(id));
+            return participants.length === 0 ? [] : others.length > 0 ? others : participants;
+          })(),
+        };
+    post.mutate(payload, {
+      onSuccess: (msg) => {
+        setBody("");
+        onSent(msg);
       },
-    );
+    });
   };
 
   return (
@@ -773,9 +868,7 @@ function ChatComposer({
         <div className="dm__replying">
           <Icon name="reply" size={16} />
           <span className="dm__replying-text">
-            {m.messages_replying_to({
-              name: names(replyTo.authorIds, byId, 2) || m.messages_someone(),
-            })}
+            {m.messages_replying_to({ name: authorLabel(replyTo, who, 2) })}
             <span className="muted"> {replyTo.body}</span>
           </span>
           <IconButton
@@ -790,9 +883,9 @@ function ChatComposer({
           label={m.messages_from()}
           title={m.messages_pick_authors()}
           lead={m.messages_pick_authors_lead()}
-          emptyLabel={m.messages_pick_none_author()}
+          emptyLabel={conv.friendId ? m.messages_everyone() : m.messages_pick_none_author()}
           members={members}
-          byId={byId}
+          byId={who.byId}
           value={from}
           onChange={setAuthors}
         />
@@ -810,11 +903,13 @@ function ChatComposer({
             className="input textarea dm__composer-input"
             rows={1}
             placeholder={
-              groupName
-                ? m.messages_placeholder_group({ name: groupName })
-                : participants.length === 0
-                  ? m.messages_placeholder_everyone()
-                  : m.messages_placeholder_to({ names: names(participants, byId) })
+              conv.group
+                ? m.messages_placeholder_group({ name: conv.group.name })
+                : conv.friendId
+                  ? m.messages_placeholder_to({ names: title })
+                  : participants.length === 0
+                    ? m.messages_placeholder_everyone()
+                    : m.messages_placeholder_to({ names: names(participants, who.byId) })
             }
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {

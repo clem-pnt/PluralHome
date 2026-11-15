@@ -13,6 +13,11 @@ const RATE_MAX = 240;
 const HEX64 = /^[0-9a-f]{64}$/;
 const B64 = /^[A-Za-z0-9+/]*={0,2}$/;
 const ID = /^[0-9A-Za-z-]{8,64}$/;
+const UUID = "([0-9a-f-]{36})";
+const MAX_CARD = 3_600_000;
+const MAX_MAIL_BATCH = 50;
+const MIN_TTL = 10 * 60_000;
+const MAX_TTL = 90 * 24 * 3600_000;
 
 class HttpError extends Error {
   constructor(status, code) {
@@ -153,6 +158,91 @@ export function createHandler({ store, verify, clock = Date.now }) {
     },
   };
 
+  const ok = { ok: true };
+  const card = async (req) => {
+    const body = await readJson(req);
+    if (!isB64(body?.card, MAX_CARD)) throw new HttpError(400, "BAD_CARD");
+    return body;
+  };
+
+  Object.assign(routes, {
+    "GET /v1/friends/identity": (user) => store.identity(user),
+    "PUT /v1/friends/identity": async (user, req) => {
+      const body = await readJson(req);
+      if (!HEX64.test(body?.pub ?? "")) throw new HttpError(400, "BAD_PUB");
+      store.setIdentity(user, body.pub, body.replace === true);
+      return ok;
+    },
+    "PUT /v1/friends/settings": async (user, req) => {
+      const body = await readJson(req);
+      if (typeof body?.open !== "boolean") throw new HttpError(400, "BAD_SETTINGS");
+      store.setOpen(user, body.open);
+      return ok;
+    },
+    "GET /v1/friends/invites": (user) => ({ invites: store.inviteList(user) }),
+    "POST /v1/friends/invites": async (user, req) => {
+      const body = await card(req);
+      const ttl = body.ttl ?? null;
+      if (ttl !== null && (!Number.isSafeInteger(ttl) || ttl < MIN_TTL || ttl > MAX_TTL)) {
+        throw new HttpError(400, "BAD_TTL");
+      }
+      return { id: store.inviteCreate(user, body.card, body.once === true, ttl) };
+    },
+    "GET /v1/friends/requests": (user) => store.requests(user),
+    "POST /v1/friends/requests": async (user, req) => {
+      const body = await card(req);
+      if (!/^[0-9a-f-]{36}$/.test(body.invite ?? "")) throw new HttpError(400, "BAD_INVITE");
+      return { id: store.requestSend(user, body.invite, body.card) };
+    },
+    "GET /v1/friends": (user) => ({ friends: store.friends(user) }),
+    "GET /v1/friends/blocks": (user) => ({ blocks: store.blocks(user) }),
+    "GET /v1/mail": (user, _req, url) => {
+      const after = Number(url.searchParams.get("after") ?? 0);
+      if (!Number.isSafeInteger(after) || after < 0) throw new HttpError(400, "BAD_AFTER");
+      return store.mail(user, after, 200);
+    },
+    "POST /v1/mail/ack": async (user, req) => {
+      const body = await readJson(req);
+      if (!Number.isSafeInteger(body?.upTo) || body.upTo < 0) throw new HttpError(400, "BAD_ACK");
+      store.mailAck(user, body.upTo);
+      return ok;
+    },
+  });
+
+  // Routes avec identifiant : [méthode, motif, gestionnaire(user, req, id)].
+  const paramRoutes = [
+    ["GET", `/v1/friends/invites/${UUID}`, (_user, _req, id) => ({ card: store.inviteRead(id) })],
+    ["DELETE", `/v1/friends/invites/${UUID}`, (user, _req, id) => (store.inviteRevoke(user, id), ok)],
+    [
+      "POST",
+      `/v1/friends/requests/${UUID}/accept`,
+      async (user, req, id) => ({ id: store.requestAccept(user, id, (await card(req)).card) }),
+    ],
+    ["POST", `/v1/friends/requests/${UUID}/block`, (user, _req, id) => ({ id: store.requestBlock(user, id) })],
+    ["DELETE", `/v1/friends/requests/${UUID}`, (user, _req, id) => (store.requestDrop(user, id), ok)],
+    ["DELETE", `/v1/friends/blocks/${UUID}`, (user, _req, id) => (store.unblock(user, id), ok)],
+    [
+      "PUT",
+      `/v1/friends/${UUID}/card`,
+      async (user, req, id) => (store.setCard(user, id, (await card(req)).card), ok),
+    ],
+    [
+      "POST",
+      `/v1/friends/${UUID}/mail`,
+      async (user, req, id) => {
+        const items = (await readJson(req))?.items;
+        if (!Array.isArray(items) || items.length === 0 || items.length > MAX_MAIL_BATCH) {
+          throw new HttpError(400, "BAD_ITEMS");
+        }
+        if (!items.every((v) => isB64(v, MAX_VALUE))) throw new HttpError(400, "BAD_ITEM");
+        store.mailSend(user, id, items);
+        return ok;
+      },
+    ],
+    ["POST", `/v1/friends/${UUID}/block`, (user, _req, id) => ({ id: store.blockFriend(user, id) })],
+    ["DELETE", `/v1/friends/${UUID}`, (user, _req, id) => (store.unfriend(user, id), ok)],
+  ].map(([method, pattern, fn]) => ({ method, re: new RegExp(`^${pattern}$`), fn }));
+
   return async (req, res) => {
     try {
       const url = new URL(req.url ?? "/", "http://localhost");
@@ -164,6 +254,16 @@ export function createHandler({ store, verify, clock = Date.now }) {
       if (!handler && pair && pairRoutes[req.method]) {
         handler = pairRoutes[req.method];
         pairId = pair[1];
+      }
+      if (!handler) {
+        for (const r of paramRoutes) {
+          const m = r.method === req.method && r.re.exec(url.pathname);
+          if (m) {
+            handler = r.fn;
+            pairId = m[1];
+            break;
+          }
+        }
       }
       if (!handler) throw new HttpError(404, "NOT_FOUND");
 
