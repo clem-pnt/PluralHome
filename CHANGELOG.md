@@ -9,6 +9,7 @@
 - Membres : rôles ajoutés avec un bouton « + » et une liste, comme sur Discord. Bouton « Archiver » qui range un membre en dormance dans une section à part, et « Supprimer » avec confirmation. Un membre supprimé venu de PluralKit n'y est pas supprimé, mais n'est plus réimporté.
 - Personne de confiance : Téléphone et SMS fusionnés, l'e-mail ouvre la messagerie.
 - Nouvel alter : plus aucune catégorie par défaut.
+- Messages : l'onglet occupe toute la place à côté de la barre latérale, sans texte d'en-tête.
 - Correction : un message écrit à plusieurs n'apparaît plus comme non lu, ni en notification, pour les alters qui l'ont écrit.
 
 ## 0.11.1 — Messagerie en conversations, notifications repliées

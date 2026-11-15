@@ -1576,6 +1576,18 @@
   }
 }
 
+@layer views {
+  /* Pleine largeur et pleine hauteur à côté de la barre latérale, sans en-tête. */
+  .view--messages {
+    max-inline-size: none;
+    margin: 0;
+    padding: 0;
+    block-size: 100%;
+    container-type: inline-size;
+    gap: 0;
+  }
+}
+
 @layer components {
   .line__text {
     flex: 1;
@@ -1671,18 +1683,12 @@
   }
 
   /* Messagerie en conversations, à la manière des messages privés. */
-  .view--messages {
-    max-inline-size: 1180px;
-    container-type: inline-size;
-    gap: var(--space-5);
-  }
   .dm {
     display: grid;
     grid-template-columns: minmax(220px, 290px) 1fr;
-    block-size: max(440px, calc(100dvh - 220px));
+    block-size: 100%;
+    min-block-size: 0;
     background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-l);
     overflow: hidden;
   }
   .dm__list {

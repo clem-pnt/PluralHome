@@ -196,13 +196,7 @@ export function MessagesView() {
     : [];
 
   return (
-    <section className="view view--messages">
-      <header className="view__header">
-        <div>
-          <h1>{m.messages_title()}</h1>
-          <p className="view__lead">{m.messages_lead()}</p>
-        </div>
-      </header>
+    <section className="view view--messages" aria-label={m.messages_title()}>
       <div className="dm" data-open={selected !== null || undefined}>
         <nav className="dm__list" aria-label={m.messages_conversations()}>
           <div className="dm__list-head">
