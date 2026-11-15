@@ -1,6 +1,6 @@
 # Changelog
 
-## Non publié
+## 0.10.4 — Tri automatique
 
 - Tri automatique des membres d'après leur description : bouton « Trier automatiquement » dans « Gérer les dossiers ». Il propose des dossiers par âge (Enfants, Ados, Adultes) et par genre, et des rôles à ajouter (hôte, gatekeeper, protection, little…). L'analyse se fait sur l'appareil et rien n'est envoyé. Seules les mentions claires sont retenues (« Âge : 16 ans », « Genre : fille », « Rôle : gatekeeper », « c'est une protectrice »), et chaque proposition peut être décochée avant d'appliquer.
 - Nouveaux rôles proposés : Co-hôte, Persécution, Fictif·ve.
