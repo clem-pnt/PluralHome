@@ -360,6 +360,7 @@ fn switches_flow_both_ways_without_echo() {
             &FrontChange {
                 members: vec![ids["Sacha"]],
                 blurry: false,
+                statuses: std::collections::HashMap::new(),
             },
         )
     })
@@ -376,6 +377,7 @@ fn switches_flow_both_ways_without_echo() {
             &FrontChange {
                 members: vec![],
                 blurry: true,
+                statuses: std::collections::HashMap::new(),
             },
         )
     })
@@ -398,6 +400,7 @@ fn older_remote_switch_never_overrides_local() {
             &FrontChange {
                 members: vec![],
                 blurry: true,
+                statuses: std::collections::HashMap::new(),
             },
         )
     })
@@ -428,6 +431,7 @@ fn offline_keeps_queue_in_order() {
             &FrontChange {
                 members: vec![ids[0]],
                 blurry: false,
+                statuses: std::collections::HashMap::new(),
             },
         )
     })
@@ -439,6 +443,7 @@ fn offline_keeps_queue_in_order() {
             &FrontChange {
                 members: vec![ids[1]],
                 blurry: false,
+                statuses: std::collections::HashMap::new(),
             },
         )
     })
@@ -483,6 +488,7 @@ fn unlink_forgets_everything_but_data() {
             &FrontChange {
                 members: vec![],
                 blurry: true,
+                statuses: std::collections::HashMap::new(),
             },
         )
     })

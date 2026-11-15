@@ -14,6 +14,8 @@ export const keys = {
   folders: ["folders"] as const,
   frontCurrent: ["front", "current"] as const,
   frontHistory: (day: number) => ["front", "history", day] as const,
+  frontRange: (from: number, to: number) => ["front", "history", "range", from, to] as const,
+  frontQuick: ["front", "quick"] as const,
   messages: ["messages"] as const,
   catchUp: (memberId: string) => ["catch-up", memberId] as const,
   account: ["account"] as const,

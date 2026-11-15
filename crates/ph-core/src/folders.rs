@@ -286,7 +286,10 @@ mod tests {
         let age = create(&c, "Âge", None).unwrap()[0].id;
         let fs = create(&c, "Enfants", Some(age)).unwrap();
         let kids = fs.iter().find(|f| f.name == "Enfants").unwrap().id;
-        assert_eq!(fs.iter().find(|f| f.id == kids).unwrap().parent_id, Some(age));
+        assert_eq!(
+            fs.iter().find(|f| f.id == kids).unwrap().parent_id,
+            Some(age)
+        );
         let small = create(&c, "Tout-petits", Some(kids)).unwrap();
         let small = small.iter().find(|f| f.name == "Tout-petits").unwrap().id;
         assert!(matches!(

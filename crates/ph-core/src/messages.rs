@@ -305,6 +305,7 @@ mod tests {
             &FrontChange {
                 members: vec![mila],
                 blurry: false,
+                statuses: std::collections::HashMap::new(),
             },
         )
         .unwrap();
@@ -313,6 +314,7 @@ mod tests {
             &FrontChange {
                 members: vec![sacha],
                 blurry: false,
+                statuses: std::collections::HashMap::new(),
             },
         )
         .unwrap();

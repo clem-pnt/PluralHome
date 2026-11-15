@@ -1,21 +1,33 @@
 import { DialogTrigger } from "react-aria-components";
 import { errorMessage } from "../../i18n/errors";
-import { formatDay, formatTime } from "../../i18n/format";
+import { formatDay, formatSince } from "../../i18n/format";
+import type { FrontSession } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
 import { Avatar } from "../../ui/Avatar";
 import { Button } from "../../ui/Button";
+import { Icon } from "../../ui/Icon";
+import { IconButton } from "../../ui/IconButton";
 import { useMembers } from "../members/useMembers";
 import { CatchUpPanel } from "../messages/CatchUpPanel";
+import { FavoritesDialog } from "./FavoritesDialog";
 import { FrontDialog } from "./FrontDialog";
+import { FrontHistoryDialog } from "./FrontHistoryDialog";
 import { Timeline } from "./Timeline";
-import { useFrontChange, useFrontCurrent } from "./useFront";
+import { STATUSES, statusLabel, useFrontChange, useFrontCurrent, useFrontQuick } from "./useFront";
 
 export function FrontView() {
   const members = useMembers();
   const current = useFrontCurrent();
   const change = useFrontChange();
+  const quick = useFrontQuick();
   const sessions = current.data ?? [];
   const fronting = new Set(sessions.map((s) => s.memberId));
+  const [quickIds, chosen] = quick.data ?? [[], false];
+  const quickMembers = quickIds.flatMap((id) => members.byId.get(id) ?? []);
+  // Co-conscients à part : le flou compte comme « au front ».
+  const groups = STATUSES.map(
+    (st) => [st, sessions.filter((s) => s.status === st)] as const,
+  ).filter(([, list]) => list.length > 0);
 
   return (
     <section className="view">
@@ -24,12 +36,21 @@ export function FrontView() {
           <h1>{m.front_title()}</h1>
           <p className="view__lead">{formatDay(Date.now())}</p>
         </div>
-        {members.list.length > 0 && (
+        <div className="view__actions">
           <DialogTrigger>
-            <Button>{m.front_change()}</Button>
-            <FrontDialog current={sessions} />
+            <Button variant="ghost">
+              <Icon name="history" size={18} />
+              {m.front_history_open()}
+            </Button>
+            <FrontHistoryDialog />
           </DialogTrigger>
-        )}
+          {members.list.length > 0 && (
+            <DialogTrigger>
+              <Button>{m.front_change()}</Button>
+              <FrontDialog current={sessions} />
+            </DialogTrigger>
+          )}
+        </div>
       </header>
 
       {members.isSuccess && members.list.length === 0 ? (
@@ -47,33 +68,43 @@ export function FrontView() {
             {sessions.length === 0 && current.isSuccess && (
               <p className="muted">{m.front_nobody()}</p>
             )}
-            <ul className="fronters">
-              {sessions.map((s) => {
-                const member = s.memberId ? members.byId.get(s.memberId) : undefined;
-                return (
-                  <li key={s.id} className="fronter">
-                    {member ? (
-                      <Avatar name={member.name} src={member.avatar} size={48} />
-                    ) : (
-                      <span className="avatar avatar--blurry" aria-hidden />
-                    )}
-                    <span className="fronter__text">
-                      <span className="fronter__name">{member?.name ?? m.front_blurry()}</span>
-                      <span className="muted">
-                        {m.front_since({ time: formatTime(s.startedAt ?? Date.now()) })}
-                      </span>
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
+            {groups.map(([st, list]) => (
+              <div key={st} className="fronters-group">
+                {(groups.length > 1 || st !== "front") && (
+                  <h3 className={`status status--${st}`}>{statusLabel(st)}</h3>
+                )}
+                <ul className="fronters">
+                  {list.map((s) => (
+                    <Fronter
+                      key={s.id}
+                      session={s}
+                      member={s.memberId ? members.byId.get(s.memberId) : undefined}
+                    />
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
 
           <div className="panel">
-            <h2 className="panel__title">{m.front_quick()}</h2>
-            <p className="muted">{m.front_quick_hint()}</p>
+            <div className="panel__head">
+              <h2 className="panel__title">{m.front_quick()}</h2>
+              <DialogTrigger>
+                <IconButton icon="star" label={m.front_favorites_edit()} />
+                <FavoritesDialog initial={chosen ? quickIds : []} />
+              </DialogTrigger>
+            </div>
+            {quick.isSuccess && (
+              <p className="muted">
+                {chosen
+                  ? m.front_quick_hint()
+                  : quickMembers.length > 0
+                    ? m.front_quick_frequent()
+                    : m.front_quick_none()}
+              </p>
+            )}
             <div className="quick">
-              {members.list.map((member) => (
+              {quickMembers.map((member) => (
                 <Button
                   key={member.id}
                   variant="ghost"
@@ -112,5 +143,27 @@ export function FrontView() {
         </>
       )}
     </section>
+  );
+}
+
+function Fronter({
+  session,
+  member,
+}: {
+  session: FrontSession;
+  member: { name: string; avatar?: string | null } | undefined;
+}) {
+  return (
+    <li className="fronter">
+      {member ? (
+        <Avatar name={member.name} src={member.avatar} size={48} />
+      ) : (
+        <span className="avatar avatar--blurry" aria-hidden />
+      )}
+      <span className="fronter__text">
+        <span className="fronter__name">{member?.name ?? m.front_blurry()}</span>
+        <span className="muted">{formatSince(session.startedAt ?? Date.now())}</span>
+      </span>
+    </li>
   );
 }

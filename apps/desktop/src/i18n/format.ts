@@ -16,7 +16,23 @@ const dateTime = new Intl.DateTimeFormat(getLocale(), {
   minute: "2-digit",
 });
 
+const shortDay = new Intl.DateTimeFormat(getLocale(), {
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+});
+
 export const formatTime = (ms: number) => time.format(ms);
+export const formatShortDay = (ms: number) => shortDay.format(ms);
+
+/** « depuis aujourd'hui, 9:12 », « depuis hier, … », ou le jour en clair. */
+export function formatSince(ms: number): string {
+  const today = startOfDay(Date.now());
+  const t = time.format(ms);
+  if (ms >= today) return m.front_since_today({ time: t });
+  if (ms >= startOfDay(today - 1)) return m.front_since_yesterday({ time: t });
+  return m.front_since_day({ day: shortDay.format(ms), time: t });
+}
 export const formatDateTime = (ms: number) => dateTime.format(ms);
 
 /** Heure seule si c'est aujourd'hui, sinon date et heure. */

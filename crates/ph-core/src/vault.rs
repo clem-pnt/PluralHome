@@ -361,6 +361,7 @@ mod tests {
             &crate::front::FrontChange {
                 members: vec![id],
                 blurry: false,
+                statuses: std::collections::HashMap::new(),
             },
         )
         .unwrap();

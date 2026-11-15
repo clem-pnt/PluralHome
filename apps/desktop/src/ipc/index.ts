@@ -10,6 +10,7 @@ export type {
   Folder,
   FrontChange,
   FrontSession_Serialize as FrontSession,
+  FrontStatus,
   Member_Serialize as Member,
   Message_Serialize as Message,
   NewEntry_Deserialize as NewEntry,
@@ -96,6 +97,8 @@ export const api = {
     change: (change: Parameters<typeof commands.frontChange>[0]) =>
       unwrap(commands.frontChange(change)),
     history: (from: number, to: number) => unwrap(commands.frontHistory(from, to)),
+    quick: () => unwrap(commands.frontQuick()),
+    setFavorites: (members: string[]) => unwrap(commands.frontSetFavorites(members)),
   },
   journal: {
     list: (before: string | null, author: string | null, limit: number) =>

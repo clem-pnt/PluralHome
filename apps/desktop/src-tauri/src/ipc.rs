@@ -357,6 +357,23 @@ pub async fn front_change(
     Ok(current)
 }
 
+/// Membres du switch rapide : les favoris choisis, sinon les plus fréquents
+/// des 90 derniers jours. Le booléen dit s'il s'agit de favoris choisis.
+#[tauri::command]
+#[specta::specta]
+pub async fn front_quick(state: State<'_, AppState>) -> IpcResult<(Vec<Uuid>, bool)> {
+    blocking(&state, |v| front::quick(v.conn()?)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn front_set_favorites(
+    state: State<'_, AppState>,
+    members: Vec<Uuid>,
+) -> IpcResult<Vec<Uuid>> {
+    blocking(&state, move |v| front::set_favorites(v.conn()?, &members)).await
+}
+
 /// Bornes en millisecondes Unix, `[from, to)`.
 #[tauri::command]
 #[specta::specta]
@@ -494,6 +511,8 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         front_current,
         front_change,
         front_history,
+        front_quick,
+        front_set_favorites,
         messages_list,
         messages_post,
         messages_set_pinned,

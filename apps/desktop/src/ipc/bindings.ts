@@ -45,9 +45,15 @@ export const commands = {
 	/**  Remplace les dossiers d'un membre. */
 	foldersSetForMember: (member: string, folders: string[]) => typedError<Folder_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("folders_set_for_member", { member, folders })),
 	frontCurrent: () => typedError<FrontSession_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("front_current")),
-	frontChange: (change: FrontChange) => typedError<FrontSession_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("front_change", { change })),
+	frontChange: (change: FrontChange_Deserialize) => typedError<FrontSession_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("front_change", { change })),
 	/**  Bornes en millisecondes Unix, `[from, to)`. */
 	frontHistory: (from: number | null, to: number | null) => typedError<FrontSession_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("front_history", { from, to })),
+	/**
+	 *  Membres du switch rapide : les favoris choisis, sinon les plus fréquents
+	 *  des 90 derniers jours. Le booléen dit s'il s'agit de favoris choisis.
+	 */
+	frontQuick: () => typedError<[string[], boolean], IpcError_Serialize>(__TAURI_INVOKE("front_quick")),
+	frontSetFavorites: (members: string[]) => typedError<string[], IpcError_Serialize>(__TAURI_INVOKE("front_set_favorites", { members })),
 	messagesList: (before: string | null, limit: number) => typedError<Message_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("messages_list", { before, limit })),
 	messagesPost: (input: NewMessage_Deserialize) => typedError<Message_Serialize, IpcError_Serialize>(__TAURI_INVOKE("messages_post", { input })),
 	messagesSetPinned: (id: string, pinned: boolean) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("messages_set_pinned", { id, pinned })),
@@ -227,9 +233,28 @@ export type Folder_Serialize = {
 };
 
 /**  Nouvel état du front. Liste vide et `blurry = false` : plus personne au front. */
-export type FrontChange = {
+export type FrontChange = FrontChange_Serialize | FrontChange_Deserialize;
+
+/**  Nouvel état du front. Liste vide et `blurry = false` : plus personne au front. */
+export type FrontChange_Deserialize = {
 	members: string[],
 	blurry: boolean,
+	/**
+	 *  Statut par membre ; absent : « front » pour un arrivant, inchangé sinon
+	 *  (un switch reçu de PluralKit ne connaît pas les statuts).
+	 */
+	statuses?: { [key in string]: FrontStatus },
+};
+
+/**  Nouvel état du front. Liste vide et `blurry = false` : plus personne au front. */
+export type FrontChange_Serialize = {
+	members: string[],
+	blurry: boolean,
+	/**
+	 *  Statut par membre ; absent : « front » pour un arrivant, inchangé sinon
+	 *  (un switch reçu de PluralKit ne connaît pas les statuts).
+	 */
+	statuses: { [key in string]: FrontStatus },
 };
 
 export type FrontSession = FrontSession_Serialize | FrontSession_Deserialize;
@@ -240,6 +265,7 @@ export type FrontSession_Deserialize = {
 	memberId?: string | null,
 	startedAt: number | null,
 	endedAt?: number | null,
+	status: FrontStatus,
 };
 
 export type FrontSession_Serialize = {
@@ -248,7 +274,11 @@ export type FrontSession_Serialize = {
 	memberId: string | null,
 	startedAt: number | null,
 	endedAt: number | null,
+	status: FrontStatus,
 };
+
+/**  Place d'un membre présent : au front, en co-front ou co-conscient. */
+export type FrontStatus = "front" | "cofront" | "coconscious";
 
 /**  Erreur telle que vue par le front : un code stable à traduire, jamais de détail brut. */
 export type IpcError = IpcError_Serialize | IpcError_Deserialize;

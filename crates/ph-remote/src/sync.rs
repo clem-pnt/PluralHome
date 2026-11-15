@@ -650,6 +650,7 @@ fn apply_remote_switch(db: &impl Db, sw: &PkSwitch, at: i64) -> Result<()> {
             &FrontChange {
                 members,
                 blurry: false,
+                statuses: std::collections::HashMap::new(),
             },
             at,
             Origin::Remote,

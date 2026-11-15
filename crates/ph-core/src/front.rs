@@ -4,7 +4,7 @@
 //! tant que `ended_at` est NULL. Le co-front est simplement plusieurs intervalles
 //! ouverts en même temps ; le front « flou » est un intervalle sans membre.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use rusqlite::{Connection, Row, params};
 use serde::{Deserialize, Serialize};
@@ -23,6 +23,37 @@ pub struct FrontSession {
     pub started_at: i64,
     #[cfg_attr(feature = "specta", specta(type = Option<f64>))]
     pub ended_at: Option<i64>,
+    pub status: FrontStatus,
+}
+
+/// Place d'un membre présent : au front, en co-front ou co-conscient.
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FrontStatus {
+    #[default]
+    Front,
+    Cofront,
+    Coconscious,
+}
+
+impl FrontStatus {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Front => "front",
+            Self::Cofront => "cofront",
+            Self::Coconscious => "coconscious",
+        }
+    }
+
+    fn parse(s: &str) -> Self {
+        match s {
+            "cofront" => Self::Cofront,
+            "coconscious" => Self::Coconscious,
+            _ => Self::Front,
+        }
+    }
 }
 
 /// Nouvel état du front. Liste vide et `blurry = false` : plus personne au front.
@@ -32,6 +63,10 @@ pub struct FrontSession {
 pub struct FrontChange {
     pub members: Vec<Uuid>,
     pub blurry: bool,
+    /// Statut par membre ; absent : « front » pour un arrivant, inchangé sinon
+    /// (un switch reçu de PluralKit ne connaît pas les statuts).
+    #[serde(default)]
+    pub statuses: HashMap<Uuid, FrontStatus>,
 }
 
 fn from_row(r: &Row<'_>) -> rusqlite::Result<FrontSession> {
@@ -42,10 +77,11 @@ fn from_row(r: &Row<'_>) -> rusqlite::Result<FrontSession> {
         member_id: member.map(Uuid::from_bytes),
         started_at: r.get(2)?,
         ended_at: r.get(3)?,
+        status: FrontStatus::parse(&r.get::<_, String>(4)?),
     })
 }
 
-const COLUMNS: &str = "id, member_id, started_at, ended_at";
+const COLUMNS: &str = "id, member_id, started_at, ended_at, status";
 
 pub fn current(conn: &Connection) -> Result<Vec<FrontSession>> {
     let mut st = conn.prepare_cached(&format!(
@@ -126,7 +162,18 @@ pub fn change_at(
         .map(|m| Some(*m))
         .chain(change.blurry.then_some(None))
         .collect();
-    if before == after {
+    if change.statuses.keys().any(|m| !wanted.contains(m)) {
+        return Err(CoreError::Invalid("statuses"));
+    }
+    let restatus: Vec<(Uuid, FrontStatus)> = open
+        .iter()
+        .filter_map(|s| {
+            let m = s.member_id?;
+            let want = *change.statuses.get(&m)?;
+            (want != s.status && wanted.contains(&m)).then_some((s.id, want))
+        })
+        .collect();
+    if before == after && restatus.is_empty() {
         return Ok(open);
     }
 
@@ -136,8 +183,12 @@ pub fn change_at(
         for s in open.iter().filter(|s| !after.contains(&s.member_id)) {
             close.execute(params![s.id.as_bytes(), at])?;
         }
+        let mut restat = tx.prepare_cached("UPDATE front_session SET status = ?2 WHERE id = ?1")?;
+        for (id, status) in &restatus {
+            restat.execute(params![id.as_bytes(), status.as_str()])?;
+        }
         let mut insert = tx.prepare_cached(
-            "INSERT INTO front_session (id, member_id, started_at) VALUES (?1, ?2, ?3)",
+            "INSERT INTO front_session (id, member_id, started_at, status) VALUES (?1, ?2, ?3, ?4)",
         )?;
         // Ordre stable : celui de la saisie, le flou en dernier.
         let arriving = change
@@ -147,10 +198,14 @@ pub fn change_at(
             .chain(change.blurry.then_some(None))
             .filter(|m| !before.contains(m));
         for member in arriving {
+            let status = member
+                .and_then(|m| change.statuses.get(&m).copied())
+                .unwrap_or_default();
             insert.execute(params![
                 Uuid::now_v7().as_bytes(),
                 member.map(|m| *m.as_bytes()),
-                at
+                at,
+                status.as_str()
             ])?;
         }
     }
@@ -177,6 +232,73 @@ pub fn last_change(conn: &Connection) -> Result<Option<i64>> {
         [],
         |r| r.get(0),
     )?)
+}
+
+/// Favoris du switch rapide, partagés entre appareils.
+const FAVORITES: &str = "front.favorites";
+pub const MAX_FAVORITES: usize = 30;
+
+/// Favoris choisis, sans les membres archivés depuis. Vide : jamais choisis.
+pub fn favorites(conn: &Connection) -> Result<Vec<Uuid>> {
+    let Some(raw) = crate::kv::get(conn, FAVORITES)? else {
+        return Ok(Vec::new());
+    };
+    let ids: Vec<Uuid> = serde_json::from_str(&raw).unwrap_or_default();
+    let mut st =
+        conn.prepare_cached("SELECT 1 FROM member WHERE id = ?1 AND archived_at IS NULL")?;
+    let mut out = Vec::with_capacity(ids.len());
+    for id in ids {
+        if st.exists([id.as_bytes()])? {
+            out.push(id);
+        }
+    }
+    Ok(out)
+}
+
+pub fn set_favorites(conn: &Connection, ids: &[Uuid]) -> Result<Vec<Uuid>> {
+    let mut seen = HashSet::new();
+    let ids: Vec<Uuid> = ids.iter().copied().filter(|id| seen.insert(*id)).collect();
+    if ids.len() > MAX_FAVORITES {
+        return Err(CoreError::Invalid("favorites"));
+    }
+    members::ensure_active(conn, &ids)?;
+    if ids.is_empty() {
+        crate::kv::delete(conn, FAVORITES)?;
+    } else {
+        let raw = serde_json::to_string(&ids).map_err(|_| CoreError::Invalid("favorites"))?;
+        crate::kv::set(conn, FAVORITES, &raw)?;
+    }
+    Ok(ids)
+}
+
+/// Membres du switch rapide : les favoris choisis, sinon les huit plus fréquents
+/// des 90 derniers jours. Le booléen dit s'il s'agit de favoris choisis.
+pub fn quick(conn: &Connection) -> Result<(Vec<Uuid>, bool)> {
+    let fav = favorites(conn)?;
+    if !fav.is_empty() {
+        return Ok((fav, true));
+    }
+    let since = crate::time::now_ms()? - 90 * 24 * 60 * 60 * 1000;
+    Ok((frequent(conn, since, 8)?, false))
+}
+
+/// Membres actifs les plus souvent passés au front depuis `since`, du plus
+/// fréquent au moins fréquent.
+pub fn frequent(conn: &Connection, since: i64, limit: usize) -> Result<Vec<Uuid>> {
+    let mut st = conn.prepare_cached(
+        "SELECT f.member_id FROM front_session f
+         JOIN member m ON m.id = f.member_id AND m.archived_at IS NULL
+         WHERE f.started_at >= ?1 OR f.ended_at IS NULL OR f.ended_at >= ?1
+         GROUP BY f.member_id
+         ORDER BY count(*) DESC, max(f.started_at) DESC
+         LIMIT ?2",
+    )?;
+    let limit = i64::try_from(limit).unwrap_or(i64::MAX);
+    Ok(st
+        .query_map(params![since, limit], |r| {
+            Ok(Uuid::from_bytes(r.get::<_, [u8; 16]>(0)?))
+        })?
+        .collect::<rusqlite::Result<_>>()?)
 }
 
 #[cfg(test)]
@@ -212,6 +334,96 @@ mod tests {
     }
 
     #[test]
+    fn favorites_and_frequent() {
+        let (_t, mut v, a, b) = setup();
+        let c = v.conn_mut().unwrap();
+        assert!(favorites(c).unwrap().is_empty());
+        assert_eq!(set_favorites(c, &[b, a, b]).unwrap(), vec![b, a]);
+        assert_eq!(favorites(c).unwrap(), vec![b, a]);
+        assert!(set_favorites(c, &[Uuid::now_v7()]).is_err());
+        let sw = |c: &mut Connection, m: Uuid, at| {
+            change_at(
+                c,
+                &FrontChange {
+                    members: vec![m],
+                    blurry: false,
+                    statuses: HashMap::new(),
+                },
+                at,
+                Origin::Local,
+            )
+            .unwrap();
+        };
+        sw(c, b, 1_000);
+        sw(c, a, 2_000);
+        sw(c, b, 3_000);
+        assert_eq!(frequent(c, 0, 10).unwrap(), vec![b, a]);
+        assert_eq!(frequent(c, 0, 1).unwrap(), vec![b]);
+        members::archive(c, b).unwrap();
+        assert_eq!(favorites(c).unwrap(), vec![a]);
+    }
+
+    #[test]
+    fn statuses_change_without_cutting() {
+        let (_t, mut v, a, b) = setup();
+        let c = v.conn_mut().unwrap();
+        let st = |pairs: &[(Uuid, FrontStatus)]| pairs.iter().copied().collect();
+        let both = vec![a, b];
+        let cur = change_at(
+            c,
+            &FrontChange {
+                members: both.clone(),
+                blurry: false,
+                statuses: st(&[(b, FrontStatus::Coconscious)]),
+            },
+            1_000,
+            Origin::Local,
+        )
+        .unwrap();
+        let of =
+            |s: &[FrontSession], m: Uuid| s.iter().find(|x| x.member_id == Some(m)).unwrap().status;
+        assert_eq!(of(&cur, a), FrontStatus::Front);
+        assert_eq!(of(&cur, b), FrontStatus::Coconscious);
+
+        // Changer le statut seul ne coupe pas l'intervalle.
+        let cur = change_at(
+            c,
+            &FrontChange {
+                members: both.clone(),
+                blurry: false,
+                statuses: st(&[(b, FrontStatus::Cofront)]),
+            },
+            2_000,
+            Origin::Local,
+        )
+        .unwrap();
+        assert_eq!(of(&cur, b), FrontStatus::Cofront);
+        assert!(cur.iter().all(|s| s.started_at == 1_000));
+
+        // Un switch sans statuts (PluralKit) garde ceux en place.
+        let cur = change_at(
+            c,
+            &FrontChange {
+                members: both,
+                blurry: false,
+                statuses: HashMap::new(),
+            },
+            3_000,
+            Origin::Remote,
+        )
+        .unwrap();
+        assert_eq!(of(&cur, b), FrontStatus::Cofront);
+
+        // Statut pour un membre absent du changement : refusé.
+        let bad = FrontChange {
+            members: vec![a],
+            blurry: false,
+            statuses: st(&[(b, FrontStatus::Front)]),
+        };
+        assert!(change_at(c, &bad, 4_000, Origin::Local).is_err());
+    }
+
+    #[test]
     fn switch_cofront_and_blurry() {
         let (_t, mut v, a, b) = setup();
         let conn = v.conn_mut().unwrap();
@@ -221,6 +433,7 @@ mod tests {
             &FrontChange {
                 members: vec![a],
                 blurry: false,
+                statuses: std::collections::HashMap::new(),
             },
         )
         .unwrap();
@@ -233,6 +446,7 @@ mod tests {
             &FrontChange {
                 members: vec![a, b],
                 blurry: false,
+                statuses: std::collections::HashMap::new(),
             },
         )
         .unwrap();
@@ -245,6 +459,7 @@ mod tests {
             &FrontChange {
                 members: vec![],
                 blurry: true,
+                statuses: std::collections::HashMap::new(),
             },
         )
         .unwrap();
@@ -256,7 +471,8 @@ mod tests {
                 conn,
                 &FrontChange {
                     members: vec![],
-                    blurry: false
+                    blurry: false,
+                    statuses: std::collections::HashMap::new(),
                 }
             )
             .unwrap()
@@ -275,11 +491,13 @@ mod tests {
         let unknown = FrontChange {
             members: vec![Uuid::now_v7()],
             blurry: false,
+            statuses: std::collections::HashMap::new(),
         };
         assert!(matches!(change(conn, &unknown), Err(CoreError::NotFound)));
         let dup = FrontChange {
             members: vec![a, a],
             blurry: false,
+            statuses: std::collections::HashMap::new(),
         };
         assert!(matches!(
             change(conn, &dup),
@@ -326,6 +544,7 @@ mod timed_tests {
         let one = FrontChange {
             members: vec![a],
             blurry: false,
+            statuses: std::collections::HashMap::new(),
         };
         change_at(c, &one, 1_000, Origin::Remote).unwrap();
         assert_eq!(
@@ -339,6 +558,7 @@ mod timed_tests {
         let none = FrontChange {
             members: vec![],
             blurry: false,
+            statuses: std::collections::HashMap::new(),
         };
         assert!(matches!(
             change_at(c, &none, 500, Origin::Remote),
