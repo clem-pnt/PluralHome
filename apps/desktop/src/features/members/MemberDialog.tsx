@@ -21,6 +21,7 @@ import { m } from "../../paraglide/messages.js";
 import { Avatar } from "../../ui/Avatar";
 import { Button } from "../../ui/Button";
 import { TextField } from "../../ui/TextField";
+import { buildTree } from "./folderTree";
 import { squareAvatar } from "./image";
 import { MEMBER_COLORS } from "./palette";
 import { RolesField } from "./RolesField";
@@ -194,9 +195,9 @@ export function MemberForm({
         <CheckboxGroup className="field" value={inFolders} onChange={setInFolders}>
           <Label className="field__label">{m.member_folders()}</Label>
           <div className="choices">
-            {folders.list.map((f) => (
+            {buildTree(folders.list).flat.map(({ folder: f, path }) => (
               <Checkbox key={f.id} value={f.id} className="choice">
-                {f.name}
+                {path}
               </Checkbox>
             ))}
           </div>

@@ -11,7 +11,7 @@ import {
 } from "react-aria-components";
 import { keys, queryClient } from "../../app/query";
 import { errorMessage } from "../../i18n/errors";
-import { api, type Member } from "../../ipc";
+import { api, type Folder, type Member } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
 import { Avatar } from "../../ui/Avatar";
 import { Button } from "../../ui/Button";
@@ -20,7 +20,13 @@ import { setFolders, useFolders } from "./useFolders";
 import { useMembers } from "./useMembers";
 
 const labels = (): Labels => ({
-  age: { child: m.sort_age_child(), teen: m.sort_age_teen(), adult: m.sort_age_adult() },
+  parents: { age: m.sort_age_parent(), gender: m.sort_gender_parent() },
+  age: {
+    child: m.sort_age_child(),
+    teen: m.sort_age_teen(),
+    adult: m.sort_age_adult(),
+    slider: m.sort_age_slider(),
+  },
   gender: {
     female: m.sort_gender_female(),
     male: m.sort_gender_male(),
@@ -81,23 +87,45 @@ function AutoSortForm({ catalog, onDone }: { catalog: string[]; onDone: () => vo
     Object.fromEntries(proposals.map((p) => [keyOf(p), p.hits.map((h) => h.id)])),
   );
   const byId = useMemo(() => new Map(members.list.map((x) => [x.id, x])), [members.list]);
-  const total = Object.values(picked).reduce((n, ids) => n + ids.length, 0);
+  const total =
+    Object.values(picked).reduce((n, ids) => n + ids.length, 0) +
+    proposals.filter((p) => p.move).length;
 
   const apply = useMutation({
     mutationFn: async () => {
       let current = folders.list;
       for (const p of proposals) {
         const ids = picked[keyOf(p)] ?? [];
-        if (p.kind === "role" || ids.length === 0) continue;
-        let folder = current.find((f) =>
-          p.folderId ? f.id === p.folderId : same(f.name, p.label),
-        );
-        if (!folder) {
-          current = await api.folders.create(p.label);
-          setFolders(current);
-          folder = current.find((f) => same(f.name, p.label));
+        if (p.kind === "role" || (ids.length === 0 && !p.move)) continue;
+        // Le dossier parent (« Âge », « Genre ») d'abord, créé au besoin.
+        let parent: Folder | undefined;
+        if (p.parent) {
+          const name = p.parent;
+          parent =
+            current.find((f) => !f.parentId && same(f.name, name)) ??
+            current.find((f) => same(f.name, name));
+          if (!parent) {
+            const before = new Set(current.map((f) => f.id));
+            current = await api.folders.create(name);
+            setFolders(current);
+            parent = current.find((f) => !before.has(f.id));
+          }
         }
-        if (!folder) continue;
+        const parentId = parent?.id ?? null;
+        let folder = p.folderId
+          ? current.find((f) => f.id === p.folderId)
+          : current.find((f) => f.parentId === parentId && same(f.name, p.label));
+        if (folder && parentId && folder.parentId !== parentId && folder.id !== parentId) {
+          current = await api.folders.move(folder.id, parentId);
+          setFolders(current);
+        }
+        if (!folder) {
+          const before = new Set(current.map((f) => f.id));
+          current = await api.folders.create(p.label, parentId);
+          setFolders(current);
+          folder = current.find((f) => !before.has(f.id));
+        }
+        if (!folder || ids.length === 0) continue;
         const union = [...new Set([...folder.members, ...ids])];
         current = await api.folders.setMembers(folder.id, union);
         setFolders(current);
@@ -136,7 +164,11 @@ function AutoSortForm({ catalog, onDone }: { catalog: string[]; onDone: () => vo
           <div key={keyOf(p)} className="sort__group">
             <p className="sort__label">
               {p.label}
+              {p.parent && <small className="muted">{m.sort_in({ folder: p.parent })}</small>}
               {kind !== "role" && !p.folderId && <small className="muted">{m.sort_new()}</small>}
+              {p.move && p.parent && (
+                <small className="muted">{m.sort_move({ folder: p.parent })}</small>
+              )}
             </p>
             <CheckboxGroup
               className="picker"

@@ -252,8 +252,23 @@ pub async fn folders_create(
     state: State<'_, AppState>,
     rem: State<'_, Remote>,
     name: String,
+    parent: Option<Uuid>,
 ) -> IpcResult<Vec<Folder>> {
-    let r = blocking(&state, move |v| folders::create(v.conn()?, &name)).await?;
+    let r = blocking(&state, move |v| folders::create(v.conn()?, &name, parent)).await?;
+    rem.wake(Wake::Full);
+    Ok(r)
+}
+
+/// Range un dossier dans un autre (ou à la racine avec `None`).
+#[tauri::command]
+#[specta::specta]
+pub async fn folders_move(
+    state: State<'_, AppState>,
+    rem: State<'_, Remote>,
+    id: Uuid,
+    parent: Option<Uuid>,
+) -> IpcResult<Vec<Folder>> {
+    let r = blocking(&state, move |v| folders::move_to(v.conn()?, id, parent)).await?;
     rem.wake(Wake::Full);
     Ok(r)
 }
@@ -472,6 +487,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         folders_list,
         folders_create,
         folders_rename,
+        folders_move,
         folders_remove,
         folders_set_members,
         folders_set_for_member,

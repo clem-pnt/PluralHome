@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Button as AriaButton,
   DialogTrigger,
@@ -10,8 +10,11 @@ import type { Member } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
 import { Avatar } from "../../ui/Avatar";
 import { Button } from "../../ui/Button";
+import { matches, Search } from "../../ui/Search";
 import { FoldersDialog } from "./FoldersDialog";
+import { ancestry, buildTree, membersUnder, pathOf } from "./folderTree";
 import { MemberDialog } from "./MemberDialog";
+import { PAGE } from "./MemberPicker";
 import { MemberProfileDialog } from "./MemberProfile";
 import { RolesDialog } from "./RolesDialog";
 import { useFolders } from "./useFolders";
@@ -23,10 +26,23 @@ export function MembersView() {
   const members = useMembers();
   const { list } = members;
   const folders = useFolders();
+  const tree = useMemo(() => buildTree(folders.list), [folders.list]);
   const [filter, setFilter] = useState(ALL);
+  const [q, setQ] = useState("");
+  const [limit, setLimit] = useState(PAGE);
   // Un dossier supprimé (ici ou ailleurs) ramène à tous les membres.
-  const folder = folders.list.find((f) => f.id === filter);
-  const shown = folder ? list.filter((x) => folder.members.includes(x.id)) : list;
+  const folder = tree.byId.get(filter);
+  const shown = useMemo(() => {
+    const inFolder = folder ? membersUnder(tree, folder.id) : null;
+    return list.filter((x) => (!inFolder || inFolder.has(x.id)) && matches(q, x));
+  }, [list, folder, tree, q]);
+  const pick = (id: string) => {
+    setFilter(id);
+    setLimit(PAGE);
+  };
+  // Une rangée de choix par niveau : la racine, puis les sous-dossiers du dossier choisi.
+  const path = folder ? ancestry(tree, folder.id) : [];
+  const levels = ["", ...path].filter((k) => (tree.children.get(k) ?? []).length > 0);
   const addButton = (
     <DialogTrigger>
       <Button variant="primary">{m.members_add()}</Button>
@@ -64,35 +80,72 @@ export function MembersView() {
         </div>
       )}
 
-      {list.length > 0 && folders.list.length > 0 && (
-        <RadioGroup
-          className="field folders__filter"
-          value={folder ? folder.id : ALL}
-          onChange={setFilter}
-          orientation="horizontal"
-        >
-          <Label className="sr-only">{m.folders_filter()}</Label>
-          <div className="choices">
-            <Radio value={ALL} className="choice">
-              {m.folders_all({ count: list.length })}
-            </Radio>
-            {folders.list.map((f) => (
-              <Radio key={f.id} value={f.id} className="choice">
-                {f.name} ({f.members.length})
-              </Radio>
-            ))}
-          </div>
-        </RadioGroup>
+      {list.length > 0 && (
+        <div className="members__tools">
+          <Search
+            label={m.search_members()}
+            value={q}
+            onChange={(v) => {
+              setQ(v);
+              setLimit(PAGE);
+            }}
+          />
+          {levels.length > 0 && (
+            <div className="folder-filter">
+              {levels.map((key, depth) => {
+                const parent = key ? tree.byId.get(key) : undefined;
+                const all = parent ? parent.id : ALL;
+                // La valeur de la rangée : le dossier choisi à ce niveau, sinon « Tout ».
+                const value = path[depth] ?? all;
+                return (
+                  <RadioGroup
+                    key={key || ALL}
+                    className="field"
+                    value={value}
+                    onChange={pick}
+                    orientation="horizontal"
+                  >
+                    <Label className="sr-only">
+                      {parent ? pathOf(tree, parent.id) : m.folders_filter()}
+                    </Label>
+                    <div className="choices">
+                      <Radio value={all} className="choice">
+                        {parent
+                          ? m.folders_all_in({
+                              folder: parent.name,
+                              count: membersUnder(tree, parent.id).size,
+                            })
+                          : m.folders_all({ count: list.length })}
+                      </Radio>
+                      {(tree.children.get(key) ?? []).map((f) => (
+                        <Radio key={f.id} value={f.id} className="choice">
+                          {f.name} ({membersUnder(tree, f.id).size})
+                        </Radio>
+                      ))}
+                    </div>
+                  </RadioGroup>
+                );
+              })}
+            </div>
+          )}
+        </div>
       )}
 
-      {folder && shown.length === 0 && <p className="muted">{m.folders_empty_folder()}</p>}
+      {list.length > 0 && shown.length === 0 && (
+        <p className="muted">{q.trim() ? m.members_none_found() : m.folders_empty_folder()}</p>
+      )}
 
       {shown.length > 0 && (
         <ul className="members">
-          {shown.map((member) => (
+          {shown.slice(0, limit).map((member) => (
             <MemberCard key={member.id} member={member} />
           ))}
         </ul>
+      )}
+      {shown.length > limit && (
+        <Button variant="ghost" onPress={() => setLimit((n) => n + PAGE * 2)}>
+          {m.search_more({ count: shown.length - limit })}
+        </Button>
       )}
     </section>
   );

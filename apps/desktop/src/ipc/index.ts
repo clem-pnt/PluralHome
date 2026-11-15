@@ -68,7 +68,9 @@ export const api = {
   },
   folders: {
     list: () => unwrap(commands.foldersList()),
-    create: (name: string) => unwrap(commands.foldersCreate(name)),
+    create: (name: string, parent: string | null = null) =>
+      unwrap(commands.foldersCreate(name, parent)),
+    move: (id: string, parent: string | null) => unwrap(commands.foldersMove(id, parent)),
     rename: (id: string, name: string) => unwrap(commands.foldersRename(id, name)),
     remove: (id: string) => unwrap(commands.foldersRemove(id)),
     setMembers: (id: string, members: string[]) => unwrap(commands.foldersSetMembers(id, members)),

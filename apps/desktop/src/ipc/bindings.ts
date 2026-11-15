@@ -34,14 +34,16 @@ export const commands = {
 	/**  Supprime un rôle du catalogue et le retire à tous les membres. */
 	rolesRemove: (name: string) => typedError<string[], IpcError_Serialize>(__TAURI_INVOKE("roles_remove", { name })),
 	/**  Dossiers de rangement des membres. */
-	foldersList: () => typedError<Folder[], IpcError_Serialize>(__TAURI_INVOKE("folders_list")),
-	foldersCreate: (name: string) => typedError<Folder[], IpcError_Serialize>(__TAURI_INVOKE("folders_create", { name })),
-	foldersRename: (id: string, name: string) => typedError<Folder[], IpcError_Serialize>(__TAURI_INVOKE("folders_rename", { id, name })),
+	foldersList: () => typedError<Folder_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("folders_list")),
+	foldersCreate: (name: string, parent: string | null) => typedError<Folder_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("folders_create", { name, parent })),
+	foldersRename: (id: string, name: string) => typedError<Folder_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("folders_rename", { id, name })),
+	/**  Range un dossier dans un autre (ou à la racine avec `None`). */
+	foldersMove: (id: string, parent: string | null) => typedError<Folder_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("folders_move", { id, parent })),
 	/**  Supprime le dossier ; les membres ne sont pas touchés. */
-	foldersRemove: (id: string) => typedError<Folder[], IpcError_Serialize>(__TAURI_INVOKE("folders_remove", { id })),
-	foldersSetMembers: (id: string, members: string[]) => typedError<Folder[], IpcError_Serialize>(__TAURI_INVOKE("folders_set_members", { id, members })),
+	foldersRemove: (id: string) => typedError<Folder_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("folders_remove", { id })),
+	foldersSetMembers: (id: string, members: string[]) => typedError<Folder_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("folders_set_members", { id, members })),
 	/**  Remplace les dossiers d'un membre. */
-	foldersSetForMember: (member: string, folders: string[]) => typedError<Folder[], IpcError_Serialize>(__TAURI_INVOKE("folders_set_for_member", { member, folders })),
+	foldersSetForMember: (member: string, folders: string[]) => typedError<Folder_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("folders_set_for_member", { member, folders })),
 	frontCurrent: () => typedError<FrontSession_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("front_current")),
 	frontChange: (change: FrontChange) => typedError<FrontSession_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("front_change", { change })),
 	/**  Bornes en millisecondes Unix, `[from, to)`. */
@@ -204,9 +206,22 @@ export type Entry_Serialize = {
 	updatedAt: number | null,
 };
 
-export type Folder = {
+export type Folder = Folder_Serialize | Folder_Deserialize;
+
+export type Folder_Deserialize = {
 	id: string,
 	name: string,
+	/**  Dossier parent ; `None` à la racine. */
+	parentId?: string | null,
+	/**  Membres rangés ici (archivés exclus). */
+	members: string[],
+};
+
+export type Folder_Serialize = {
+	id: string,
+	name: string,
+	/**  Dossier parent ; `None` à la racine. */
+	parentId: string | null,
 	/**  Membres rangés ici (archivés exclus). */
 	members: string[],
 };

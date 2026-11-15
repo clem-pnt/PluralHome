@@ -4,6 +4,7 @@ import type { Member } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
 import { Avatar } from "../../ui/Avatar";
 import { Button } from "../../ui/Button";
+import { buildTree, pathOf } from "./folderTree";
 import { MemberForm } from "./MemberDialog";
 import { foldersOf, useFolders } from "./useFolders";
 import { useMembers } from "./useMembers";
@@ -36,7 +37,9 @@ export function MemberProfileDialog({ member }: { member: Member }) {
 function Profile({ id, fallback, onEdit }: { id: string; fallback: Member; onEdit: () => void }) {
   // Toujours la version à jour (après modification ou synchro).
   const member = useMembers().byId.get(id) ?? fallback;
-  const folders = foldersOf(useFolders().list, id);
+  const all = useFolders().list;
+  const tree = buildTree(all);
+  const folders = foldersOf(all, id);
   const [main, ...others] = member.roles;
 
   return (
@@ -75,7 +78,7 @@ function Profile({ id, fallback, onEdit }: { id: string; fallback: Member; onEdi
           <ul className="chips">
             {folders.map((f) => (
               <li key={f.id} className="chip chip--read chip--folder">
-                {f.name}
+                {pathOf(tree, f.id)}
               </li>
             ))}
           </ul>

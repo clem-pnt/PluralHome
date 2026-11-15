@@ -2,8 +2,6 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   TextField as AriaTextField,
-  Checkbox,
-  CheckboxGroup,
   Dialog,
   DialogTrigger,
   Heading,
@@ -15,13 +13,17 @@ import {
 import { errorMessage } from "../../i18n/errors";
 import { api, type Folder } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
-import { Avatar } from "../../ui/Avatar";
 import { Button } from "../../ui/Button";
+import { IconButton } from "../../ui/IconButton";
+import { Select } from "../../ui/Select";
 import { AutoSort } from "./AutoSortDialog";
+import { buildTree, type FolderTree, membersUnder, subtree } from "./folderTree";
+import { MemberPicker } from "./MemberPicker";
 import { setFolders, useFolders } from "./useFolders";
 import { useMembers } from "./useMembers";
 
 const MAX_FOLDER = 60;
+const ROOT = "__root__";
 
 /** Dossiers du système : créer, renommer, supprimer, choisir qui y est rangé. */
 export function FoldersDialog() {
@@ -50,9 +52,10 @@ export function FoldersDialog() {
 
 function FoldersEditor() {
   const folders = useFolders();
+  const tree = buildTree(folders.list);
   const [draft, setDraft] = useState("");
   const create = useMutation({
-    mutationFn: api.folders.create,
+    mutationFn: (name: string) => api.folders.create(name),
     onSuccess: (next) => {
       setFolders(next);
       setDraft("");
@@ -68,9 +71,9 @@ function FoldersEditor() {
         <p className="muted">{m.folders_empty()}</p>
       )}
       {folders.list.length > 0 && (
-        <ul className="facts">
-          {folders.list.map((f) => (
-            <FolderRow key={f.id} folder={f} />
+        <ul className="facts folders">
+          {tree.flat.map((n) => (
+            <FolderRow key={n.folder.id} folder={n.folder} depth={n.depth} tree={tree} />
           ))}
         </ul>
       )}
@@ -103,72 +106,139 @@ function FoldersEditor() {
   );
 }
 
-function FolderRow({ folder }: { folder: Folder }) {
-  const [editing, setEditing] = useState(false);
+function FolderRow({ folder, depth, tree }: { folder: Folder; depth: number; tree: FolderTree }) {
+  const [mode, setMode] = useState<"view" | "edit" | "sub">("view");
   const [name, setName] = useState(folder.name);
-  const rename = useMutation({
-    mutationFn: (to: string) => api.folders.rename(folder.id, to),
+  const parent = tree.parentOf(folder.id);
+  const [to, setTo] = useState(parent ?? ROOT);
+  const save = useMutation({
+    mutationFn: async () => {
+      const n = name.trim();
+      let next = n && n !== folder.name ? await api.folders.rename(folder.id, n) : null;
+      const target = to === ROOT ? null : to;
+      if (target !== parent) next = await api.folders.move(folder.id, target);
+      return next;
+    },
     onSuccess: (next) => {
-      setFolders(next);
-      setEditing(false);
+      if (next) setFolders(next);
+      setMode("view");
     },
   });
-  const save = () => {
-    const to = name.trim();
-    if (!to || to === folder.name) setEditing(false);
-    else rename.mutate(to);
+  const [sub, setSub] = useState("");
+  const addSub = useMutation({
+    mutationFn: () => api.folders.create(sub.trim(), folder.id),
+    onSuccess: (next) => {
+      setFolders(next);
+      setSub("");
+      setMode("view");
+    },
+  });
+  // On ne peut pas ranger un dossier dans lui-même ni dans ses sous-dossiers.
+  const own = new Set(subtree(tree, folder.id));
+  const targets = [
+    { id: ROOT, label: m.folders_root() },
+    ...tree.flat
+      .filter((n) => !own.has(n.folder.id))
+      .map((n) => ({ id: n.folder.id, label: n.path })),
+  ];
+  const count = membersUnder(tree, folder.id).size;
+  const style = { paddingInlineStart: `calc(${depth} * var(--space-5))` };
+  const keys = (submit: () => void) => (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      submit();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setMode("view");
+    }
   };
 
-  if (editing) {
+  if (mode === "edit") {
     return (
-      <li className="roles__add">
+      <li className="folder__edit" style={style}>
         <AriaTextField
-          className="field roles__input"
+          className="field"
           maxLength={MAX_FOLDER}
           value={name}
           onChange={setName}
           autoFocus
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              save();
-            } else if (e.key === "Escape") {
-              e.preventDefault();
-              setEditing(false);
-            }
-          }}
+          onKeyDown={keys(() => name.trim() && save.mutate())}
         >
-          <Label className="sr-only">{m.folders_rename_label({ folder: folder.name })}</Label>
+          <Label className="field__label">{m.folders_rename_label({ folder: folder.name })}</Label>
           <Input className="input" />
         </AriaTextField>
-        <Button variant="ghost" isDisabled={!name.trim() || rename.isPending} onPress={save}>
-          {m.roles_save()}
-        </Button>
-        {rename.isError && (
-          <span className="alert" role="alert">
-            {errorMessage(rename.error)}
-          </span>
+        <Select label={m.folders_parent()} options={targets} value={to} onChange={setTo} />
+        <div className="roles__add">
+          <Button variant="ghost" onPress={() => setMode("view")}>
+            {m.cancel()}
+          </Button>
+          <Button isDisabled={!name.trim() || save.isPending} onPress={() => save.mutate()}>
+            {m.roles_save()}
+          </Button>
+        </div>
+        {save.isError && (
+          <p className="alert" role="alert">
+            {errorMessage(save.error)}
+          </p>
         )}
       </li>
     );
   }
   return (
-    <li className="roles__add folder__row">
-      <span className="folder__name">
-        {folder.name}
-        <small className="muted">{m.folders_count({ count: folder.members.length })}</small>
-      </span>
-      <FolderMembers folder={folder} />
-      <Button
-        variant="ghost"
-        onPress={() => {
-          setName(folder.name);
-          setEditing(true);
-        }}
-      >
-        {m.roles_rename()}
-      </Button>
-      <RemoveFolder folder={folder} />
+    <li className="folder__item" style={style}>
+      <div className="folder__row">
+        {depth > 0 && <span aria-hidden className="folder__branch" />}
+        <span className="folder__name">
+          {folder.name}
+          <small className="muted">{m.folders_count({ count })}</small>
+        </span>
+        <span className="row-actions">
+          <FolderMembers folder={folder} />
+          <IconButton
+            icon="folderPlus"
+            label={m.folders_add_sub({ folder: folder.name })}
+            pressed={mode === "sub"}
+            onPress={() => setMode(mode === "sub" ? "view" : "sub")}
+          />
+          <IconButton
+            icon="edit"
+            label={m.action_edit()}
+            onPress={() => {
+              setName(folder.name);
+              setTo(parent ?? ROOT);
+              setMode("edit");
+            }}
+          />
+          <RemoveFolder folder={folder} hasChildren={own.size > 1} />
+        </span>
+      </div>
+      {mode === "sub" && (
+        <div className="roles__add folder__sub">
+          <AriaTextField
+            className="field roles__input"
+            maxLength={MAX_FOLDER}
+            value={sub}
+            onChange={setSub}
+            autoFocus
+            onKeyDown={keys(() => sub.trim() && addSub.mutate())}
+          >
+            <Label className="sr-only">{m.folders_add_sub({ folder: folder.name })}</Label>
+            <Input className="input" placeholder={m.folders_sub_placeholder()} />
+          </AriaTextField>
+          <Button
+            variant="ghost"
+            isDisabled={!sub.trim() || addSub.isPending}
+            onPress={() => addSub.mutate()}
+          >
+            {m.folders_add()}
+          </Button>
+        </div>
+      )}
+      {addSub.isError && (
+        <p className="alert" role="alert">
+          {errorMessage(addSub.error)}
+        </p>
+      )}
     </li>
   );
 }
@@ -183,7 +253,7 @@ function FolderMembers({ folder }: { folder: Folder }) {
   });
   return (
     <DialogTrigger onOpenChange={(open) => open && setSelected(folder.members)}>
-      <Button variant="ghost">{m.folders_members()}</Button>
+      <IconButton icon="users" label={m.folders_members()} />
       <ModalOverlay className="overlay" isDismissable>
         <Modal className="modal modal--wide">
           <Dialog className="dialog">
@@ -191,19 +261,12 @@ function FolderMembers({ folder }: { folder: Folder }) {
               <>
                 <Heading slot="title">{m.folders_members_title({ folder: folder.name })}</Heading>
                 <p className="muted">{m.folders_members_lead()}</p>
-                <CheckboxGroup
-                  className="picker"
-                  aria-label={m.folders_members_title({ folder: folder.name })}
+                <MemberPicker
+                  label={m.folders_members_title({ folder: folder.name })}
+                  members={members.list}
                   value={selected}
                   onChange={setSelected}
-                >
-                  {members.list.map((x) => (
-                    <Checkbox key={x.id} value={x.id} className="pick">
-                      <Avatar name={x.name} src={x.avatar} size={32} />
-                      <span className="pick__name">{x.name}</span>
-                    </Checkbox>
-                  ))}
-                </CheckboxGroup>
+                />
                 {save.isError && (
                   <p className="alert" role="alert">
                     {errorMessage(save.error)}
@@ -229,21 +292,23 @@ function FolderMembers({ folder }: { folder: Folder }) {
   );
 }
 
-function RemoveFolder({ folder }: { folder: Folder }) {
+function RemoveFolder({ folder, hasChildren }: { folder: Folder; hasChildren: boolean }) {
   const remove = useMutation({
     mutationFn: () => api.folders.remove(folder.id),
     onSuccess: setFolders,
   });
   return (
     <DialogTrigger>
-      <Button variant="ghost">{m.roles_remove()}</Button>
+      <IconButton icon="trash" tone="danger" label={m.action_delete()} />
       <ModalOverlay className="overlay" isDismissable>
         <Modal className="modal">
           <Dialog className="dialog" role="alertdialog">
             {({ close }) => (
               <>
                 <Heading slot="title">{m.folders_remove_title({ folder: folder.name })}</Heading>
-                <p className="muted">{m.folders_remove_body()}</p>
+                <p className="muted">
+                  {hasChildren ? m.folders_remove_body_sub() : m.folders_remove_body()}
+                </p>
                 {remove.isError && (
                   <p className="alert" role="alert">
                     {errorMessage(remove.error)}

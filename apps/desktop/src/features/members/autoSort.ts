@@ -21,16 +21,21 @@ export type Proposal = {
   label: string;
   /** Pour un dossier : identifiant s'il existe déjà. */
   folderId?: string | undefined;
+  /** Dossier parent (« Âge », « Genre ») sous lequel ranger le dossier proposé. */
+  parent?: string | undefined;
+  /** Dossier existant hors du parent : il y sera déplacé. */
+  move?: boolean;
   hits: Hit[];
 };
 
 export type Labels = {
+  parents: { age: string; gender: string };
   age: Record<AgeGroup, string>;
   gender: Record<Gender, string>;
   roles: Record<RoleKey, string>;
 };
 
-export type AgeGroup = "child" | "teen" | "adult";
+export type AgeGroup = "child" | "teen" | "adult" | "slider";
 export type Gender = "female" | "male" | "nonbinary" | "agender" | "fluid";
 export type RoleKey =
   | "host"
@@ -137,9 +142,21 @@ function groupOf(age: number): AgeGroup | null {
   return "adult";
 }
 
+const SLIDER = /age[- ]?slid(?:er|ing)|age[- ]?fluide?|age[- ]?fluid/u;
+
 function detectAge(f: Folded): { group: AgeGroup; reason: string } | null {
   for (const { value, start } of fields(f, FIELD_NAMES.age)) {
-    if (/fluide?|fluid|slider|inconnu|unknown|variable|\?/u.test(value)) return null;
+    const reason = () => excerpt(f, start, start + value.trimEnd().length);
+    // Âge qui varie : « Âge : slider », « fluide », « 8-16 ans ».
+    if (/slid(?:er|ing)|fluide?|fluid|variable|change/u.test(value))
+      return { group: "slider", reason: reason() };
+    if (/inconnu|unknown|\?/u.test(value)) return null;
+    const range = /(\d{1,3})\s*(?:-|a|\/)\s*(\d{1,3})/u.exec(value);
+    if (range) {
+      const a = groupOf(Number(range[1]));
+      const b = groupOf(Number(range[2]));
+      if (a && b && a !== b) return { group: "slider", reason: reason() };
+    }
     const n = /\d{1,3}/u.exec(value);
     if (n) {
       const group = groupOf(Number(n[0]));
@@ -148,6 +165,9 @@ function detectAge(f: Folded): { group: AgeGroup; reason: string } | null {
     const kw = ageKeyword(value);
     if (kw) return { group: kw, reason: excerpt(f, start, start + value.trimEnd().length) };
   }
+  const slide = SLIDER.exec(f.text);
+  if (slide)
+    return { group: "slider", reason: excerpt(f, slide.index, slide.index + slide[0].length) };
   for (const mt of f.text.matchAll(AGE_NUMBER)) {
     const idx = mt.index ?? 0;
     if (DURATION_BEFORE.test(f.text.slice(Math.max(0, idx - 20), idx))) continue;
@@ -283,7 +303,7 @@ function hasRole(member: SortMember, label: string, key: RoleKey | null) {
 
 export function analyze(
   members: SortMember[],
-  folders: { id: string; name: string; members: string[] }[],
+  folders: { id: string; name: string; parentId: string | null; members: string[] }[],
   catalog: string[],
   labels: Labels,
 ): Proposal[] {
@@ -291,9 +311,32 @@ export function analyze(
   const push = (kind: Proposal["kind"], label: string, hit: Hit) => {
     const key = `${kind}:${fold(label).text}`;
     const found = props.get(key);
-    const existing =
-      kind === "role" ? undefined : folders.find((x) => fold(x.name).text === fold(label).text);
-    const p = found ?? { kind, label: existing?.name ?? label, folderId: existing?.id, hits: [] };
+    const same = (a: string, b: string) => fold(a).text === fold(b).text;
+    let existing: (typeof folders)[number] | undefined;
+    let parent: string | undefined;
+    let move = false;
+    if (kind !== "role") {
+      parent = kind === "age" ? labels.parents.age : labels.parents.gender;
+      const name = parent;
+      const top =
+        folders.find((x) => !x.parentId && same(x.name, name)) ??
+        folders.find((x) => same(x.name, name));
+      if (top) parent = top.name;
+      existing = top && folders.find((x) => x.parentId === top.id && same(x.name, label));
+      // Dossier « Enfants » créé à plat par une version précédente : on le range.
+      if (!existing) {
+        existing = folders.find((x) => !x.parentId && x.id !== top?.id && same(x.name, label));
+        move = existing !== undefined;
+      }
+    }
+    const p = found ?? {
+      kind,
+      label: existing?.name ?? label,
+      folderId: existing?.id,
+      parent,
+      move,
+      hits: [],
+    };
     if (!found) props.set(key, p);
     if (kind !== "role") {
       if (existing?.members.includes(hit.id)) return;
@@ -327,7 +370,7 @@ export function analyze(
   const order = { age: 0, gender: 1, role: 2 };
   const ageOrder = Object.values(labels.age);
   return [...props.values()]
-    .filter((p) => p.hits.length > 0)
+    .filter((p) => p.hits.length > 0 || p.move)
     .sort(
       (a, b) =>
         order[a.kind] - order[b.kind] ||

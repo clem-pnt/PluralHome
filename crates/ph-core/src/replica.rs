@@ -24,11 +24,19 @@ enum Kind {
 struct Spec {
     name: &'static str,
     pk: &'static [(&'static str, Kind)],
-    /// Seule clé de `kv` partagée : le reste (jetons, réglages d'appareil) reste local.
-    only_key: Option<&'static str>,
+    /// Seules clés de `kv` partagées : le reste (jetons, réglages d'appareil) reste local.
+    only_key: Option<&'static [&'static str]>,
 }
 
 use Kind::{Blob, Text};
+
+/// Clés de `kv` synchronisées (mêmes que dans les déclencheurs de la migration 11).
+pub const SHARED_KEYS: &[&str] = &[
+    "safety.plan",
+    "newcomer.plan",
+    "trusted.contact",
+    "front.favorites",
+];
 
 /// Ordre parents → enfants : les insertions le suivent, les suppressions l'inversent.
 const TABLES: &[Spec] = &[
@@ -58,6 +66,11 @@ const TABLES: &[Spec] = &[
         only_key: None,
     },
     Spec {
+        name: "poll",
+        pk: &[("id", Blob)],
+        only_key: None,
+    },
+    Spec {
         name: "member_profile",
         pk: &[("member_id", Blob)],
         only_key: None,
@@ -70,6 +83,11 @@ const TABLES: &[Spec] = &[
     Spec {
         name: "message_read",
         pk: &[("message_id", Blob), ("member_id", Blob)],
+        only_key: None,
+    },
+    Spec {
+        name: "poll_option",
+        pk: &[("id", Blob)],
         only_key: None,
     },
     Spec {
@@ -88,6 +106,16 @@ const TABLES: &[Spec] = &[
         only_key: None,
     },
     Spec {
+        name: "message_author",
+        pk: &[("message_id", Blob), ("member_id", Blob)],
+        only_key: None,
+    },
+    Spec {
+        name: "poll_vote",
+        pk: &[("option_id", Blob), ("member_id", Blob)],
+        only_key: None,
+    },
+    Spec {
         name: "pk_member",
         pk: &[("member_id", Blob)],
         only_key: None,
@@ -100,7 +128,7 @@ const TABLES: &[Spec] = &[
     Spec {
         name: "kv",
         pk: &[("key", Text)],
-        only_key: Some("safety.plan"),
+        only_key: Some(SHARED_KEYS),
     },
 ];
 
@@ -181,7 +209,7 @@ fn pk_values(s: &Spec, pk: &str) -> Result<Vec<Value>> {
         })
         .collect::<Result<Vec<_>>>()?;
     if let Some(only) = s.only_key
-        && values.first() != Some(&Value::Text(only.into()))
+        && !matches!(values.first(), Some(Value::Text(k)) if only.contains(&k.as_str()))
     {
         return Err(CoreError::Invalid("sync_pk"));
     }
@@ -239,7 +267,7 @@ pub fn seed(conn: &Connection) -> Result<()> {
     for s in TABLES {
         let filter = s
             .only_key
-            .map(|k| format!(" WHERE key = '{k}'"))
+            .map(|k| format!(" WHERE key IN ('{}')", k.join("', '")))
             .unwrap_or_default();
         conn.execute(
             &format!(
@@ -466,7 +494,12 @@ fn sweep_orphans(conn: &Connection) -> Result<()> {
          DELETE FROM member_profile WHERE member_id NOT IN (SELECT id FROM member);
          DELETE FROM pk_member WHERE member_id NOT IN (SELECT id FROM member);
          DELETE FROM journal_author WHERE member_id NOT IN (SELECT id FROM member) OR entry_id NOT IN (SELECT id FROM journal_entry);
-         DELETE FROM folder_member WHERE member_id NOT IN (SELECT id FROM member) OR folder_id NOT IN (SELECT id FROM folder);",
+         DELETE FROM folder_member WHERE member_id NOT IN (SELECT id FROM member) OR folder_id NOT IN (SELECT id FROM folder);
+         DELETE FROM folder WHERE parent_id IS NOT NULL AND parent_id NOT IN (SELECT id FROM folder);
+         DELETE FROM message_author WHERE member_id NOT IN (SELECT id FROM member) OR message_id NOT IN (SELECT id FROM message);
+         UPDATE poll SET author_id = NULL WHERE author_id IS NOT NULL AND author_id NOT IN (SELECT id FROM member);
+         DELETE FROM poll_option WHERE poll_id NOT IN (SELECT id FROM poll);
+         DELETE FROM poll_vote WHERE member_id NOT IN (SELECT id FROM member) OR option_id NOT IN (SELECT id FROM poll_option);",
     )?;
     Ok(())
 }

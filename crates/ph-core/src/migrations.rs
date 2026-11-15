@@ -224,6 +224,64 @@ const MIGRATIONS: &[&str] = &[
             "json_array(hex(OLD.folder_id), hex(OLD.member_id))"
         ),
     ),
+    // 11 — sous-dossiers, statut au front (front, co-front, co-conscience),
+    // messages à plusieurs auteurs et modifiables, votes, et nouveaux réglages
+    // partagés entre appareils (plan d'accueil, proche de confiance, favoris).
+    concat!(
+        "ALTER TABLE folder ADD COLUMN parent_id BLOB REFERENCES folder (id) ON DELETE CASCADE;
+        CREATE INDEX folder_by_parent ON folder (parent_id);
+        ALTER TABLE front_session ADD COLUMN status TEXT NOT NULL DEFAULT 'front'
+            CHECK (status IN ('front', 'cofront', 'coconscious'));
+        ALTER TABLE message ADD COLUMN edited_at INTEGER;
+        CREATE TABLE message_author (
+            message_id BLOB NOT NULL REFERENCES message (id) ON DELETE CASCADE,
+            member_id  BLOB NOT NULL REFERENCES member (id) ON DELETE CASCADE,
+            PRIMARY KEY (message_id, member_id)
+        ) STRICT, WITHOUT ROWID;
+        CREATE TABLE poll (
+            id         BLOB PRIMARY KEY NOT NULL CHECK (length(id) = 16),
+            question   TEXT NOT NULL CHECK (length(question) BETWEEN 1 AND 300),
+            author_id  BLOB REFERENCES member (id) ON DELETE SET NULL,
+            multi      INTEGER NOT NULL DEFAULT 0 CHECK (multi IN (0, 1)),
+            created_at INTEGER NOT NULL,
+            closed_at  INTEGER
+        ) STRICT;
+        CREATE TABLE poll_option (
+            id       BLOB PRIMARY KEY NOT NULL CHECK (length(id) = 16),
+            poll_id  BLOB NOT NULL REFERENCES poll (id) ON DELETE CASCADE,
+            label    TEXT NOT NULL CHECK (length(label) BETWEEN 1 AND 100),
+            position INTEGER NOT NULL
+        ) STRICT;
+        CREATE INDEX poll_option_by_poll ON poll_option (poll_id, position);
+        CREATE TABLE poll_vote (
+            option_id BLOB NOT NULL REFERENCES poll_option (id) ON DELETE CASCADE,
+            member_id BLOB NOT NULL REFERENCES member (id) ON DELETE CASCADE,
+            voted_at  INTEGER NOT NULL,
+            PRIMARY KEY (option_id, member_id)
+        ) STRICT, WITHOUT ROWID;
+        DROP TRIGGER sync_kv_ins;
+        DROP TRIGGER sync_kv_upd;
+        DROP TRIGGER sync_kv_del;\n",
+        track!(
+            "message_author",
+            "json_array(hex(NEW.message_id), hex(NEW.member_id))",
+            "json_array(hex(OLD.message_id), hex(OLD.member_id))"
+        ),
+        track!("poll", "json_array(hex(NEW.id))", "json_array(hex(OLD.id))"),
+        track!("poll_option", "json_array(hex(NEW.id))", "json_array(hex(OLD.id))"),
+        track!(
+            "poll_vote",
+            "json_array(hex(NEW.option_id), hex(NEW.member_id))",
+            "json_array(hex(OLD.option_id), hex(OLD.member_id))"
+        ),
+        track!(
+            "kv",
+            "json_array(NEW.key)",
+            "json_array(OLD.key)",
+            " AND NEW.key IN ('safety.plan', 'newcomer.plan', 'trusted.contact', 'front.favorites')",
+            " AND OLD.key IN ('safety.plan', 'newcomer.plan', 'trusted.contact', 'front.favorites')"
+        ),
+    ),
 ];
 
 pub fn run(conn: &mut Connection) -> Result<()> {

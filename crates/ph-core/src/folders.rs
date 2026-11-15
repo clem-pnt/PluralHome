@@ -1,6 +1,7 @@
 //! Dossiers pour ranger les membres. Un membre peut être dans plusieurs dossiers
 //! (ou aucun) et reste toujours dans la liste de tous les membres. Partagés entre
-//! appareils ; rien n'en part vers PluralKit.
+//! appareils ; rien n'en part vers PluralKit. Un dossier peut en contenir d'autres
+//! (« Âge » → « Enfants », « Ados »…).
 
 use std::collections::HashMap;
 
@@ -18,6 +19,8 @@ pub const MAX_FOLDER_NAME: usize = 60;
 pub struct Folder {
     pub id: Uuid,
     pub name: String,
+    /// Dossier parent ; `None` à la racine.
+    pub parent_id: Option<Uuid>,
     /// Membres rangés ici (archivés exclus).
     pub members: Vec<Uuid>,
 }
@@ -39,11 +42,17 @@ fn uuid(bytes: &[u8]) -> rusqlite::Result<Uuid> {
 /// Dossiers par ordre alphabétique, avec leurs membres.
 pub fn list(conn: &Connection) -> Result<Vec<Folder>> {
     let mut folders: Vec<Folder> = conn
-        .prepare_cached("SELECT id, name FROM folder ORDER BY name COLLATE NOCASE, created_at")?
+        .prepare_cached(
+            "SELECT id, name, parent_id FROM folder ORDER BY name COLLATE NOCASE, created_at",
+        )?
         .query_map([], |r| {
             Ok(Folder {
                 id: uuid(&r.get::<_, Vec<u8>>(0)?)?,
                 name: r.get(1)?,
+                parent_id: r
+                    .get::<_, Option<Vec<u8>>>(2)?
+                    .map(|b| uuid(&b))
+                    .transpose()?,
                 members: Vec::new(),
             })
         })?
@@ -77,11 +86,45 @@ fn exists(conn: &Connection, id: Uuid) -> Result<()> {
     Ok(())
 }
 
-pub fn create(conn: &Connection, name: &str) -> Result<Vec<Folder>> {
+pub fn create(conn: &Connection, name: &str, parent: Option<Uuid>) -> Result<Vec<Folder>> {
     let name = clean(name)?;
+    if let Some(p) = parent {
+        exists(conn, p)?;
+    }
     conn.execute(
-        "INSERT INTO folder (id, name, created_at) VALUES (?1, ?2, ?3)",
-        params![Uuid::now_v7().as_bytes(), name, time::now_ms()?],
+        "INSERT INTO folder (id, name, parent_id, created_at) VALUES (?1, ?2, ?3, ?4)",
+        params![
+            Uuid::now_v7().as_bytes(),
+            name,
+            parent.map(|p| *p.as_bytes()),
+            time::now_ms()?
+        ],
+    )?;
+    list(conn)
+}
+
+/// Déplace un dossier (avec ce qu'il contient) sous un autre, ou à la racine.
+/// Refuse de le ranger dans lui-même ou dans un de ses sous-dossiers.
+pub fn move_to(conn: &Connection, id: Uuid, parent: Option<Uuid>) -> Result<Vec<Folder>> {
+    exists(conn, id)?;
+    if let Some(p) = parent {
+        exists(conn, p)?;
+        let cycle: i64 = conn.query_row(
+            "WITH RECURSIVE up(id, n) AS (
+                SELECT ?1, 0
+                UNION SELECT f.parent_id, up.n + 1 FROM folder f JOIN up ON f.id = up.id
+                WHERE f.parent_id IS NOT NULL AND up.n < 1000
+            ) SELECT count(*) FROM up WHERE id = ?2",
+            params![p.as_bytes(), id.as_bytes()],
+            |r| r.get(0),
+        )?;
+        if cycle > 0 {
+            return Err(CoreError::Invalid("folder_parent"));
+        }
+    }
+    conn.execute(
+        "UPDATE folder SET parent_id = ?2 WHERE id = ?1",
+        params![id.as_bytes(), parent.map(|p| *p.as_bytes())],
     )?;
     list(conn)
 }
@@ -98,7 +141,8 @@ pub fn rename(conn: &Connection, id: Uuid, name: &str) -> Result<Vec<Folder>> {
     list(conn)
 }
 
-/// Supprime le dossier ; ses membres restent, simplement plus rangés là.
+/// Supprime le dossier et ses sous-dossiers ; les membres restent, simplement
+/// plus rangés là.
 pub fn remove(conn: &Connection, id: Uuid) -> Result<Vec<Folder>> {
     conn.execute("DELETE FROM folder WHERE id = ?1", [id.as_bytes()])?;
     list(conn)
@@ -202,12 +246,12 @@ mod tests {
         let mut c = db();
         let a = member(&c, "Mila");
         let b = member(&c, "Alex");
-        let fs = create(&c, " Petits ").unwrap();
+        let fs = create(&c, " Petits ", None).unwrap();
         assert_eq!(fs[0].name, "Petits");
         let id = fs[0].id;
         let fs = set_members(&mut c, id, &[a, b]).unwrap();
         assert_eq!(fs[0].members, vec![b, a]);
-        create(&c, "Protecteurs").unwrap();
+        create(&c, "Protecteurs", None).unwrap();
         let prot = list(&c).unwrap()[1].id;
         let fs = set_for_member(&mut c, a, &[prot]).unwrap();
         assert_eq!(fs[0].members, vec![b]);
@@ -219,7 +263,7 @@ mod tests {
         let fs = remove(&c, id).unwrap();
         assert_eq!(fs.len(), 1);
         assert_eq!(members::list(&c).unwrap().len(), 2);
-        assert!(create(&c, "  ").is_err());
+        assert!(create(&c, "  ", None).is_err());
         assert!(matches!(
             set_members(&mut c, id, &[a]),
             Err(CoreError::NotFound)
@@ -230,9 +274,34 @@ mod tests {
     fn archived_members_are_hidden() {
         let mut c = db();
         let a = member(&c, "Mila");
-        let id = create(&c, "Petits").unwrap()[0].id;
+        let id = create(&c, "Petits", None).unwrap()[0].id;
         set_members(&mut c, id, &[a]).unwrap();
         members::archive(&mut c, a).unwrap();
         assert!(list(&c).unwrap()[0].members.is_empty());
+    }
+
+    #[test]
+    fn subfolders_nest_without_cycles() {
+        let c = db();
+        let age = create(&c, "Âge", None).unwrap()[0].id;
+        let fs = create(&c, "Enfants", Some(age)).unwrap();
+        let kids = fs.iter().find(|f| f.name == "Enfants").unwrap().id;
+        assert_eq!(fs.iter().find(|f| f.id == kids).unwrap().parent_id, Some(age));
+        let small = create(&c, "Tout-petits", Some(kids)).unwrap();
+        let small = small.iter().find(|f| f.name == "Tout-petits").unwrap().id;
+        assert!(matches!(
+            move_to(&c, age, Some(small)),
+            Err(CoreError::Invalid("folder_parent"))
+        ));
+        assert!(matches!(
+            move_to(&c, age, Some(age)),
+            Err(CoreError::Invalid("folder_parent"))
+        ));
+        let fs = move_to(&c, small, None).unwrap();
+        assert_eq!(fs.iter().find(|f| f.id == small).unwrap().parent_id, None);
+        // Supprimer un parent emporte ses sous-dossiers.
+        let fs = remove(&c, age).unwrap();
+        assert_eq!(fs.len(), 1);
+        assert!(create(&c, "X", Some(age)).is_err());
     }
 }
