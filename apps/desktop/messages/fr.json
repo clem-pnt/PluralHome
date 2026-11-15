@@ -410,7 +410,7 @@
   "vote_create": "Lancer le vote",
   "vote_voters": "Qui vote",
   "vote_voters_title": "Qui vote ?",
-  "vote_voters_lead": "Par défaut, les personnes au front. Le choix fait s'applique à chacune.",
+  "vote_voters_lead": "Une personne à la fois. Par défaut, la première au front. Touchez un autre nom pour passer la main.",
   "vote_voters_none": "Personne",
   "vote_pick_voters_hint": "Choisissez qui vote pour pouvoir répondre.",
   "vote_voting_as": "Vote au nom de {names}. Touchez un choix pour le prendre ou le retirer.",

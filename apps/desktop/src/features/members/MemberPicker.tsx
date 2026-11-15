@@ -20,12 +20,15 @@ export function MemberPicker({
   value,
   onChange,
   autoFocus,
+  single,
 }: {
   label: string;
   members: Member[];
   value: string[];
   onChange: (ids: string[]) => void;
   autoFocus?: boolean;
+  /** Un seul membre à la fois : en cocher un autre remplace le précédent. */
+  single?: boolean;
 }) {
   const [q, setQ] = useState("");
   const [limit, setLimit] = useState(PAGE);
@@ -45,7 +48,7 @@ export function MemberPicker({
           {...(autoFocus && { autoFocus })}
         />
       )}
-      {value.length > 0 && (
+      {!single && value.length > 0 && (
         <p className="muted picker__count">{m.picker_selected({ count: value.length })}</p>
       )}
       <CheckboxGroup
@@ -53,7 +56,11 @@ export function MemberPicker({
         aria-label={label}
         value={value}
         // Le groupe garde aussi les membres cochés que la recherche masque.
-        onChange={(ids) => onChange([...new Set(ids)])}
+        onChange={(ids) => {
+          if (!single) return onChange([...new Set(ids)]);
+          const added = ids.find((id) => !value.includes(id));
+          onChange(added ? [added] : []);
+        }}
       >
         {shown.map((x) => (
           <Checkbox key={x.id} value={x.id} className="pick">

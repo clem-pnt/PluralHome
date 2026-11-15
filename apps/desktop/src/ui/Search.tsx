@@ -35,13 +35,10 @@ export function Search({
 /** Texte replié pour chercher sans tenir compte des accents ni de la casse. */
 export const foldText = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 
-/** Le membre correspond-il à la recherche (nom, pronoms, rôles) ? */
-export function matches(
-  q: string,
-  x: { name: string; pronouns?: string | null; roles?: string[] },
-): boolean {
+/** Le membre correspond-il à la recherche ? Seul le prénom compte. */
+export function matches(q: string, x: { name: string }): boolean {
   const needle = foldText(q.trim());
   if (!needle) return true;
-  const hay = foldText([x.name, x.pronouns ?? "", ...(x.roles ?? [])].join(" "));
+  const hay = foldText(x.name);
   return needle.split(/\s+/u).every((w) => hay.includes(w));
 }

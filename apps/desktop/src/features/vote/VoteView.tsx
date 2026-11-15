@@ -13,9 +13,9 @@ export function VoteView() {
   const front = useFrontCurrent();
   const polls = usePolls();
   const fronters = fronting(front.data);
-  // Par défaut, ce sont les personnes au front qui votent, tant qu'on n'a pas choisi.
+  // Une personne vote à la fois ; par défaut la première au front, tant qu'on n'a pas choisi.
   const [picked, setPicked] = useState<string[] | null>(null);
-  const voters = picked ?? fronters;
+  const voters = picked ?? fronters.slice(0, 1);
   const list = polls.data ?? [];
 
   return (
@@ -37,6 +37,7 @@ export function VoteView() {
           byId={members.byId}
           value={voters}
           onChange={setPicked}
+          single
         />
       </div>
       {polls.isSuccess && list.length === 0 && <p className="muted">{m.vote_empty()}</p>}

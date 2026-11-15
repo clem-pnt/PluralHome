@@ -28,6 +28,7 @@ export function PeopleField({
   byId,
   value,
   onChange,
+  single,
 }: {
   label: string;
   title: string;
@@ -38,6 +39,8 @@ export function PeopleField({
   byId: Map<string, Member>;
   value: string[];
   onChange: (ids: string[]) => void;
+  /** Un seul membre : toucher un nom le choisit et ferme. */
+  single?: boolean;
 }) {
   const shown = value.flatMap((id) => {
     const x = byId.get(id);
@@ -75,6 +78,7 @@ export function PeopleField({
                   emptyLabel={emptyLabel}
                   members={members}
                   initial={value}
+                  single={single ?? false}
                   onDone={(ids) => {
                     onChange(ids);
                     close();
@@ -95,6 +99,7 @@ function Picker({
   emptyLabel,
   members,
   initial,
+  single,
   onDone,
 }: {
   title: string;
@@ -102,16 +107,28 @@ function Picker({
   emptyLabel: string;
   members: Member[];
   initial: string[];
+  single: boolean;
   onDone: (ids: string[]) => void;
 }) {
   const [value, setValue] = useState(initial);
+  const pick = (ids: string[]) => {
+    setValue(ids);
+    if (single && ids.length > 0) onDone(ids);
+  };
   return (
     <>
       <div>
         <Heading slot="title">{title}</Heading>
         <p className="muted">{lead}</p>
       </div>
-      <MemberPicker label={title} members={members} value={value} onChange={setValue} autoFocus />
+      <MemberPicker
+        label={title}
+        members={members}
+        value={value}
+        onChange={pick}
+        single={single}
+        autoFocus
+      />
       <div className="dialog__actions">
         <Button variant="ghost" onPress={() => onDone([])}>
           {emptyLabel}
@@ -120,7 +137,7 @@ function Picker({
         <Button variant="ghost" slot="close">
           {m.cancel()}
         </Button>
-        <Button onPress={() => onDone(value)}>{m.messages_pick_validate()}</Button>
+        {!single && <Button onPress={() => onDone(value)}>{m.messages_pick_validate()}</Button>}
       </div>
     </>
   );
