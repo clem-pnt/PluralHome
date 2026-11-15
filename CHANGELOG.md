@@ -1,24 +1,15 @@
 # Changelog
 
-## Non publié
+## 0.11.0 — Sous-dossiers, front détaillé, messagerie en conversations, vote et accueil des nouveaux alters
 
-- Au front : bouton « Créer un alter » dans la fenêtre « Qui est au front ? ». « Flou » se coche comme un alter, sans statut. Le choix « Personne » est retiré.
-- Notifications : au-delà de deux, elles sont repliées dans un seul bloc qu'on peut déplier, avec un bouton « Tout marquer comme lu ».
-- Messages : nouvelle interface en conversations, à la manière des messages privés (liste à gauche, fil à droite, envoi avec Entrée). Seuls les messages qui concernent un alter présent (au front, co-front ou co-conscience) et ceux pour tout le système s'affichent. Bouton « Tout marquer comme lu ».
-- Vote : un seul alter vote à la fois, choisir un autre alter remplace le précédent.
-- Recherche : elle porte sur le prénom seul.
-- Appeler à l'aide : le nom et l'utilité passent avant le numéro. La personne de confiance a plusieurs moyens de contact (téléphone, SMS, WhatsApp, Discord, Instagram, Snapchat…).
-- Nouvel alter : catégories libres, à nommer et à ajouter autant que nécessaire.
-
-## 0.11.0 — Sous-dossiers, front détaillé, vote et accueil des nouveaux alters
-
-- Dossiers : sous-dossiers (par exemple Âge > Enfants, Ados, Adultes), avec une mention « Ageslider » possible. Le tri automatique range aussi par genre. Barre de recherche dans l'écran Membres.
+- Dossiers : sous-dossiers (par exemple Âge > Enfants, Ados, Adultes), avec une mention « Ageslider » possible. Le tri automatique range aussi par genre. Barre de recherche dans l'écran Membres, sur le prénom.
 - Rôles : liste refaite, boutons Modifier et Supprimer en icônes.
-- Au front : le jour est indiqué, bouton « Historique » pour tout l'historique du front, statut de chacun (au front, co-front, co-conscience). Le choix « Changer » a une barre de recherche et reste fluide avec des centaines d'alters. Le switch rapide montre les plus fréquents, ou des favoris à choisir.
-- Messages : ceux reçus ou envoyés par les alters au front sont mis en avant. Plusieurs auteurs et plusieurs destinataires possibles. Un message peut être modifié. Le destinataire a un bouton « Marquer comme lu », et « Supprimer » ne s'affiche que pour lui. Seuls les messages non lus sont affichés par défaut, l'historique est à part.
-- Nouvel onglet Vote : questions à choix entre alters, résultats en direct, clôture.
+- Au front : le jour est indiqué, bouton « Historique » pour tout l'historique du front, statut de chacun (au front, co-front, co-conscience). La fenêtre « Changer » a une barre de recherche, reste fluide avec des centaines d'alters et permet de créer un alter. « Flou » se coche comme un alter. Le switch rapide montre les plus fréquents, ou des favoris à choisir.
+- Notifications : au-delà de deux, elles sont repliées dans un seul bloc qu'on peut déplier, avec « Tout marquer comme lu ».
+- Messages : nouvelle interface en conversations, à la manière des messages privés (liste à gauche, fil à droite, envoi avec Entrée). Seuls les messages qui concernent un alter présent et ceux pour tout le système s'affichent. Plusieurs auteurs et plusieurs destinataires possibles, modification, « Tout marquer comme lu ».
+- Nouvel onglet Vote : questions à choix entre alters, un alter vote à la fois, résultats en direct, clôture.
 - Nouvel onglet Paramètres, où se trouvent maintenant les connexions (compte, synchro, PluralKit).
-- Ancrage : le plan de crise est remplacé par un plan d'accueil pour les nouveaux alters (mot d'accueil, repères, personnes et lieux sûrs, premières choses à faire). Dans « Appeler à l'aide », un numéro personnalisable pour une personne de confiance.
+- Ancrage : le plan de crise est remplacé par un plan d'accueil pour les nouveaux alters, avec des catégories libres à nommer et à ajouter. Dans « Appeler à l'aide », une personne de confiance avec plusieurs moyens de contact (téléphone, SMS, WhatsApp, Discord, Instagram, Snapchat…), et le nom et l'utilité de chaque numéro avant le numéro.
 
 ## 0.10.4 — Tri automatique
 
