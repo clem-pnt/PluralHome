@@ -16,6 +16,7 @@ pub mod members;
 pub mod messages;
 mod migrations;
 pub mod outbox;
+pub mod polls;
 pub mod replica;
 mod reset;
 pub mod roles;

@@ -62,6 +62,11 @@ export const commands = {
 	messagesDelete: (id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("messages_delete", { id })),
 	catchUp: (memberId: string) => typedError<CatchUp_Serialize, IpcError_Serialize>(__TAURI_INVOKE("catch_up", { memberId })),
 	messagesMarkRead: (memberId: string, ids: string[]) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("messages_mark_read", { memberId, ids })),
+	pollsList: () => typedError<Poll_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("polls_list")),
+	pollsCreate: (input: NewPoll_Deserialize) => typedError<Poll_Serialize, IpcError_Serialize>(__TAURI_INVOKE("polls_create", { input })),
+	pollsVote: (id: string, voters: string[], options: string[]) => typedError<Poll_Serialize, IpcError_Serialize>(__TAURI_INVOKE("polls_vote", { id, voters, options })),
+	pollsSetClosed: (id: string, closed: boolean) => typedError<Poll_Serialize, IpcError_Serialize>(__TAURI_INVOKE("polls_set_closed", { id, closed })),
+	pollsDelete: (id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("polls_delete", { id })),
 	journalList: (before: string | null, author: string | null, limit: number) => typedError<Entry_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("journal_list", { before, author, limit })),
 	journalCreate: (input: NewEntry_Deserialize) => typedError<Entry_Serialize, IpcError_Serialize>(__TAURI_INVOKE("journal_create", { input })),
 	journalUpdate: (id: string, input: NewEntry_Deserialize) => typedError<Entry_Serialize, IpcError_Serialize>(__TAURI_INVOKE("journal_update", { id, input })),
@@ -394,6 +399,22 @@ export type NewMessage = {
 	body: string,
 };
 
+export type NewPoll = NewPoll_Serialize | NewPoll_Deserialize;
+
+export type NewPoll_Deserialize = {
+	question: string,
+	authorId?: string | null,
+	multi: boolean,
+	options: string[],
+};
+
+export type NewPoll_Serialize = {
+	question: string,
+	authorId: string | null,
+	multi: boolean,
+	options: string[],
+};
+
 export type PairPoll = 
 /**  Pas encore approuvée. */
 "waiting" | 
@@ -420,6 +441,39 @@ export type PkSystem_Serialize = {
 	id: string,
 	uuid: string,
 	name: string | null,
+};
+
+export type Poll = Poll_Serialize | Poll_Deserialize;
+
+export type PollOption = {
+	id: string,
+	label: string,
+	/**  Membres qui ont choisi cette option. */
+	voters: string[],
+};
+
+export type Poll_Deserialize = {
+	id: string,
+	question: string,
+	authorId?: string | null,
+	/**  Plusieurs choix possibles par membre. */
+	multi: boolean,
+	createdAt: number | null,
+	/**  Vote clos : plus personne ne peut changer son choix. */
+	closedAt?: number | null,
+	options: PollOption[],
+};
+
+export type Poll_Serialize = {
+	id: string,
+	question: string,
+	authorId: string | null,
+	/**  Plusieurs choix possibles par membre. */
+	multi: boolean,
+	createdAt: number | null,
+	/**  Vote clos : plus personne ne peut changer son choix. */
+	closedAt: number | null,
+	options: PollOption[],
 };
 
 /**

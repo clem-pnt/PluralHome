@@ -17,6 +17,7 @@ export const keys = {
   frontRange: (from: number, to: number) => ["front", "history", "range", from, to] as const,
   frontQuick: ["front", "quick"] as const,
   messages: ["messages"] as const,
+  polls: ["polls"] as const,
   catchUp: (memberId: string) => ["catch-up", memberId] as const,
   account: ["account"] as const,
   cloudStatus: ["cloud", "status"] as const,

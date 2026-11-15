@@ -1,12 +1,13 @@
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
 import { Button } from "react-aria-components";
-import { ConnectionsView } from "../features/connections/ConnectionsView";
 import { FrontView } from "../features/front/FrontView";
 import { GroundingView } from "../features/grounding/GroundingView";
 import { JournalView } from "../features/journal/JournalView";
 import { MembersView } from "../features/members/MembersView";
 import { MessagesView } from "../features/messages/MessagesView";
+import { SettingsView } from "../features/settings/SettingsView";
+import { VoteView } from "../features/vote/VoteView";
 import { m } from "../paraglide/messages.js";
 import { Logo } from "../ui/Logo";
 import { keys, queryClient } from "./query";
@@ -14,10 +15,11 @@ import { keys, queryClient } from "./query";
 const VIEWS = {
   front: { label: m.nav_front, Component: FrontView },
   messages: { label: m.nav_messages, Component: MessagesView },
+  vote: { label: m.nav_vote, Component: VoteView },
   journal: { label: m.nav_journal, Component: JournalView },
   members: { label: m.nav_members, Component: MembersView },
   grounding: { label: m.nav_grounding, Component: GroundingView },
-  connections: { label: m.nav_connections, Component: ConnectionsView },
+  settings: { label: m.nav_settings, Component: SettingsView },
 } as const;
 
 /** Émis par la boucle de synchro (src-tauri/src/remote.rs) quand des données ont changé. */

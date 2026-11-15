@@ -8,6 +8,7 @@ use ph_core::front::{self, FrontChange, FrontSession};
 use ph_core::journal::{self, Entry, NewEntry};
 use ph_core::members::{self, Member, NewMember, Profile};
 use ph_core::messages::{self, CatchUp, Message, NewMessage};
+use ph_core::polls::{self, NewPoll, Poll};
 use ph_core::roles;
 use ph_core::safety::{self, SafetyPlan};
 use ph_core::{CoreError, Vault, VaultStatus};
@@ -467,6 +468,48 @@ pub async fn messages_mark_read(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn polls_list(state: State<'_, AppState>) -> IpcResult<Vec<Poll>> {
+    blocking(&state, move |v| polls::list(v.conn()?)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn polls_create(state: State<'_, AppState>, input: NewPoll) -> IpcResult<Poll> {
+    blocking(&state, move |v| polls::create(v.conn_mut()?, &input)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn polls_vote(
+    state: State<'_, AppState>,
+    id: Uuid,
+    voters: Vec<Uuid>,
+    options: Vec<Uuid>,
+) -> IpcResult<Poll> {
+    blocking(&state, move |v| {
+        polls::vote(v.conn_mut()?, id, &voters, &options)
+    })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn polls_set_closed(
+    state: State<'_, AppState>,
+    id: Uuid,
+    closed: bool,
+) -> IpcResult<Poll> {
+    blocking(&state, move |v| polls::set_closed(v.conn()?, id, closed)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn polls_delete(state: State<'_, AppState>, id: Uuid) -> IpcResult<()> {
+    blocking(&state, move |v| polls::delete(v.conn()?, id)).await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn safety_get(state: State<'_, AppState>) -> IpcResult<SafetyPlan> {
     blocking(&state, |v| safety::get(v.conn()?)).await
 }
@@ -548,6 +591,11 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         messages_delete,
         catch_up,
         messages_mark_read,
+        polls_list,
+        polls_create,
+        polls_vote,
+        polls_set_closed,
+        polls_delete,
         journal_list,
         journal_create,
         journal_update,

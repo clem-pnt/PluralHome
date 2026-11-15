@@ -10,13 +10,14 @@ import {
 export interface TextFieldProps extends Omit<AriaTextFieldProps, "className"> {
   label: string;
   hint?: string | undefined;
+  placeholder?: string | undefined;
 }
 
-export function TextField({ label, hint, ...props }: TextFieldProps) {
+export function TextField({ label, hint, placeholder, ...props }: TextFieldProps) {
   return (
     <AriaTextField {...props} className="field">
       <Label className="field__label">{label}</Label>
-      <Input className="input" />
+      <Input className="input" {...(placeholder ? { placeholder } : {})} />
       {hint && (
         <Text slot="description" className="field__hint">
           {hint}

@@ -16,9 +16,12 @@ export type {
   NewEntry_Deserialize as NewEntry,
   NewMember_Serialize as NewMember,
   NewMessage,
+  NewPoll_Deserialize as NewPoll,
   PairPoll,
   PendingDevice,
   PkSystem_Serialize as PkSystem,
+  Poll_Serialize as Poll,
+  PollOption,
   SafetyPlan_Serialize as SafetyPlan,
   Status_Serialize as PkStatus,
   VaultStatus,
@@ -128,6 +131,15 @@ export const api = {
     disable: () => unwrap(commands.cloudDisable()),
     remove: () => unwrap(commands.cloudDelete()),
     syncNow: () => unwrap(commands.cloudSyncNow()),
+  },
+  polls: {
+    list: () => unwrap(commands.pollsList()),
+    create: (input: Parameters<typeof commands.pollsCreate>[0]) =>
+      unwrap(commands.pollsCreate(input)),
+    vote: (id: string, voters: string[], options: string[]) =>
+      unwrap(commands.pollsVote(id, voters, options)),
+    setClosed: (id: string, closed: boolean) => unwrap(commands.pollsSetClosed(id, closed)),
+    remove: (id: string) => unwrap(commands.pollsDelete(id)),
   },
   messages: {
     list: (before: string | null, limit: number, unreadOnly: boolean) =>

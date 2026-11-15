@@ -19,21 +19,14 @@ import { Button } from "../../ui/Button";
 import { TextField } from "../../ui/TextField";
 import { CloudPanel } from "./CloudPanel";
 
-export function ConnectionsView() {
+/** Compte, synchro chiffrée et PluralKit : tout est facultatif. */
+export function ConnectionsPanels() {
   return (
-    <section className="view">
-      <header className="view__header">
-        <div>
-          <h1>{m.connections_title()}</h1>
-          <p className="view__lead">{m.connections_lead()}</p>
-        </div>
-      </header>
-      <div className="connections">
-        <AccountPanel />
-        <CloudPanel />
-        <PluralKitPanel />
-      </div>
-    </section>
+    <div className="connections">
+      <AccountPanel />
+      <CloudPanel />
+      <PluralKitPanel />
+    </div>
   );
 }
 
