@@ -1351,6 +1351,10 @@
     align-items: center;
     gap: var(--space-2);
   }
+  .present__warn {
+    color: var(--danger);
+    font-size: 14px;
+  }
   .present__name {
     flex: 1 1 8em;
     min-inline-size: 0;

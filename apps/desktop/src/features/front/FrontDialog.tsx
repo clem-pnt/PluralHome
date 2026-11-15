@@ -52,6 +52,8 @@ function FrontForm({ current, onDone }: { current: FrontSession[]; onDone: () =>
   const found = useMemo(() => members.list.filter((x) => matches(q, x)), [members.list, q]);
   const present = selected.filter((id) => id !== BLURRY && members.byId.has(id));
   const blurry = selected.includes(BLURRY);
+  // Il faut toujours quelqu'un au front : un membre au statut front, ou le flou.
+  const hasFronter = blurry || present.some((id) => (statuses[id] ?? "front") === "front");
 
   const save = (values: string[]) => {
     const ids = values.filter((v) => v !== BLURRY);
@@ -140,6 +142,11 @@ function FrontForm({ current, onDone }: { current: FrontSession[]; onDone: () =>
               );
             })}
           </ul>
+          {!hasFronter && (
+            <p className="present__warn" role="status">
+              {m.front_need_fronter()}
+            </p>
+          )}
         </section>
       )}
 
@@ -201,10 +208,7 @@ function FrontForm({ current, onDone }: { current: FrontSession[]; onDone: () =>
         <Button variant="ghost" slot="close">
           {m.cancel()}
         </Button>
-        <Button
-          onPress={() => save(selected)}
-          isDisabled={change.isPending || selected.length === 0}
-        >
+        <Button onPress={() => save(selected)} isDisabled={change.isPending || !hasFronter}>
           {m.front_save()}
         </Button>
       </div>

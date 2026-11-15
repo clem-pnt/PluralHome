@@ -7,6 +7,7 @@
 - Connexion Aragonite : elle s'ouvre dans une fenêtre de l'application (session privée) au lieu du navigateur. Fermer la fenêtre annule la connexion.
 - Compte Aragonite : sa photo de profil s'affiche dans Paramètres. Elle est gardée dans le coffre chiffré et mise à jour à chaque lancement.
 - Se déconnecter d'Aragonite fait sortir de l'application : un écran propose de se reconnecter ou de continuer en invité. Les données restent sur l'appareil. C'est pareil si la session est fermée côté Aragonite.
+- Front : on ne peut plus enregistrer un front sans personne « au front ». Il faut au moins un alter au statut « Au front », ou cocher « Flou ». Les switchs reçus de PluralKit ne sont pas concernés.
 
 ## 0.12.1 — Correctif écran vide
 

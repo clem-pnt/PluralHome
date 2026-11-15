@@ -63,6 +63,7 @@
   "front_quick_hint": "Vos favoris, en un geste.",
   "front_dialog_title": "Qui est au front ?",
   "front_dialog_lead": "Cochez qui est là, puis précisez pour chacun : au front, en co-front ou co-conscient. Si c'est flou, cochez « Flou ».",
+  "front_need_fronter": "Au moins un alter doit être au front (ou cochez « Flou »).",
   "front_save": "Enregistrer",
   "front_today": "Aujourd'hui",
   "front_today_empty": "Rien d'enregistré aujourd'hui.",

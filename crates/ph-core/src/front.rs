@@ -128,7 +128,26 @@ pub struct PendingSwitch {
 }
 
 /// Applique un changement de front maintenant, depuis l'application.
+///
+/// Saisi à la main, le front doit garder quelqu'un « au front » : un membre au
+/// statut front, ou le flou. Les switchs reçus de PluralKit ne sont pas filtrés.
 pub fn change(conn: &mut Connection, change: &FrontChange) -> Result<Vec<FrontSession>> {
+    let open = current(conn)?;
+    let status_of = |m: &Uuid| {
+        change.statuses.get(m).copied().unwrap_or_else(|| {
+            open.iter()
+                .find(|s| s.member_id == Some(*m))
+                .map_or(FrontStatus::Front, |s| s.status)
+        })
+    };
+    if !change.blurry
+        && !change
+            .members
+            .iter()
+            .any(|m| status_of(m) == FrontStatus::Front)
+    {
+        return Err(CoreError::Invalid("fronter"));
+    }
     change_at(conn, change, crate::time::now_ms()?, Origin::Local)
 }
 
@@ -465,18 +484,18 @@ mod tests {
         .unwrap();
         assert_eq!(ids(&cur), HashSet::from([None]));
 
-        // Personne.
+        // Personne : refusé à la main, possible depuis PluralKit.
+        let nobody = FrontChange {
+            members: vec![],
+            blurry: false,
+            statuses: std::collections::HashMap::new(),
+        };
+        assert!(change(conn, &nobody).is_err());
+        let now = crate::time::now_ms().unwrap();
         assert!(
-            change(
-                conn,
-                &FrontChange {
-                    members: vec![],
-                    blurry: false,
-                    statuses: std::collections::HashMap::new(),
-                }
-            )
-            .unwrap()
-            .is_empty()
+            change_at(conn, &nobody, now, Origin::Remote)
+                .unwrap()
+                .is_empty()
         );
 
         let all = history(conn, 0, i64::MAX).unwrap();
@@ -504,6 +523,36 @@ mod tests {
             Err(CoreError::Invalid("members"))
         ));
         assert!(current(conn).unwrap().is_empty());
+    }
+
+    #[test]
+    fn manual_change_needs_someone_at_front() {
+        let (_t, mut v, a, b) = setup();
+        let c = v.conn_mut().unwrap();
+        let mk = |members: Vec<Uuid>, blurry: bool, st: &[(Uuid, FrontStatus)]| FrontChange {
+            members,
+            blurry,
+            statuses: st.iter().copied().collect(),
+        };
+        // Personne, ou seulement du co-front : refusé.
+        let nobody = mk(vec![], false, &[]);
+        assert!(matches!(
+            change(c, &nobody),
+            Err(CoreError::Invalid("fronter"))
+        ));
+        let co = mk(vec![a], false, &[(a, FrontStatus::Cofront)]);
+        assert!(matches!(change(c, &co), Err(CoreError::Invalid("fronter"))));
+        assert!(current(c).unwrap().is_empty());
+        // Un alter au front, ou le flou : accepté.
+        change(c, &mk(vec![a, b], false, &[(b, FrontStatus::Coconscious)])).unwrap();
+        change(c, &mk(vec![], true, &[])).unwrap();
+        // Statut absent : celui déjà ouvert compte (Sacha reste co-conscient).
+        change(c, &mk(vec![b], false, &[(b, FrontStatus::Coconscious)])).unwrap_err();
+        change(c, &mk(vec![a, b], false, &[(b, FrontStatus::Coconscious)])).unwrap();
+        assert!(matches!(
+            change(c, &mk(vec![b], false, &[])),
+            Err(CoreError::Invalid("fronter"))
+        ));
     }
 
     #[test]

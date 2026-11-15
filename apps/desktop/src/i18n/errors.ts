@@ -43,6 +43,7 @@ export function errorMessage(e: unknown): string {
   if (e instanceof AppError && e.code === "invalid") {
     if (e.field === "recovery_key") return m.cloud_recovery_invalid();
     if (e.field === "phone") return m.error_invalid_phone();
+    if (e.field === "fronter") return m.front_need_fronter();
     if (e.field === "avatar") return m.member_avatar_error();
     if (e.field === "roles") return m.error_invalid_roles();
     if (e.field === "folder") return m.error_invalid_folder();
