@@ -139,6 +139,7 @@ export const api = {
     change: (change: Parameters<typeof commands.frontChange>[0]) =>
       unwrap(commands.frontChange(change)),
     history: (from: number, to: number) => unwrap(commands.frontHistory(from, to)),
+    first: () => unwrap(commands.frontFirst()),
     quick: () => unwrap(commands.frontQuick()),
     setFavorites: (members: string[]) => unwrap(commands.frontSetFavorites(members)),
   },

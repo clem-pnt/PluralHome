@@ -36,6 +36,9 @@ function History() {
     queryFn: () => api.front.history(from, to),
     placeholderData: keepPreviousData,
   });
+  const first = useQuery({ queryKey: keys.frontFirst, queryFn: api.front.first });
+  // Rien avant le premier passage au front : pas la peine de remonter plus loin.
+  const atStart = first.data == null || from <= startOfDay(first.data);
   const members = useMembers();
   const sessions = (history.data ?? [])
     .map((s) => ({ ...s, startedAt: s.startedAt ?? from }))
@@ -99,7 +102,7 @@ function History() {
       <div className="dialog__actions">
         <Button
           variant="ghost"
-          isDisabled={history.isFetching}
+          isDisabled={history.isFetching || atStart}
           onPress={() => setDays((d) => d + STEP_DAYS)}
         >
           {m.front_history_more()}

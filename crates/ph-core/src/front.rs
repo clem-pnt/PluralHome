@@ -92,6 +92,15 @@ pub fn current(conn: &Connection) -> Result<Vec<FrontSession>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// Début du tout premier passage au front enregistré, s'il y en a un.
+pub fn first_start(conn: &Connection) -> Result<Option<i64>> {
+    Ok(
+        conn.query_row("SELECT MIN(started_at) FROM front_session", [], |r| {
+            r.get(0)
+        })?,
+    )
+}
+
 /// Intervalles qui chevauchent `[from, to)`, y compris ceux encore ouverts.
 pub fn history(conn: &Connection, from: i64, to: i64) -> Result<Vec<FrontSession>> {
     if to <= from {

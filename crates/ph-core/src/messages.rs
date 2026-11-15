@@ -434,6 +434,13 @@ pub fn catch_up(conn: &Connection, member_id: Uuid) -> Result<CatchUp> {
         )
         .optional()?;
 
+    // Retour au front en cours : ce qui commence après, il l'a vécu en étant là.
+    let back_at: Option<i64> = conn.query_row(
+        "SELECT min(started_at) FROM front_session WHERE member_id = ?1 AND ended_at IS NULL",
+        [member_id.as_bytes()],
+        |r| r.get(0),
+    )?;
+
     // Un accusé postérieur au dernier passage masque ce qui a déjà été vu ;
     // seuls les passages commencés depuis restent à rattraper.
     let fronts = match last_seen {
@@ -443,6 +450,7 @@ pub fn catch_up(conn: &Connection, member_id: Uuid) -> Result<CatchUp> {
                 .into_iter()
                 .filter(|s| s.member_id != Some(member_id))
                 .filter(|s| seen_until.is_none_or(|a| s.started_at > a))
+                .filter(|s| back_at.is_none_or(|b| s.started_at < b))
                 .collect()
         }
         None => Vec::new(),
@@ -734,6 +742,31 @@ mod tests {
                 .unread
                 .iter()
                 .all(|m| !m.author_ids.contains(&sacha))
+        );
+    }
+
+    #[test]
+    fn arrivals_while_present_are_not_missed() {
+        let (_t, mut v, mila, sacha) = setup();
+        let c = v.conn_mut().unwrap();
+        let set = |c: &mut rusqlite::Connection, members: Vec<Uuid>, blurry: bool, at: i64| {
+            let ch = FrontChange {
+                members,
+                blurry,
+                statuses: std::collections::HashMap::new(),
+            };
+            front::change_at(c, &ch, at, front::Origin::Remote).unwrap();
+        };
+        set(c, vec![mila], false, 1_000);
+        set(c, vec![sacha], false, 2_000); // Mila part
+        set(c, vec![mila, sacha], false, 3_000); // Mila revient
+        set(c, vec![mila, sacha], true, 4_000); // du flou arrive, Mila est là
+        let cu = catch_up(c, mila).unwrap();
+        let who: Vec<_> = cu.fronts.iter().map(|s| s.member_id).collect();
+        assert_eq!(
+            who,
+            vec![Some(sacha)],
+            "seul ce qui s'est passé en son absence"
         );
     }
 

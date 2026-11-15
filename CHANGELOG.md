@@ -8,6 +8,8 @@
 - Compte Aragonite : sa photo de profil s'affiche dans Paramètres. Elle est gardée dans le coffre chiffré et mise à jour à chaque lancement.
 - Se déconnecter d'Aragonite fait sortir de l'application : un écran propose de se reconnecter ou de continuer en invité. Les données restent sur l'appareil. C'est pareil si la session est fermée côté Aragonite.
 - Front : on ne peut plus enregistrer un front sans personne « au front ». Il faut au moins un alter au statut « Au front », ou cocher « Flou ». Les switchs reçus de PluralKit ne sont pas concernés.
+- Historique du front : on ne peut plus remonter avant le tout premier passage enregistré.
+- Rattrapage : ajouter un alter au front ne fait plus croire aux alters déjà présents qu'ils viennent de revenir. La notification de retour ne liste que ce qui s'est passé pendant leur absence.
 
 ## 0.12.1 — Correctif écran vide
 

@@ -65,6 +65,8 @@ export const commands = {
 	frontChange: (change: FrontChange_Deserialize) => typedError<FrontSession_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("front_change", { change })),
 	/**  Bornes en millisecondes Unix, `[from, to)`. */
 	frontHistory: (from: number | null, to: number | null) => typedError<FrontSession_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("front_history", { from, to })),
+	/**  Début du premier passage au front (ms Unix), pour borner l'historique. */
+	frontFirst: () => typedError<number | null, IpcError_Serialize>(__TAURI_INVOKE("front_first")),
 	/**
 	 *  Membres du switch rapide : les favoris choisis, sinon les plus fréquents
 	 *  des 90 derniers jours. Le booléen dit s'il s'agit de favoris choisis.

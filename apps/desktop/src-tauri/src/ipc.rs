@@ -454,6 +454,17 @@ pub async fn front_set_favorites(
     blocking(&state, move |v| front::set_favorites(v.conn()?, &members)).await
 }
 
+/// Début du premier passage au front (ms Unix), pour borner l'historique.
+#[tauri::command]
+#[specta::specta]
+pub async fn front_first(state: State<'_, AppState>) -> IpcResult<Option<f64>> {
+    #[allow(clippy::cast_precision_loss)]
+    blocking(&state, |v| {
+        Ok(front::first_start(v.conn()?)?.map(|t| t as f64))
+    })
+    .await
+}
+
 /// Bornes en millisecondes Unix, `[from, to)`.
 #[tauri::command]
 #[specta::specta]
@@ -738,6 +749,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         front_current,
         front_change,
         front_history,
+        front_first,
         front_quick,
         front_set_favorites,
         messages_list,
