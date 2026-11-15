@@ -1,5 +1,15 @@
 # Changelog
 
+## Non publié
+
+- Dossiers : sous-dossiers (par exemple Âge > Enfants, Ados, Adultes), avec une mention « Ageslider » possible. Le tri automatique range aussi par genre. Barre de recherche dans l'écran Membres.
+- Rôles : liste refaite, boutons Modifier et Supprimer en icônes.
+- Au front : le jour est indiqué, bouton « Historique » pour tout l'historique du front, statut de chacun (au front, co-front, co-conscience). Le choix « Changer » a une barre de recherche et reste fluide avec des centaines d'alters. Le switch rapide montre les plus fréquents, ou des favoris à choisir.
+- Messages : ceux reçus ou envoyés par les alters au front sont mis en avant. Plusieurs auteurs et plusieurs destinataires possibles. Un message peut être modifié. Le destinataire a un bouton « Marquer comme lu », et « Supprimer » ne s'affiche que pour lui. Seuls les messages non lus sont affichés par défaut, l'historique est à part.
+- Nouvel onglet Vote : questions à choix entre alters, résultats en direct, clôture.
+- Nouvel onglet Paramètres, où se trouvent maintenant les connexions (compte, synchro, PluralKit).
+- Ancrage : le plan de crise est remplacé par un plan d'accueil pour les nouveaux alters (mot d'accueil, repères, personnes et lieux sûrs, premières choses à faire). Dans « Appeler à l'aide », un numéro personnalisable pour une personne de confiance.
+
 ## 0.10.4 — Tri automatique
 
 - Tri automatique des membres d'après leur description : bouton « Trier automatiquement » dans « Gérer les dossiers ». Il propose des dossiers par âge (Enfants, Ados, Adultes) et par genre, et des rôles à ajouter (hôte, gatekeeper, protection, little…). L'analyse se fait sur l'appareil et rien n'est envoyé. Seules les mentions claires sont retenues (« Âge : 16 ans », « Genre : fille », « Rôle : gatekeeper », « c'est une protectrice »), et chaque proposition peut être décochée avant d'appliquer.
