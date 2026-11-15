@@ -4,9 +4,8 @@ import { errorMessage } from "../../i18n/errors";
 import type { Member, Message } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
 import { Button } from "../../ui/Button";
-import { MAX_BODY } from "./Composer";
 import { PeopleField } from "./PeopleField";
-import { useUpdateMessage } from "./useMessages";
+import { MAX_BODY, useUpdateMessage } from "./useMessages";
 
 /** Contenu de la fenêtre « Modifier le message » : texte, auteurs et destinataires. */
 export function EditMessageForm({

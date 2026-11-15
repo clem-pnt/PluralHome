@@ -7,7 +7,7 @@ import { Avatar } from "../../ui/Avatar";
 import { Button } from "../../ui/Button";
 import { IconButton } from "../../ui/IconButton";
 import { EditMessageForm } from "./EditMessageDialog";
-import { names } from "./people";
+import { names, readersOf } from "./people";
 import { useDeleteMessage, useMarkReadBy, usePinMessage } from "./useMessages";
 
 export function MessageCard({
@@ -24,27 +24,10 @@ export function MessageCard({
   members?: Member[];
   actions?: boolean;
 }) {
-  const pin = usePinMessage();
-  const remove = useDeleteMessage();
-  const markRead = useMarkReadBy();
-  const [dialog, setDialog] = useState<"edit" | "delete" | null>(null);
-
   const { authorIds, recipientIds, readBy } = message;
   const broadcast = recipientIds.length === 0;
   const fromFront = fronters.filter((id) => authorIds.includes(id));
   const toFront = broadcast ? [] : fronters.filter((id) => recipientIds.includes(id));
-  // Qui peut marquer comme lu : les destinataires au front qui ne l'ont pas encore lu
-  // (tout le monde au front pour un message à tout le système, sauf les auteurs).
-  // Sans personne au front, les destinataires directs.
-  const readers = (
-    fronters.length > 0
-      ? broadcast
-        ? fronters.filter((id) => !authorIds.includes(id))
-        : toFront
-      : recipientIds
-  ).filter((id) => !readBy.includes(id));
-  // Un message reçu se lit et s'épingle, mais ne se modifie ni ne se supprime.
-  const received = toFront.length > 0 && fromFront.length === 0;
 
   const author = byId.get(authorIds[0] ?? "");
   const from = names(authorIds, byId) || m.messages_someone();
@@ -95,41 +78,66 @@ export function MessageCard({
           </p>
         )}
         {actions && (
-          <div className="message__actions">
-            {readers.length > 0 && (
-              <IconButton
-                icon="check"
-                tone="accent"
-                label={m.messages_mark_read()}
-                isDisabled={markRead.isPending}
-                onPress={() => markRead.mutate({ id: message.id, members: readers })}
-              />
-            )}
-            <IconButton
-              icon="pin"
-              label={message.pinned ? m.messages_unpin() : m.messages_pin()}
-              pressed={message.pinned}
-              isDisabled={pin.isPending}
-              onPress={() => pin.mutate({ id: message.id, pinned: !message.pinned })}
-            />
-            {!received && (
-              <>
-                <IconButton
-                  icon="edit"
-                  label={m.messages_edit()}
-                  onPress={() => setDialog("edit")}
-                />
-                <IconButton
-                  icon="trash"
-                  tone="danger"
-                  label={m.messages_delete()}
-                  onPress={() => setDialog("delete")}
-                />
-              </>
-            )}
-          </div>
+          <MessageActions message={message} byId={byId} members={members} fronters={fronters} />
         )}
       </div>
+    </article>
+  );
+}
+
+/** Lu, épingler, modifier, supprimer : sous un message du tableau ou du fil. */
+export function MessageActions({
+  message,
+  byId,
+  members,
+  fronters,
+}: {
+  message: Message;
+  byId: Map<string, Member>;
+  members: Member[];
+  fronters: string[];
+}) {
+  const pin = usePinMessage();
+  const remove = useDeleteMessage();
+  const markRead = useMarkReadBy();
+  const [dialog, setDialog] = useState<"edit" | "delete" | null>(null);
+  const { authorIds, recipientIds } = message;
+  const broadcast = recipientIds.length === 0;
+  const fromFront = fronters.some((id) => authorIds.includes(id));
+  const toFront = !broadcast && fronters.some((id) => recipientIds.includes(id));
+  const readers = readersOf(message, fronters);
+  // Un message reçu se lit et s'épingle, mais ne se modifie ni ne se supprime.
+  const received = toFront && !fromFront;
+
+  return (
+    <div className="message__actions">
+      {readers.length > 0 && (
+        <IconButton
+          icon="check"
+          tone="accent"
+          label={m.messages_mark_read()}
+          isDisabled={markRead.isPending}
+          onPress={() => markRead.mutate({ id: message.id, members: readers })}
+        />
+      )}
+      <IconButton
+        icon="pin"
+        label={message.pinned ? m.messages_unpin() : m.messages_pin()}
+        pressed={message.pinned}
+        isDisabled={pin.isPending}
+        onPress={() => pin.mutate({ id: message.id, pinned: !message.pinned })}
+      />
+      {!received && (
+        <>
+          <IconButton icon="edit" label={m.messages_edit()} onPress={() => setDialog("edit")} />
+          <IconButton
+            icon="trash"
+            tone="danger"
+            label={m.messages_delete()}
+            onPress={() => setDialog("delete")}
+          />
+        </>
+      )}
       <ModalOverlay
         className="overlay"
         isDismissable
@@ -163,6 +171,6 @@ export function MessageCard({
           </Dialog>
         </Modal>
       </ModalOverlay>
-    </article>
+    </div>
   );
 }

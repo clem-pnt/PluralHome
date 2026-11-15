@@ -2,7 +2,8 @@ import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import { keys, queryClient } from "../../app/query";
 import { api, type NewMessage } from "../../ipc";
 
-const PAGE = 50;
+const PAGE = 200;
+export const MAX_BODY = 4000;
 
 /** `unreadOnly` : seulement ce qui n'a pas encore été lu (les épinglés restent). */
 export function useMessageBoard(unreadOnly: boolean) {

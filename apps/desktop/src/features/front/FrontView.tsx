@@ -8,7 +8,7 @@ import { Button } from "../../ui/Button";
 import { Icon } from "../../ui/Icon";
 import { IconButton } from "../../ui/IconButton";
 import { useMembers } from "../members/useMembers";
-import { CatchUpPanel } from "../messages/CatchUpPanel";
+import { CatchUpStack } from "../messages/CatchUpPanel";
 import { FavoritesDialog } from "./FavoritesDialog";
 import { FrontDialog } from "./FrontDialog";
 import { FrontHistoryDialog } from "./FrontHistoryDialog";
@@ -59,10 +59,13 @@ export function FrontView() {
         </div>
       ) : (
         <>
-          {sessions.map((s) => {
-            const member = s.memberId ? members.byId.get(s.memberId) : undefined;
-            return member ? <CatchUpPanel key={s.id} member={member} byId={members.byId} /> : null;
-          })}
+          <CatchUpStack
+            members={sessions.flatMap((s) => {
+              const member = s.memberId ? members.byId.get(s.memberId) : undefined;
+              return member ? [member] : [];
+            })}
+            byId={members.byId}
+          />
           <div className="panel">
             <h2 className="panel__title">{m.front_now()}</h2>
             {sessions.length === 0 && current.isSuccess && (
