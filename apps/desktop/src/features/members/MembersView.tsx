@@ -1,3 +1,4 @@
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import {
   Button as AriaButton,
@@ -6,7 +7,8 @@ import {
   Radio,
   RadioGroup,
 } from "react-aria-components";
-import type { Member } from "../../ipc";
+import { keys, queryClient } from "../../app/query";
+import { api, type Member } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
 import { Avatar } from "../../ui/Avatar";
 import { Button } from "../../ui/Button";
@@ -147,6 +149,7 @@ export function MembersView() {
           {m.search_more({ count: shown.length - limit })}
         </Button>
       )}
+      <ArchivedSection />
     </section>
   );
 }
@@ -167,5 +170,44 @@ function MemberCard({ member }: { member: Member }) {
         <MemberProfileDialog member={member} />
       </DialogTrigger>
     </li>
+  );
+}
+
+/** Membres en dormance, rangés à part ; on peut les faire revenir. */
+function ArchivedSection() {
+  const archived = useQuery({ queryKey: keys.membersArchived, queryFn: api.members.listArchived });
+  const back = useMutation({
+    mutationFn: api.members.unarchive,
+    onSuccess: (member) => {
+      queryClient.setQueryData<Member[]>(keys.membersArchived, (prev = []) =>
+        prev.filter((x) => x.id !== member.id),
+      );
+      queryClient.setQueryData<Member[]>(keys.members, (prev = []) =>
+        [...prev.filter((x) => x.id !== member.id), member].sort((a, b) =>
+          a.name.localeCompare(b.name),
+        ),
+      );
+    },
+  });
+  const list = archived.data ?? [];
+  if (list.length === 0) return null;
+  return (
+    <details className="archived">
+      <summary>
+        {m.member_archived()} ({list.length})
+      </summary>
+      <p className="muted">{m.member_archived_hint()}</p>
+      <ul className="archived__list">
+        {list.map((x) => (
+          <li key={x.id} className="archived__item">
+            <Avatar name={x.name} src={x.avatar} size={36} />
+            <span className="member__name">{x.name}</span>
+            <Button variant="ghost" isDisabled={back.isPending} onPress={() => back.mutate(x.id)}>
+              {m.member_unarchive()}
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }

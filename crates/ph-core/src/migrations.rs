@@ -294,6 +294,41 @@ const MIGRATIONS: &[&str] = &[
             " AND OLD.key IN ('safety.plan', 'newcomer.plan', 'trusted.contact', 'front.favorites')"
         ),
     ),
+    // 12 — groupes de discussion nommés, réponses à un message, et nom et
+    // photo du système partagés entre appareils.
+    concat!(
+        "CREATE TABLE chat_group (
+            id         BLOB PRIMARY KEY NOT NULL CHECK (length(id) = 16),
+            name       TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 100),
+            avatar     BLOB,
+            created_at INTEGER NOT NULL
+        ) STRICT;
+        CREATE TABLE chat_group_member (
+            group_id  BLOB NOT NULL REFERENCES chat_group (id) ON DELETE CASCADE,
+            member_id BLOB NOT NULL REFERENCES member (id) ON DELETE CASCADE,
+            PRIMARY KEY (group_id, member_id)
+        ) STRICT, WITHOUT ROWID;
+        ALTER TABLE message ADD COLUMN group_id BLOB REFERENCES chat_group (id) ON DELETE CASCADE;
+        ALTER TABLE message ADD COLUMN reply_to BLOB REFERENCES message (id) ON DELETE SET NULL;
+        CREATE INDEX message_by_group ON message (group_id);
+        CREATE INDEX message_by_reply ON message (reply_to);
+        DROP TRIGGER sync_kv_ins;
+        DROP TRIGGER sync_kv_upd;
+        DROP TRIGGER sync_kv_del;\n",
+        track!("chat_group", "json_array(hex(NEW.id))", "json_array(hex(OLD.id))"),
+        track!(
+            "chat_group_member",
+            "json_array(hex(NEW.group_id), hex(NEW.member_id))",
+            "json_array(hex(OLD.group_id), hex(OLD.member_id))"
+        ),
+        track!(
+            "kv",
+            "json_array(NEW.key)",
+            "json_array(OLD.key)",
+            " AND NEW.key IN ('safety.plan', 'newcomer.plan', 'trusted.contact', 'front.favorites', 'system.name', 'system.avatar', 'pluralkit.ignored')",
+            " AND OLD.key IN ('safety.plan', 'newcomer.plan', 'trusted.contact', 'front.favorites', 'system.name', 'system.avatar', 'pluralkit.ignored')"
+        ),
+    ),
 ];
 
 pub fn run(conn: &mut Connection) -> Result<()> {

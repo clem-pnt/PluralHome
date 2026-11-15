@@ -18,6 +18,7 @@ const PATHS = {
   send: "M4 12l16-8-6 16-3-7-7-1Z",
   plus: "M12 5v14M5 12h14",
   pin: "M9 4h6l-1 6 4 3H6l4-3-1-6ZM12 13v7",
+  reply: "M9 14 4 9l5-5M4 9h10a6 6 0 0 1 6 6v5",
   lock: "M6 11h12v9H6v-9ZM8 11V8a4 4 0 0 1 8 0v3",
   unlock: "M6 11h12v9H6v-9ZM8 11V8a4 4 0 0 1 7.6-1.8",
 } as const;

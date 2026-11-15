@@ -12,7 +12,6 @@ import { TextField } from "../../ui/TextField";
 
 const KINDS = [
   { id: "phone", label: m.channel_phone },
-  { id: "sms", label: m.channel_sms },
   { id: "discord", label: m.channel_discord },
   { id: "instagram", label: m.channel_instagram },
   { id: "snapchat", label: m.channel_snapchat },
@@ -60,9 +59,19 @@ export function TrustedContact() {
         {contact.channels.map((c) => (
           <li key={`${c.kind}:${c.value}`}>
             <span className="channels__kind muted">{channelLabel(c.kind)}</span>
-            <span className="channels__value" data-selectable>
-              {c.value}
-            </span>
+            {c.kind === "email" ? (
+              <button
+                type="button"
+                className="channels__value channels__value--link"
+                onClick={() => void api.mailto(c.value).catch(() => {})}
+              >
+                {c.value}
+              </button>
+            ) : (
+              <span className="channels__value" data-selectable>
+                {c.value}
+              </span>
+            )}
           </li>
         ))}
       </ul>
@@ -78,7 +87,9 @@ const row = (c: ContactChannel): Row => ({ ...c, key: nextKey++ });
 function TrustedForm({ contact, onDone }: { contact: Trusted | null; onDone: () => void }) {
   const [name, setName] = useState(contact?.name ?? "");
   const [rows, setRows] = useState<Row[]>(() =>
-    contact?.channels.length ? contact.channels.map(row) : [row({ kind: "phone", value: "" })],
+    contact?.channels.length
+      ? contact.channels.map((c) => row(c.kind === "sms" ? { ...c, kind: "phone" } : c))
+      : [row({ kind: "phone", value: "" })],
   );
   const save = useMutation({
     mutationFn: api.trusted.set,
@@ -126,7 +137,7 @@ function TrustedForm({ contact, onDone }: { contact: Trusted | null; onDone: () 
               hideLabel
               maxLength={100}
               placeholder={
-                r.kind === "phone" || r.kind === "sms" || r.kind === "whatsapp"
+                r.kind === "phone" || r.kind === "whatsapp"
                   ? "06 12 34 56 78"
                   : r.kind === "email"
                     ? "nom@exemple.fr"

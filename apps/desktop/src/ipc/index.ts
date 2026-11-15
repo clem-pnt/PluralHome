@@ -4,6 +4,7 @@ export type {
   Account_Serialize as Account,
   AvatarEdit,
   CatchUp_Serialize as CatchUp,
+  ChatGroup_Serialize as ChatGroup,
   CloudStatus_Serialize as CloudStatus,
   Contact_Serialize as Contact,
   ContactChannel_Serialize as ContactChannel,
@@ -12,6 +13,7 @@ export type {
   FrontChange,
   FrontSession_Serialize as FrontSession,
   FrontStatus,
+  GroupInput_Deserialize as GroupInput,
   Member_Serialize as Member,
   Message_Serialize as Message,
   NewcomerPlan_Serialize as NewcomerPlan,
@@ -27,6 +29,7 @@ export type {
   PollOption,
   SafetyPlan_Serialize as SafetyPlan,
   Status_Serialize as PkStatus,
+  SystemProfile_Serialize as SystemProfile,
   TrustedContact_Serialize as TrustedContact,
   VaultStatus,
 } from "./bindings";
@@ -53,6 +56,7 @@ async function unwrap<T>(p: Promise<Result<T>>): Promise<T> {
 
 /** Façade typée : chaque appel rejette avec une `AppError` en cas d'échec. */
 export const api = {
+  mailto: (address: string) => unwrap(commands.openMailto(address)),
   vault: {
     open: () => unwrap(commands.vaultOpen()),
     create: () => unwrap(commands.vaultCreate()),
@@ -68,6 +72,21 @@ export const api = {
     setProfile: (id: string, profile: Parameters<typeof commands.membersSetProfile>[1]) =>
       unwrap(commands.membersSetProfile(id, profile)),
     archive: (id: string) => unwrap(commands.membersArchive(id)),
+    listArchived: () => unwrap(commands.membersListArchived()),
+    unarchive: (id: string) => unwrap(commands.membersUnarchive(id)),
+    remove: (id: string) => unwrap(commands.membersDelete(id)),
+  },
+  groups: {
+    list: () => unwrap(commands.groupsList()),
+    create: (input: Parameters<typeof commands.groupsCreate>[0]) =>
+      unwrap(commands.groupsCreate(input)),
+    update: (id: string, input: Parameters<typeof commands.groupsUpdate>[1]) =>
+      unwrap(commands.groupsUpdate(id, input)),
+    remove: (id: string) => unwrap(commands.groupsDelete(id)),
+  },
+  system: {
+    get: () => unwrap(commands.systemGet()),
+    set: (input: Parameters<typeof commands.systemSet>[0]) => unwrap(commands.systemSet(input)),
   },
   roles: {
     list: () => unwrap(commands.rolesList()),

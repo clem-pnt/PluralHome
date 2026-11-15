@@ -10,6 +10,7 @@ export const queryClient = new QueryClient({
 export const keys = {
   vaultStatus: ["vault", "status"] as const,
   members: ["members"] as const,
+  membersArchived: ["members", "archived"] as const,
   roles: ["roles"] as const,
   folders: ["folders"] as const,
   frontCurrent: ["front", "current"] as const,
@@ -27,4 +28,6 @@ export const keys = {
   newcomerPlan: ["newcomer-plan"] as const,
   trusted: ["trusted"] as const,
   journal: (author: string | null) => ["journal", author] as const,
+  groups: ["groups"] as const,
+  system: ["system"] as const,
 };

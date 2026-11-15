@@ -14,8 +14,6 @@ const MAX_SECTIONS = 20;
 const isEmpty = (p: Plan) => !p.welcome && p.sections.length === 0;
 
 /** Catégories proposées à la première préparation, toutes renommables. */
-const starters = () => [m.newcomer_basics(), m.newcomer_safe(), m.newcomer_steps()];
-
 /** Ce qu'un alter qui arrive au front pour la première fois a besoin de lire. */
 export function NewcomerPlan() {
   const plan = useQuery({ queryKey: keys.newcomerPlan, queryFn: api.newcomer.get });
@@ -71,10 +69,9 @@ const draft = (title: string, items: string[] = []): Draft => ({
 
 function PlanForm({ plan, onDone }: { plan: Plan; onDone: () => void }) {
   const [welcome, setWelcome] = useState(plan.welcome);
+  // Aucune catégorie imposée : chacun crée les siennes.
   const [sections, setSections] = useState<Draft[]>(() =>
-    isEmpty(plan)
-      ? starters().map((t) => draft(t))
-      : plan.sections.map((s) => draft(s.title, s.items)),
+    plan.sections.map((s) => draft(s.title, s.items)),
   );
   const save = useMutation({
     mutationFn: api.newcomer.set,

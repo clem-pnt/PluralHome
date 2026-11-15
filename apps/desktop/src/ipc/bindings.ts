@@ -26,6 +26,22 @@ export const commands = {
 	membersSetProfile: (id: string, profile: Profile_Deserialize) => typedError<Member_Serialize, IpcError_Serialize>(__TAURI_INVOKE("members_set_profile", { id, profile })),
 	/**  Archive : le membre disparaît des listes, son historique reste. */
 	membersArchive: (id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("members_archive", { id })),
+	/**  Membres archivés (en dormance), du plus récent au plus ancien. */
+	membersListArchived: () => typedError<Member_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("members_list_archived")),
+	membersUnarchive: (id: string) => typedError<Member_Serialize, IpcError_Serialize>(__TAURI_INVOKE("members_unarchive", { id })),
+	/**
+	 *  Suppression définitive. Un membre lié à PluralKit n'y est pas effacé,
+	 *  mais il ne sera plus réimporté.
+	 */
+	membersDelete: (id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("members_delete", { id })),
+	groupsList: () => typedError<ChatGroup_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("groups_list")),
+	groupsCreate: (input: GroupInput_Deserialize) => typedError<ChatGroup_Serialize, IpcError_Serialize>(__TAURI_INVOKE("groups_create", { input })),
+	groupsUpdate: (id: string, input: GroupInput_Deserialize) => typedError<ChatGroup_Serialize, IpcError_Serialize>(__TAURI_INVOKE("groups_update", { id, input })),
+	/**  Supprime le groupe et ses messages. */
+	groupsDelete: (id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("groups_delete", { id })),
+	/**  Nom et photo du système (repris de PluralKit tant qu'ils ne sont pas choisis ici). */
+	systemGet: () => typedError<SystemProfile_Serialize, IpcError_Serialize>(__TAURI_INVOKE("system_get")),
+	systemSet: (input: SystemInput_Deserialize) => typedError<SystemProfile_Serialize, IpcError_Serialize>(__TAURI_INVOKE("system_set", { input })),
 	/**  Catalogue de rôles du système. */
 	rolesList: () => typedError<string[], IpcError_Serialize>(__TAURI_INVOKE("roles_list")),
 	rolesAdd: (name: string) => typedError<string[], IpcError_Serialize>(__TAURI_INVOKE("roles_add", { name })),
@@ -55,8 +71,8 @@ export const commands = {
 	frontQuick: () => typedError<[string[], boolean], IpcError_Serialize>(__TAURI_INVOKE("front_quick")),
 	frontSetFavorites: (members: string[]) => typedError<string[], IpcError_Serialize>(__TAURI_INVOKE("front_set_favorites", { members })),
 	messagesList: (before: string | null, limit: number, unreadOnly: boolean) => typedError<Message_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("messages_list", { before, limit, unreadOnly })),
-	messagesPost: (input: NewMessage) => typedError<Message_Serialize, IpcError_Serialize>(__TAURI_INVOKE("messages_post", { input })),
-	messagesUpdate: (id: string, input: NewMessage) => typedError<Message_Serialize, IpcError_Serialize>(__TAURI_INVOKE("messages_update", { id, input })),
+	messagesPost: (input: NewMessage_Deserialize) => typedError<Message_Serialize, IpcError_Serialize>(__TAURI_INVOKE("messages_post", { input })),
+	messagesUpdate: (id: string, input: NewMessage_Deserialize) => typedError<Message_Serialize, IpcError_Serialize>(__TAURI_INVOKE("messages_update", { id, input })),
 	messagesMarkReadBy: (id: string, members: string[]) => typedError<Message_Serialize, IpcError_Serialize>(__TAURI_INVOKE("messages_mark_read_by", { id, members })),
 	messagesSetPinned: (id: string, pinned: boolean) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("messages_set_pinned", { id, pinned })),
 	messagesDelete: (id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("messages_delete", { id })),
@@ -77,6 +93,11 @@ export const commands = {
 	newcomerSet: (plan: NewcomerPlan_Deserialize) => typedError<NewcomerPlan_Serialize, IpcError_Serialize>(__TAURI_INVOKE("newcomer_set", { plan })),
 	trustedGet: () => typedError<TrustedContact_Serialize | null, IpcError_Serialize>(__TAURI_INVOKE("trusted_get")),
 	trustedSet: (contact: TrustedContact_Deserialize | null) => typedError<TrustedContact_Serialize | null, IpcError_Serialize>(__TAURI_INVOKE("trusted_set", { contact })),
+	/**
+	 *  Ouvre la messagerie de l'appareil vers une adresse. L'adresse est vérifiée
+	 *  ici : le front ne peut pas ouvrir d'autre lien.
+	 */
+	openMailto: (address: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("open_mailto", { address })),
 	accountGet: () => typedError<Account_Serialize | null, IpcError_Serialize>(__TAURI_INVOKE("account_get")),
 	/**  Ouvre le navigateur sur la page de connexion et attend son retour (5 min au plus). */
 	accountLogin: () => typedError<Account_Serialize, IpcError_Serialize>(__TAURI_INVOKE("account_login")),
@@ -157,6 +178,26 @@ export type CatchUp_Serialize = {
 	fronts: FrontSession_Serialize[],
 	/**  Messages qui le concernent et qu'il n'a pas encore lus. */
 	unread: Message_Serialize[],
+};
+
+export type ChatGroup = ChatGroup_Serialize | ChatGroup_Deserialize;
+
+export type ChatGroup_Deserialize = {
+	id: string,
+	name: string,
+	/**  Adresse `data:` prête pour `<img src>`. */
+	avatar?: string | null,
+	memberIds: string[],
+	createdAt: number | null,
+};
+
+export type ChatGroup_Serialize = {
+	id: string,
+	name: string,
+	/**  Adresse `data:` prête pour `<img src>`. */
+	avatar: string | null,
+	memberIds: string[],
+	createdAt: number | null,
 };
 
 export type CloudStatus = CloudStatus_Serialize | CloudStatus_Deserialize;
@@ -315,6 +356,20 @@ export type FrontSession_Serialize = {
 /**  Place d'un membre présent : au front, en co-front ou co-conscient. */
 export type FrontStatus = "front" | "cofront" | "coconscious";
 
+export type GroupInput = GroupInput_Serialize | GroupInput_Deserialize;
+
+export type GroupInput_Deserialize = {
+	name: string,
+	memberIds: string[],
+	avatar?: AvatarEdit,
+};
+
+export type GroupInput_Serialize = {
+	name: string,
+	memberIds: string[],
+	avatar: AvatarEdit,
+};
+
 /**  Erreur telle que vue par le front : un code stable à traduire, jamais de détail brut. */
 export type IpcError = IpcError_Serialize | IpcError_Deserialize;
 
@@ -374,6 +429,10 @@ export type Message_Deserialize = {
 	editedAt?: number | null,
 	/**  Membres qui l'ont marqué comme lu. */
 	readBy: string[],
+	/**  Groupe de discussion nommé ; `None` : conversation entre ses participants. */
+	groupId?: string | null,
+	/**  Message auquel celui-ci répond (`None` s'il a été supprimé depuis). */
+	replyTo?: string | null,
 };
 
 export type Message_Serialize = {
@@ -388,6 +447,10 @@ export type Message_Serialize = {
 	editedAt: number | null,
 	/**  Membres qui l'ont marqué comme lu. */
 	readBy: string[],
+	/**  Groupe de discussion nommé ; `None` : conversation entre ses participants. */
+	groupId: string | null,
+	/**  Message auquel celui-ci répond (`None` s'il a été supprimé depuis). */
+	replyTo: string | null,
 };
 
 export type NewEntry = NewEntry_Serialize | NewEntry_Deserialize;
@@ -420,11 +483,26 @@ export type NewMember_Serialize = {
 	color: string,
 };
 
-export type NewMessage = {
+export type NewMessage = NewMessage_Serialize | NewMessage_Deserialize;
+
+export type NewMessage_Deserialize = {
 	authorIds: string[],
 	/**  Vide : pour tout le système. */
 	recipientIds: string[],
 	body: string,
+	/**  Fixés à l'envoi, ignorés à la modification. */
+	groupId?: string | null,
+	replyTo?: string | null,
+};
+
+export type NewMessage_Serialize = {
+	authorIds: string[],
+	/**  Vide : pour tout le système. */
+	recipientIds: string[],
+	body: string,
+	/**  Fixés à l'envoi, ignorés à la modification. */
+	groupId: string | null,
+	replyTo: string | null,
 };
 
 export type NewPoll = NewPoll_Serialize | NewPoll_Deserialize;
@@ -479,12 +557,14 @@ export type PkSystem_Deserialize = {
 	id: string,
 	uuid: string,
 	name?: string | null,
+	avatar_url?: string | null,
 };
 
 export type PkSystem_Serialize = {
 	id: string,
 	uuid: string,
 	name: string | null,
+	avatar_url: string | null,
 };
 
 /**  Une catégorie du plan, nommée par le système. */
@@ -618,6 +698,32 @@ export type Status_Serialize = {
 	pending: number | null,
 	/**  Les descriptions sont synchronisées avec PluralKit. */
 	syncDescription: boolean,
+};
+
+export type SystemInput = SystemInput_Serialize | SystemInput_Deserialize;
+
+export type SystemInput_Deserialize = {
+	name?: string | null,
+	avatar?: AvatarEdit,
+};
+
+export type SystemInput_Serialize = {
+	name: string | null,
+	avatar: AvatarEdit,
+};
+
+export type SystemProfile = SystemProfile_Serialize | SystemProfile_Deserialize;
+
+export type SystemProfile_Deserialize = {
+	name?: string | null,
+	/**  Adresse `data:` prête pour `<img src>`. */
+	avatar?: string | null,
+};
+
+export type SystemProfile_Serialize = {
+	name: string | null,
+	/**  Adresse `data:` prête pour `<img src>`. */
+	avatar: string | null,
 };
 
 export type TrustedContact = TrustedContact_Serialize | TrustedContact_Deserialize;

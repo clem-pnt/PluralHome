@@ -25,6 +25,8 @@ pub struct PkSystem {
     pub id: String,
     pub uuid: String,
     pub name: Option<String>,
+    #[serde(default)]
+    pub avatar_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]

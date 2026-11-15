@@ -217,6 +217,7 @@ export function MemberForm({
         {member && (
           <span className="dialog__aside">
             <ArchiveButton member={member} onDone={onClose} />
+            <DeleteButton member={member} onDone={onClose} />
           </span>
         )}
         {onCancel ? (
@@ -245,6 +246,7 @@ function ArchiveButton({ member, onDone }: { member: Member; onDone: () => void 
       );
       // L'archivage ferme aussi un éventuel passage au front.
       void queryClient.invalidateQueries({ queryKey: ["front"] });
+      void queryClient.invalidateQueries({ queryKey: keys.membersArchived });
       onDone();
     },
   });
@@ -275,6 +277,59 @@ function ArchiveButton({ member, onDone }: { member: Member; onDone: () => void 
                     onPress={() => archive.mutate()}
                   >
                     {m.member_archive()}
+                  </Button>
+                </div>
+              </>
+            )}
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
+    </DialogTrigger>
+  );
+}
+
+function DeleteButton({ member, onDone }: { member: Member; onDone: () => void }) {
+  const remove = useMutation({
+    mutationFn: () => api.members.remove(member.id),
+    onSuccess: () => {
+      queryClient.setQueryData<Member[]>(keys.members, (prev = []) =>
+        prev.filter((x) => x.id !== member.id),
+      );
+      // Ses passages au front, messages et votes sont touchés aussi.
+      for (const k of [["front"], keys.messages, keys.polls, keys.folders, ["journal"]]) {
+        void queryClient.invalidateQueries({ queryKey: k });
+      }
+      onDone();
+    },
+  });
+
+  return (
+    <DialogTrigger>
+      <Button variant="ghost">{m.member_delete()}</Button>
+      <ModalOverlay className="overlay" isDismissable>
+        <Modal className="modal">
+          <Dialog className="dialog" role="alertdialog">
+            {({ close }) => (
+              <>
+                <Heading slot="title">{m.member_delete_title({ name: member.name })}</Heading>
+                <p className="muted">{m.member_delete_body({ name: member.name })}</p>
+                <p className="muted">{m.member_delete_pk()}</p>
+                {remove.isError && (
+                  <p className="alert" role="alert">
+                    {errorMessage(remove.error)}
+                  </p>
+                )}
+                <div className="dialog__actions">
+                  <Button variant="ghost" onPress={close}>
+                    {m.cancel()}
+                  </Button>
+                  <Button
+                    variant="danger"
+                    autoFocus
+                    isDisabled={remove.isPending}
+                    onPress={() => remove.mutate()}
+                  >
+                    {m.member_delete_confirm()}
                   </Button>
                 </div>
               </>

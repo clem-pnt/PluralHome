@@ -108,6 +108,7 @@ function PluralKitPanel() {
   const afterChange = () => {
     void queryClient.invalidateQueries({ queryKey: keys.pkStatus });
     void queryClient.invalidateQueries({ queryKey: keys.members });
+    void queryClient.invalidateQueries({ queryKey: keys.system });
     void queryClient.invalidateQueries({ queryKey: ["front"] });
   };
   const syncNow = useMutation({

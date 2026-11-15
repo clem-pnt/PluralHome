@@ -34,6 +34,8 @@ use crate::{RemoteError, Result};
 pub const K_ENABLED: &str = "pluralkit.enabled";
 pub const K_TOKEN: &str = "pluralkit.token";
 const K_SYSTEM: &str = "pluralkit.system";
+/// Nom et photo du système déjà repris de PluralKit (une fois par liaison).
+const K_SYSTEM_SEEN: &str = "pluralkit.system_seen";
 const K_LINKED_AT: &str = "pluralkit.linked_at";
 const K_LAST_SYNC: &str = "pluralkit.last_sync";
 const K_LAST_ERROR: &str = "pluralkit.last_error";
@@ -252,6 +254,7 @@ pub fn link(db: &impl Db, api: &impl PkApi, token: &str) -> Result<PkSystem> {
         kv::delete(c, K_LAST_ERROR)?;
         Ok(())
     })?;
+    adopt_system(db, api, &system)?;
     sync_members(db, api)?;
 
     // Front initial : le plus récent l'emporte.
@@ -282,6 +285,7 @@ pub fn unlink(db: &impl Db) -> Result<()> {
             K_LAST_SYNC,
             K_LAST_ERROR,
             K_SYNC_DESCRIPTION,
+            K_SYSTEM_SEEN,
         ] {
             kv::delete(&tx, k)?;
         }
@@ -473,7 +477,8 @@ fn reconcile(c: &mut Connection, remote: &[PkMember]) -> ph_core::Result<Plan> {
         pushes: Vec::new(),
         creates: Vec::new(),
     };
-    for r in remote {
+    let ignored = members::pk_ignored(&tx)?;
+    for r in remote.iter().filter(|r| !ignored.contains(&r.uuid)) {
         if let Some(link) = by_uuid.get(r.uuid.as_str()) {
             // Archivé ici : on ne touche à rien.
             let Some(local) = locals.get(&link.member_id) else {
@@ -511,7 +516,43 @@ fn reconcile(c: &mut Connection, remote: &[PkMember]) -> ph_core::Result<Plan> {
     Ok(plan)
 }
 
+/// Nom et photo du système PluralKit, à sens unique et seulement s'il n'y en a
+/// pas encore ici : ce qui a été choisi dans `PluralHome` n'est jamais remplacé.
+fn adopt_system(db: &impl Db, api: &impl PkApi, system: &PkSystem) -> Result<()> {
+    let need_avatar = db.with(|c| {
+        if let Some(name) = system.name.as_deref() {
+            ph_core::system::adopt_name(c, name)?;
+        }
+        Ok(!ph_core::system::has_avatar(c)?)
+    })?;
+    let url = system
+        .avatar_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|u| !u.is_empty());
+    if let (true, Some(url)) = (need_avatar, url) {
+        match api.fetch_avatar(url) {
+            Ok(bytes) => {
+                if let Some(img) = crate::avatar::square(&bytes) {
+                    db.with(|c| ph_core::system::adopt_avatar(c, &img).map(|_| ()))?;
+                }
+            }
+            Err(e) if transient(&e) => {
+                tracing::warn!("photo du système non téléchargée : {}", e.code());
+                return Ok(());
+            }
+            Err(e) => tracing::warn!("photo du système écartée : {}", e.code()),
+        }
+    }
+    db.with(|c| kv::set(c, K_SYSTEM_SEEN, "1"))?;
+    Ok(())
+}
+
 pub fn sync_members(db: &impl Db, api: &impl PkApi) -> Result<(usize, usize)> {
+    if !db.with(|c| kv::flag(c, K_SYSTEM_SEEN))? {
+        let system = api.system()?;
+        adopt_system(db, api, &system)?;
+    }
     let remote = api.members()?;
     let plan = db.with(|c| reconcile(c, &remote))?;
 

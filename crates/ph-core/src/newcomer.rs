@@ -168,9 +168,24 @@ impl From<StoredTrusted> for TrustedContact {
             .unwrap_or_else(|| s.phone.into_iter().map(phone_channel).collect());
         Self {
             name: s.name,
-            channels,
+            channels: merge_sms(channels),
         }
     }
+}
+
+/// SMS et appel passent par le même numéro : un ancien moyen « sms » devient
+/// « phone », et un numéro déjà présent n'est pas répété.
+fn merge_sms(channels: Vec<ContactChannel>) -> Vec<ContactChannel> {
+    let mut out: Vec<ContactChannel> = Vec::with_capacity(channels.len());
+    for mut c in channels {
+        if c.kind == "sms" {
+            c.kind = "phone".into();
+        }
+        if !out.iter().any(|o| o.kind == c.kind && o.value == c.value) {
+            out.push(c);
+        }
+    }
+    out
 }
 
 fn valid_phone(p: &str) -> bool {
@@ -211,6 +226,7 @@ impl TrustedContact {
                 value,
             });
         }
+        let channels = merge_sms(channels);
         if name.is_empty() && channels.is_empty() {
             return Ok(None);
         }
@@ -394,6 +410,28 @@ mod tests {
             ]
         );
         assert_eq!(get_trusted(c).unwrap(), Some(saved));
+
+        // Un ancien « SMS » se fond dans le téléphone.
+        let merged = set_trusted(
+            c,
+            Some(TrustedContact {
+                name: "Lou".into(),
+                channels: vec![
+                    channel("phone", "07 00 00 00 00"),
+                    channel("sms", "07 00 00 00 00"),
+                    channel("sms", "06 00 00 00 00"),
+                ],
+            }),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            merged.channels,
+            vec![
+                channel("phone", "07 00 00 00 00"),
+                channel("phone", "06 00 00 00 00")
+            ]
+        );
 
         let bad = |channels| TrustedContact {
             name: "Lou".into(),

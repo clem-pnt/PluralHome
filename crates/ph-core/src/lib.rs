@@ -8,6 +8,7 @@ pub mod cloudkey;
 pub mod error;
 pub mod folders;
 pub mod front;
+pub mod groups;
 pub mod journal;
 pub mod keyfile;
 mod keystore;
@@ -22,6 +23,7 @@ pub mod replica;
 mod reset;
 pub mod roles;
 pub mod safety;
+pub mod system;
 mod time;
 pub mod vault;
 

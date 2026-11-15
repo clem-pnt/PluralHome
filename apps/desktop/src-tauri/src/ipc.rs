@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use ph_core::folders::{self, Folder};
 use ph_core::front::{self, FrontChange, FrontSession};
+use ph_core::groups::{self, ChatGroup, GroupInput};
 use ph_core::journal::{self, Entry, NewEntry};
 use ph_core::members::{self, Member, NewMember, Profile};
 use ph_core::messages::{self, CatchUp, Message, NewMessage};
@@ -12,9 +13,11 @@ use ph_core::newcomer::{self, NewcomerPlan, TrustedContact};
 use ph_core::polls::{self, NewPoll, Poll};
 use ph_core::roles;
 use ph_core::safety::{self, SafetyPlan};
+use ph_core::system::{self, SystemInput, SystemProfile};
 use ph_core::{CoreError, Vault, VaultStatus};
 use serde::Serialize;
 use tauri::State;
+use tauri_plugin_opener::OpenerExt;
 use uuid::Uuid;
 
 use crate::remote::{self, Remote, Wake};
@@ -341,6 +344,72 @@ pub async fn members_archive(state: State<'_, AppState>, id: Uuid) -> IpcResult<
     blocking(&state, move |v| members::archive(v.conn_mut()?, id)).await
 }
 
+/// Membres archivés (en dormance), du plus récent au plus ancien.
+#[tauri::command]
+#[specta::specta]
+pub async fn members_list_archived(state: State<'_, AppState>) -> IpcResult<Vec<Member>> {
+    blocking(&state, |v| members::list_archived(v.conn()?)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn members_unarchive(state: State<'_, AppState>, id: Uuid) -> IpcResult<Member> {
+    blocking(&state, move |v| members::unarchive(v.conn()?, id)).await
+}
+
+/// Suppression définitive. Un membre lié à PluralKit n'y est pas effacé,
+/// mais il ne sera plus réimporté.
+#[tauri::command]
+#[specta::specta]
+pub async fn members_delete(state: State<'_, AppState>, id: Uuid) -> IpcResult<()> {
+    blocking(&state, move |v| members::delete(v.conn_mut()?, id)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn groups_list(state: State<'_, AppState>) -> IpcResult<Vec<ChatGroup>> {
+    blocking(&state, |v| groups::list(v.conn()?)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn groups_create(state: State<'_, AppState>, input: GroupInput) -> IpcResult<ChatGroup> {
+    blocking(&state, move |v| groups::create(v.conn_mut()?, &input)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn groups_update(
+    state: State<'_, AppState>,
+    id: Uuid,
+    input: GroupInput,
+) -> IpcResult<ChatGroup> {
+    blocking(&state, move |v| groups::update(v.conn_mut()?, id, &input)).await
+}
+
+/// Supprime le groupe et ses messages.
+#[tauri::command]
+#[specta::specta]
+pub async fn groups_delete(state: State<'_, AppState>, id: Uuid) -> IpcResult<()> {
+    blocking(&state, move |v| groups::delete(v.conn()?, id)).await
+}
+
+/// Nom et photo du système (repris de PluralKit tant qu'ils ne sont pas choisis ici).
+#[tauri::command]
+#[specta::specta]
+pub async fn system_get(state: State<'_, AppState>) -> IpcResult<SystemProfile> {
+    blocking(&state, |v| system::get(v.conn()?)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn system_set(
+    state: State<'_, AppState>,
+    input: SystemInput,
+) -> IpcResult<SystemProfile> {
+    blocking(&state, move |v| system::set(v.conn_mut()?, &input)).await
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn front_current(state: State<'_, AppState>) -> IpcResult<Vec<FrontSession>> {
@@ -587,6 +656,34 @@ pub async fn journal_delete(state: State<'_, AppState>, id: Uuid) -> IpcResult<(
     blocking(&state, move |v| journal::delete(v.conn()?, id)).await
 }
 
+/// Ouvre la messagerie de l'appareil vers une adresse. L'adresse est vérifiée
+/// ici : le front ne peut pas ouvrir d'autre lien.
+#[tauri::command]
+#[specta::specta]
+pub async fn open_mailto(app: tauri::AppHandle, address: String) -> IpcResult<()> {
+    let address = address.trim();
+    let ok = address.len() <= 254
+        && address.split('@').count() == 2
+        && !address.starts_with('@')
+        && !address.ends_with('@')
+        && address
+            .chars()
+            .all(|c| c.is_alphanumeric() || "@.-_+".contains(c));
+    let invalid = || IpcError {
+        code: "invalid".into(),
+        field: Some("email".into()),
+    };
+    if !ok {
+        return Err(invalid());
+    }
+    app.opener()
+        .open_url(format!("mailto:{address}"), None::<&str>)
+        .map_err(|_| IpcError {
+            code: "internal".into(),
+            field: None,
+        })
+}
+
 pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
     tauri_specta::Builder::<tauri::Wry>::new().commands(tauri_specta::collect_commands![
         vault_open,
@@ -598,6 +695,15 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         members_update,
         members_set_profile,
         members_archive,
+        members_list_archived,
+        members_unarchive,
+        members_delete,
+        groups_list,
+        groups_create,
+        groups_update,
+        groups_delete,
+        system_get,
+        system_set,
         roles_list,
         roles_add,
         roles_rename,
@@ -637,6 +743,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         newcomer_set,
         trusted_get,
         trusted_set,
+        open_mailto,
         remote::account_get,
         remote::account_login,
         remote::account_login_cancel,

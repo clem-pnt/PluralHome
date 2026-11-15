@@ -1,5 +1,15 @@
 # Changelog
 
+## Non publié
+
+- Messages : groupes nommés, avec photos des membres empilées comme sur Discord ; clic droit sur un groupe pour changer son nom, sa photo et ses membres.
+- Messages : un message épinglé s'affiche en haut de la conversation, cliquer dessus y ramène. Répondre à un message avec le bouton ou un double clic, la réponse cite le message d'origine.
+- Messages : « Nouvelle conversation » ouvre une fenêtre pour choisir entre « Nouvelle discussion » et « Nouveau groupe », puis les membres. Recherche dans tous les messages.
+- La conversation de tout le système porte le nom et la photo du système, repris de PluralKit ou choisis dans Paramètres > Système.
+- Membres : rôles ajoutés avec un bouton « + » et une liste, comme sur Discord. Bouton « Archiver » qui range un membre en dormance dans une section à part, et « Supprimer » avec confirmation. Un membre supprimé venu de PluralKit n'y est pas supprimé, mais n'est plus réimporté.
+- Personne de confiance : Téléphone et SMS fusionnés, l'e-mail ouvre la messagerie.
+- Nouvel alter : plus aucune catégorie par défaut.
+
 ## 0.11.1 — Messagerie en conversations, notifications repliées
 
 - Au front : bouton « Créer un alter » dans la fenêtre « Qui est au front ? ». « Flou » se coche comme un alter, sans statut. Le choix « Personne » est retiré.

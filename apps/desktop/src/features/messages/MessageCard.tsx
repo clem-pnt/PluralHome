@@ -91,11 +91,14 @@ export function MessageActions({
   byId,
   members,
   fronters,
+  onReply,
 }: {
   message: Message;
   byId: Map<string, Member>;
   members: Member[];
   fronters: string[];
+  /** Fourni par le fil de discussion : propose de répondre au message. */
+  onReply?: () => void;
 }) {
   const pin = usePinMessage();
   const remove = useDeleteMessage();
@@ -111,6 +114,7 @@ export function MessageActions({
 
   return (
     <div className="message__actions">
+      {onReply && <IconButton icon="reply" label={m.messages_reply()} onPress={onReply} />}
       {readers.length > 0 && (
         <IconButton
           icon="check"

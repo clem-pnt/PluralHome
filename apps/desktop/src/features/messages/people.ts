@@ -55,8 +55,15 @@ export function concerns(message: Message, present: string[]): boolean {
 
 export const EVERYONE = "all";
 
-/** Conversation d'un message : tout le système, ou l'ensemble auteurs + destinataires. */
+/** Clé de conversation d'un groupe nommé. */
+export const groupKey = (id: string) => `g:${id}`;
+
+/**
+ * Conversation d'un message : son groupe nommé, tout le système, ou l'ensemble
+ * auteurs + destinataires.
+ */
 export function conversationOf(message: Message): string {
+  if (message.groupId) return groupKey(message.groupId);
   if (message.recipientIds.length === 0) return EVERYONE;
   return participantsKey([...message.authorIds, ...message.recipientIds]);
 }

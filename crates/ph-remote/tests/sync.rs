@@ -74,6 +74,7 @@ impl PkApi for FakePk {
             id: "sysid".into(),
             uuid: "sys-uuid".into(),
             name: Some("Le système".into()),
+            avatar_url: None,
         })
     }
     fn members(&self) -> Result<Vec<PkMember>> {
@@ -330,6 +331,34 @@ fn remote_deletion_only_unlinks() {
     pk.st().members.clear();
     sync::sync_members(&db, &pk).unwrap();
     assert_eq!(names(&db), vec!["Mila"], "rien n'est effacé ici");
+}
+
+#[test]
+fn deleted_linked_member_never_comes_back() {
+    let (_t, db) = vault();
+    let pk = FakePk::default();
+    pk.add_member("Mila", None, None);
+    pk.add_member("Sacha", None, None);
+    sync::link(&db, &pk, "jeton").unwrap();
+    let mila = db
+        .with(|c| members::list(c))
+        .unwrap()
+        .into_iter()
+        .find(|m| m.name == "Mila")
+        .unwrap();
+    db.with(|c| members::delete(c, mila.id)).unwrap();
+    sync::sync_members(&db, &pk).unwrap();
+    assert_eq!(names(&db), vec!["Sacha"], "Mila n'est pas réimportée");
+    assert_eq!(pk.st().members.len(), 2, "rien n'est effacé sur PluralKit");
+}
+
+#[test]
+fn system_name_adopted_from_pluralkit() {
+    let (_t, db) = vault();
+    let pk = FakePk::default();
+    sync::link(&db, &pk, "jeton").unwrap();
+    let sys = db.with(|c| ph_core::system::get(c)).unwrap();
+    assert_eq!(sys.name.as_deref(), Some("Le système"));
 }
 
 #[test]

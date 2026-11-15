@@ -31,16 +31,25 @@ pub struct Message {
     pub edited_at: Option<i64>,
     /// Membres qui l'ont marqué comme lu.
     pub read_by: Vec<Uuid>,
+    /// Groupe de discussion nommé ; `None` : conversation entre ses participants.
+    pub group_id: Option<Uuid>,
+    /// Message auquel celui-ci répond (`None` s'il a été supprimé depuis).
+    pub reply_to: Option<Uuid>,
 }
 
 #[cfg_attr(feature = "specta", derive(specta::Type))]
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NewMessage {
     pub author_ids: Vec<Uuid>,
     /// Vide : pour tout le système.
     pub recipient_ids: Vec<Uuid>,
     pub body: String,
+    /// Fixés à l'envoi, ignorés à la modification.
+    #[serde(default)]
+    pub group_id: Option<Uuid>,
+    #[serde(default)]
+    pub reply_to: Option<Uuid>,
 }
 
 /// Ce qu'un membre a manqué depuis son dernier passage au front.
@@ -71,7 +80,8 @@ fn columns() -> String {
         "m.id, m.body, m.pinned, m.created_at, m.edited_at,
          (SELECT group_concat(hex(x.member_id)) FROM ({AUTHORS}) x),
          (SELECT group_concat(hex(x.member_id)) FROM ({RECIPIENTS}) x),
-         (SELECT group_concat(hex(member_id)) FROM message_read WHERE message_id = m.id)"
+         (SELECT group_concat(hex(member_id)) FROM message_read WHERE message_id = m.id),
+         m.group_id, m.reply_to"
     )
 }
 
@@ -96,6 +106,8 @@ fn from_row(r: &Row<'_>) -> rusqlite::Result<Message> {
         author_ids: ids(r.get(5)?),
         recipient_ids: ids(r.get(6)?),
         read_by: ids(r.get(7)?),
+        group_id: r.get::<_, Option<[u8; 16]>>(8)?.map(Uuid::from_bytes),
+        reply_to: r.get::<_, Option<[u8; 16]>>(9)?.map(Uuid::from_bytes),
     })
 }
 
@@ -156,16 +168,25 @@ fn write_people(conn: &Connection, id: Uuid, input: &NewMessage) -> Result<()> {
 pub fn post(conn: &mut Connection, input: &NewMessage) -> Result<Message> {
     let tx = conn.transaction()?;
     let body = check(&tx, input)?;
+    if let Some(g) = input.group_id {
+        crate::groups::get(&tx, g)?;
+    }
+    if let Some(parent) = input.reply_to {
+        get(&tx, parent)?;
+    }
     let id = Uuid::now_v7();
     // `author_id` garde le premier auteur pour les appareils pas encore à jour ;
     // `recipient_id` reste vide : sinon supprimer ce destinataire effacerait le message.
     tx.execute(
-        "INSERT INTO message (id, author_id, recipient_id, body, created_at) VALUES (?1, ?2, NULL, ?3, ?4)",
+        "INSERT INTO message (id, author_id, recipient_id, body, created_at, group_id, reply_to)
+         VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6)",
         params![
             id.as_bytes(),
             input.author_ids.first().map(|u| *u.as_bytes()),
             body,
-            crate::time::now_ms()?
+            crate::time::now_ms()?,
+            input.group_id.map(|u| *u.as_bytes()),
+            input.reply_to.map(|u| *u.as_bytes()),
         ],
     )?;
     write_people(&tx, id, input)?;
@@ -380,6 +401,7 @@ mod tests {
             author_ids: author.into_iter().collect(),
             recipient_ids: to.into_iter().collect(),
             body: body.into(),
+            ..Default::default()
         }
     }
 
@@ -435,6 +457,7 @@ mod tests {
             author_ids: vec![mila, sacha, mila],
             recipient_ids: vec![],
             body: "à tous".into(),
+            ..Default::default()
         };
         let shared = post(c, &both).unwrap();
         let mut authors = vec![mila, sacha];
@@ -448,6 +471,7 @@ mod tests {
                 author_ids: vec![],
                 recipient_ids: vec![mila, sacha],
                 body: "pour vous deux".into(),
+                ..Default::default()
             },
         )
         .unwrap();
@@ -470,6 +494,7 @@ mod tests {
                 author_ids: vec![sacha],
                 recipient_ids: vec![mila],
                 body: "corrigé".into(),
+                ..Default::default()
             },
         )
         .unwrap();

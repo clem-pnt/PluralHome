@@ -94,7 +94,7 @@ fn from_row(r: &Row<'_>) -> rusqlite::Result<Member> {
     })
 }
 
-fn image_mime(bytes: &[u8]) -> Option<&'static str> {
+pub(crate) fn image_mime(bytes: &[u8]) -> Option<&'static str> {
     match bytes {
         [0x89, b'P', b'N', b'G', ..] => Some("image/png"),
         [0xFF, 0xD8, 0xFF, ..] => Some("image/jpeg"),
@@ -117,7 +117,7 @@ fn image_mime(bytes: &[u8]) -> Option<&'static str> {
     }
 }
 
-fn data_url(bytes: &[u8]) -> Option<String> {
+pub(crate) fn data_url(bytes: &[u8]) -> Option<String> {
     image_mime(bytes).map(|mime| format!("data:{mime};base64,{}", STANDARD.encode(bytes)))
 }
 
@@ -172,6 +172,64 @@ pub fn archive(conn: &mut Connection, id: Uuid) -> Result<()> {
     )?;
     tx.commit()?;
     Ok(())
+}
+
+/// Membres archivés (en dormance), du plus récemment archivé au plus ancien.
+pub fn list_archived(conn: &Connection) -> Result<Vec<Member>> {
+    let mut st = conn.prepare_cached(&format!(
+        "{SELECT} WHERE m.archived_at IS NOT NULL ORDER BY m.archived_at DESC"
+    ))?;
+    let rows = st.query_map([], from_row)?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+/// Sort un membre des archives : il retrouve les listes, son historique est intact.
+pub fn unarchive(conn: &Connection, id: Uuid) -> Result<Member> {
+    let n = conn.execute(
+        "UPDATE member SET archived_at = NULL WHERE id = ?1 AND archived_at IS NOT NULL",
+        [id.as_bytes()],
+    )?;
+    if n == 0 {
+        return Err(CoreError::NotFound);
+    }
+    get(conn, id)
+}
+
+/// Supprime définitivement un membre, son profil et ses passages au front.
+/// Ses messages restent, sans cet auteur ; rien n'est supprimé sur PluralKit.
+pub fn delete(conn: &mut Connection, id: Uuid) -> Result<()> {
+    let tx = conn.transaction()?;
+    // Lié à PluralKit : on retient son identifiant pour que la synchro ne le réimporte pas.
+    let pk: Option<String> = tx
+        .query_row(
+            "SELECT pk_uuid FROM pk_member WHERE member_id = ?1",
+            [id.as_bytes()],
+            |r| r.get(0),
+        )
+        .optional()?;
+    if let Some(pk) = pk {
+        let mut ignored = pk_ignored(&tx)?;
+        if !ignored.contains(&pk) {
+            ignored.push(pk);
+        }
+        let json = serde_json::to_string(&ignored).map_err(|_| CoreError::Invalid("pk"))?;
+        crate::kv::set(&tx, PK_IGNORED, &json)?;
+    }
+    let n = tx.execute("DELETE FROM member WHERE id = ?1", [id.as_bytes()])?;
+    if n == 0 {
+        return Err(CoreError::NotFound);
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+/// Membres PluralKit supprimés ici (identifiants `uuid`), que la synchro ignore.
+pub const PK_IGNORED: &str = "pluralkit.ignored";
+
+pub fn pk_ignored(conn: &Connection) -> Result<Vec<String>> {
+    Ok(crate::kv::get(conn, PK_IGNORED)?
+        .and_then(|j| serde_json::from_str(&j).ok())
+        .unwrap_or_default())
 }
 
 pub fn create(conn: &Connection, input: NewMember) -> Result<Member> {
