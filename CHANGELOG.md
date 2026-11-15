@@ -12,6 +12,8 @@
 - Paramètres (et toutes les pages) : on ne peut plus faire défiler la fenêtre au-delà du contenu, ce qui décalait toute l'application. La barre latérale défile seule si la fenêtre est trop basse.
 - Rattrapage : ajouter un alter au front ne fait plus croire aux alters déjà présents qu'ils viennent de revenir. La notification de retour ne liste que ce qui s'est passé pendant leur absence.
 - Amis : plus de bouton « Synchroniser », la synchronisation est automatique (en arrière-plan et à l'ouverture de la page).
+- Votes : date et/ou heure de fin facultative. Le vote se clôt tout seul à l'échéance (le jour seul : fin à 23 h 59 ; l'heure seule : aujourd'hui, ou demain si elle est passée). Rouvrir un vote retire sa date de fin.
+- Votes : notification sur la page Front pour les votes en cours auxquels un membre présent n'a pas encore répondu, et pour les votes terminés dont le résultat n'a pas encore été vu. Une pastille sur « Vote » en donne le nombre. Les votes déjà clos avant la mise à jour comptent comme vus.
 
 ## 0.12.1 — Correctif écran vide
 

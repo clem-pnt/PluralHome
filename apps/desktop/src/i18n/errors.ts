@@ -61,6 +61,7 @@ export function errorMessage(e: unknown): string {
     if (e.field === "question") return m.error_invalid_question();
     if (e.field === "options") return m.error_invalid_options();
     if (e.field === "closed") return m.error_poll_closed();
+    if (e.field === "ends_at") return m.error_invalid_ends_at();
     if (e.field === "friend_closed") return m.error_friend_closed();
     if (e.field === "friend") return m.error_invalid_friend();
     if (e.field === "recipients") return m.error_invalid_recipients();

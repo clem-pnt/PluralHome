@@ -9,6 +9,9 @@ import { Icon } from "../../ui/Icon";
 import { IconButton } from "../../ui/IconButton";
 import { useMembers } from "../members/useMembers";
 import { CatchUpStack } from "../messages/CatchUpPanel";
+import { presentIds } from "../messages/people";
+import { PollNotice } from "../vote/PollNotice";
+import { usePolls } from "../vote/usePolls";
 import { FavoritesDialog } from "./FavoritesDialog";
 import { FrontDialog } from "./FrontDialog";
 import { FrontHistoryDialog } from "./FrontHistoryDialog";
@@ -20,6 +23,7 @@ export function FrontView() {
   const current = useFrontCurrent();
   const change = useFrontChange();
   const quick = useFrontQuick();
+  const polls = usePolls();
   const sessions = current.data ?? [];
   const fronting = new Set(sessions.map((s) => s.memberId));
   const [quickIds, chosen] = quick.data ?? [[], false];
@@ -64,6 +68,11 @@ export function FrontView() {
               const member = s.memberId ? members.byId.get(s.memberId) : undefined;
               return member ? [member] : [];
             })}
+            byId={members.byId}
+          />
+          <PollNotice
+            polls={polls.data ?? []}
+            present={presentIds(current.data)}
             byId={members.byId}
           />
           <div className="panel">

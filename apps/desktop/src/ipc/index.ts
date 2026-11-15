@@ -188,6 +188,7 @@ export const api = {
       unwrap(commands.pollsVote(id, voters, options)),
     setClosed: (id: string, closed: boolean) => unwrap(commands.pollsSetClosed(id, closed)),
     remove: (id: string) => unwrap(commands.pollsDelete(id)),
+    markResultSeen: (id: string) => unwrap(commands.pollsMarkResultSeen(id)),
   },
   messages: {
     list: (before: string | null, limit: number, unreadOnly: boolean) =>

@@ -34,9 +34,15 @@ pub struct Poll {
     pub multi: bool,
     #[cfg_attr(feature = "specta", specta(type = f64))]
     pub created_at: i64,
-    /// Vote clos : plus personne ne peut changer son choix.
+    /// Vote clos : plus personne ne peut changer son choix. Un vote dont la
+    /// date de fin est passée est clos à cette date.
     #[cfg_attr(feature = "specta", specta(type = Option<f64>))]
     pub closed_at: Option<i64>,
+    /// Date de fin prévue (clôture automatique).
+    #[cfg_attr(feature = "specta", specta(type = Option<f64>))]
+    pub ends_at: Option<i64>,
+    /// Le résultat a été vu : plus de notification « vote terminé ».
+    pub result_seen: bool,
     pub options: Vec<PollOption>,
 }
 
@@ -48,6 +54,10 @@ pub struct NewPoll {
     pub author_id: Option<Uuid>,
     pub multi: bool,
     pub options: Vec<String>,
+    /// Date de fin facultative, dans le futur.
+    #[serde(default)]
+    #[cfg_attr(feature = "specta", specta(type = Option<f64>))]
+    pub ends_at: Option<i64>,
 }
 
 fn uuid(bytes: [u8; 16]) -> Uuid {
@@ -76,18 +86,24 @@ fn options_of(conn: &Connection, poll: Uuid) -> Result<Vec<PollOption>> {
     Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
-const COLUMNS: &str = "id, question, author_id, multi, created_at, closed_at";
+const COLUMNS: &str =
+    "id, question, author_id, multi, created_at, closed_at, ends_at, result_seen_at IS NOT NULL";
 
 fn from_row(conn: &Connection, r: &rusqlite::Row<'_>) -> Result<Poll> {
     let id = uuid(r.get(0)?);
     let author: Option<[u8; 16]> = r.get(2)?;
+    let closed_at: Option<i64> = r.get(5)?;
+    let ends_at: Option<i64> = r.get(6)?;
+    let now = crate::time::now_ms()?;
     Ok(Poll {
         id,
         question: r.get(1)?,
         author_id: author.map(uuid),
         multi: r.get(3)?,
         created_at: r.get(4)?,
-        closed_at: r.get(5)?,
+        closed_at: closed_at.or(ends_at.filter(|&e| e <= now)),
+        ends_at,
+        result_seen: r.get(7)?,
         options: options_of(conn, id)?,
     })
 }
@@ -104,9 +120,10 @@ fn get(conn: &Connection, id: Uuid) -> Result<Poll> {
 /// Votes en cours d'abord, puis du plus récent au plus ancien.
 pub fn list(conn: &Connection) -> Result<Vec<Poll>> {
     let mut st = conn.prepare_cached(&format!(
-        "SELECT {COLUMNS} FROM poll ORDER BY closed_at IS NOT NULL, id DESC LIMIT {LIST_MAX}"
+        "SELECT {COLUMNS} FROM poll
+         ORDER BY closed_at IS NOT NULL OR coalesce(ends_at <= ?1, 0), id DESC LIMIT {LIST_MAX}"
     ))?;
-    let mut rows = st.query([])?;
+    let mut rows = st.query([crate::time::now_ms()?])?;
     let mut out = Vec::new();
     while let Some(r) = rows.next()? {
         out.push(from_row(conn, r)?);
@@ -132,19 +149,25 @@ pub fn create(conn: &mut Connection, input: &NewPoll) -> Result<Poll> {
     if labels.len() < 2 || labels.len() > MAX_OPTIONS {
         return Err(CoreError::Invalid("options"));
     }
+    let now = crate::time::now_ms()?;
+    if input.ends_at.is_some_and(|e| e <= now) {
+        return Err(CoreError::Invalid("ends_at"));
+    }
     let tx = conn.transaction()?;
     if let Some(a) = input.author_id {
         members::ensure_active(&tx, &[a])?;
     }
     let id = Uuid::now_v7();
     tx.execute(
-        "INSERT INTO poll (id, question, author_id, multi, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+        "INSERT INTO poll (id, question, author_id, multi, created_at, ends_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         params![
             id.as_bytes(),
             question,
             input.author_id.map(|u| *u.as_bytes()),
             input.multi,
-            crate::time::now_ms()?
+            now,
+            input.ends_at
         ],
     )?;
     {
@@ -169,15 +192,16 @@ pub fn vote(
     option_ids: &[Uuid],
 ) -> Result<Poll> {
     let tx = conn.transaction()?;
-    let (multi, closed): (bool, Option<i64>) = tx
+    let now = crate::time::now_ms()?;
+    let (multi, closed, ends): (bool, Option<i64>, Option<i64>) = tx
         .query_row(
-            "SELECT multi, closed_at FROM poll WHERE id = ?1",
+            "SELECT multi, closed_at, ends_at FROM poll WHERE id = ?1",
             [poll.as_bytes()],
-            |r| Ok((r.get(0)?, r.get(1)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
         )
         .optional()?
         .ok_or(CoreError::NotFound)?;
-    if closed.is_some() {
+    if closed.is_some() || ends.is_some_and(|e| e <= now) {
         return Err(CoreError::Invalid("closed"));
     }
     if voters.is_empty() {
@@ -199,7 +223,6 @@ pub fn vote(
         }
     }
     members::ensure_active(&tx, voters)?;
-    let now = crate::time::now_ms()?;
     {
         let mut clear = tx.prepare_cached(
             "DELETE FROM poll_vote WHERE member_id = ?1
@@ -220,10 +243,16 @@ pub fn vote(
     Ok(p)
 }
 
-/// Clôt ou rouvre un vote.
+/// Clôt ou rouvre un vote. Rouvrir retire aussi la date de fin.
 pub fn set_closed(conn: &Connection, id: Uuid, closed: bool) -> Result<Poll> {
+    // Qui clôt voit le résultat : pas de notification pour ce vote.
+    let sql = if closed {
+        "UPDATE poll SET closed_at = ?2, result_seen_at = ?2 WHERE id = ?1"
+    } else {
+        "UPDATE poll SET closed_at = ?2, ends_at = NULL, result_seen_at = NULL WHERE id = ?1"
+    };
     let n = conn.execute(
-        "UPDATE poll SET closed_at = ?2 WHERE id = ?1",
+        sql,
         params![
             id.as_bytes(),
             if closed {
@@ -232,6 +261,18 @@ pub fn set_closed(conn: &Connection, id: Uuid, closed: bool) -> Result<Poll> {
                 None
             }
         ],
+    )?;
+    if n == 0 {
+        return Err(CoreError::NotFound);
+    }
+    get(conn, id)
+}
+
+/// Le résultat d'un vote terminé a été vu : sa notification disparaît.
+pub fn mark_result_seen(conn: &Connection, id: Uuid) -> Result<Poll> {
+    let n = conn.execute(
+        "UPDATE poll SET result_seen_at = coalesce(result_seen_at, ?2) WHERE id = ?1",
+        params![id.as_bytes(), crate::time::now_ms()?],
     )?;
     if n == 0 {
         return Err(CoreError::NotFound);
@@ -280,6 +321,7 @@ mod tests {
             author_id: None,
             multi,
             options: options.iter().map(|s| (*s).to_owned()).collect(),
+            ends_at: None,
         }
     }
 
@@ -346,7 +388,7 @@ mod tests {
         );
 
         let closed = set_closed(c, p.id, true).unwrap();
-        assert!(closed.closed_at.is_some());
+        assert!(closed.closed_at.is_some() && closed.result_seen);
         assert!(matches!(
             vote(c, p.id, &[sacha], &[pizza]),
             Err(CoreError::Invalid("closed"))
@@ -360,5 +402,49 @@ mod tests {
         delete(c, p.id).unwrap();
         assert!(matches!(delete(c, p.id), Err(CoreError::NotFound)));
         assert_eq!(list(c).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn end_date_closes_the_poll() {
+        let (_t, mut v, mila, _) = setup();
+        let c = v.conn_mut().unwrap();
+        let now = crate::time::now_ms().unwrap();
+        let mut past = poll(false, &["A", "B"]);
+        past.ends_at = Some(now - 1000);
+        assert!(matches!(
+            create(c, &past),
+            Err(CoreError::Invalid("ends_at"))
+        ));
+
+        let mut later = poll(false, &["A", "B"]);
+        later.ends_at = Some(now + 3_600_000);
+        let p = create(c, &later).unwrap();
+        assert_eq!(p.ends_at, later.ends_at);
+        assert!(p.closed_at.is_none());
+        vote(c, p.id, &[mila], &[p.options[0].id]).unwrap();
+
+        // L'échéance passe : le vote est clos à cette date.
+        let ended = now - 10;
+        c.execute(
+            "UPDATE poll SET ends_at = ?2 WHERE id = ?1",
+            params![p.id.as_bytes(), ended],
+        )
+        .unwrap();
+        let open = create(c, &poll(false, &["C", "D"])).unwrap();
+        let all = list(c).unwrap();
+        assert_eq!(all[0].id, open.id);
+        assert_eq!(all[1].closed_at, Some(ended));
+        assert!(!all[1].result_seen);
+        assert!(mark_result_seen(c, p.id).unwrap().result_seen);
+        assert!(matches!(
+            vote(c, p.id, &[mila], &[p.options[1].id]),
+            Err(CoreError::Invalid("closed"))
+        ));
+
+        // Rouvrir retire l'échéance.
+        let reopened = set_closed(c, p.id, false).unwrap();
+        assert!(reopened.closed_at.is_none() && reopened.ends_at.is_none());
+        assert!(!reopened.result_seen);
+        vote(c, p.id, &[mila], &[p.options[1].id]).unwrap();
     }
 }

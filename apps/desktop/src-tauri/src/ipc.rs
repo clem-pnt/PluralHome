@@ -603,6 +603,12 @@ pub async fn polls_set_closed(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn polls_mark_result_seen(state: State<'_, AppState>, id: Uuid) -> IpcResult<Poll> {
+    blocking(&state, move |v| polls::mark_result_seen(v.conn()?, id)).await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn polls_delete(state: State<'_, AppState>, id: Uuid) -> IpcResult<()> {
     blocking(&state, move |v| polls::delete(v.conn()?, id)).await
 }
@@ -765,6 +771,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         polls_vote,
         polls_set_closed,
         polls_delete,
+        polls_mark_result_seen,
         journal_list,
         journal_create,
         journal_update,

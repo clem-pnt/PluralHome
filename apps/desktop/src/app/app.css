@@ -144,6 +144,37 @@
   .navlink[data-focus-visible] {
     box-shadow: var(--focus);
   }
+  .navlink__badge {
+    float: inline-end;
+    min-inline-size: 20px;
+    block-size: 20px;
+    padding-inline: 6px;
+    border-radius: 10px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 20px;
+    text-align: center;
+  }
+  .poll-notice__group {
+    display: grid;
+    gap: var(--space-2);
+  }
+  .poll-notice__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: var(--space-2);
+  }
+  .poll-notice__list li {
+    display: grid;
+    gap: 2px;
+  }
+  .poll__ends {
+    color: var(--ink-muted);
+  }
 
   /* position: relative garde les champs cachés de react-aria (position: absolute)
      dans la zone qui défile, sinon ils font défiler toute la fenêtre. */
@@ -1585,6 +1616,18 @@
   }
   .poll-form__options > .btn {
     justify-self: start;
+  }
+  .poll-form__end {
+    display: grid;
+    gap: var(--space-2);
+  }
+  .poll-form__end-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+  .poll-form__end-fields > .field {
+    flex: 1 1 160px;
   }
 }
 

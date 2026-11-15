@@ -3,15 +3,20 @@ import { useEffect, useState } from "react";
 import { Button } from "react-aria-components";
 import { FriendsView } from "../features/friends/FriendsView";
 import { FrontView } from "../features/front/FrontView";
+import { useFrontCurrent } from "../features/front/useFront";
 import { GroundingView } from "../features/grounding/GroundingView";
 import { JournalView } from "../features/journal/JournalView";
 import { MembersView } from "../features/members/MembersView";
 import { MessagesView } from "../features/messages/MessagesView";
+import { presentIds } from "../features/messages/people";
 import { SettingsView } from "../features/settings/SettingsView";
+import { pollAlerts } from "../features/vote/PollNotice";
+import { usePolls } from "../features/vote/usePolls";
 import { VoteView } from "../features/vote/VoteView";
 import { api } from "../ipc";
 import { m } from "../paraglide/messages.js";
 import { Logo } from "../ui/Logo";
+import { NavContext, type ViewKey } from "./nav";
 import { keys, queryClient } from "./query";
 import { useKind } from "./useKind";
 
@@ -24,7 +29,7 @@ const VIEWS = {
   members: { label: m.nav_members, Component: MembersView },
   grounding: { label: m.nav_grounding, Component: GroundingView },
   settings: { label: m.nav_settings, Component: SettingsView },
-} as const;
+} as const satisfies Record<ViewKey, unknown>;
 
 /** Émis par la boucle de synchro (src-tauri/src/remote.rs) quand des données ont changé. */
 const EVENT_SYNCED = "pluralkit://synced";
@@ -77,7 +82,16 @@ function useAccountRefresh() {
   }, []);
 }
 
-type View = keyof typeof VIEWS;
+type View = ViewKey;
+
+/** Pastille de la vue Vote : votes en attente de réponse et résultats à voir. */
+function useVoteBadge(enabled: boolean): number {
+  const polls = usePolls();
+  const current = useFrontCurrent();
+  if (!enabled) return 0;
+  const { pending, ended } = pollAlerts(polls.data ?? [], presentIds(current.data));
+  return pending.length + ended.length;
+}
 
 /** Sans alters, ces vues n'ont pas de sens : masquées, pas supprimées. */
 const SYSTEM_ONLY: readonly View[] = ["front", "members", "vote"];
@@ -92,6 +106,7 @@ export function Shell() {
   const view = chosen && views.includes(chosen) ? chosen : fallback;
   useRemoteSync();
   useAccountRefresh();
+  const voteBadge = useVoteBadge(views.includes("vote"));
   const { Component } = VIEWS[view];
 
   return (
@@ -110,12 +125,23 @@ export function Shell() {
               onPress={() => setView(key)}
             >
               {VIEWS[key].label()}
+              {key === "vote" && voteBadge > 0 && (
+                <span
+                  className="navlink__badge"
+                  role="img"
+                  aria-label={m.vote_notice_badge({ count: voteBadge })}
+                >
+                  {voteBadge}
+                </span>
+              )}
             </Button>
           ))}
         </nav>
       </aside>
       <main className="main">
-        <Component />
+        <NavContext.Provider value={setView}>
+          <Component />
+        </NavContext.Provider>
       </main>
     </div>
   );

@@ -401,6 +401,12 @@ const MIGRATIONS: &[&str] = &[
             " AND OLD.key IN ('safety.plan', 'newcomer.plan', 'trusted.contact', 'front.favorites', 'system.name', 'system.avatar', 'system.kind', 'pluralkit.ignored', 'friends.identity', 'friends.privacy')"
         ),
     ),
+    // Votes : date de fin facultative (clôture automatique à l'échéance) et
+    // résultat vu (la notification « vote terminé » disparaît). Les votes déjà
+    // clos ne notifient pas.
+    "ALTER TABLE poll ADD COLUMN ends_at INTEGER;
+    ALTER TABLE poll ADD COLUMN result_seen_at INTEGER;
+    UPDATE poll SET result_seen_at = closed_at WHERE closed_at IS NOT NULL;",
 ];
 
 pub fn run(conn: &mut Connection) -> Result<()> {

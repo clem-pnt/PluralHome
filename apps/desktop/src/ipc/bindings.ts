@@ -86,6 +86,7 @@ export const commands = {
 	pollsVote: (id: string, voters: string[], options: string[]) => typedError<Poll_Serialize, IpcError_Serialize>(__TAURI_INVOKE("polls_vote", { id, voters, options })),
 	pollsSetClosed: (id: string, closed: boolean) => typedError<Poll_Serialize, IpcError_Serialize>(__TAURI_INVOKE("polls_set_closed", { id, closed })),
 	pollsDelete: (id: string) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("polls_delete", { id })),
+	pollsMarkResultSeen: (id: string) => typedError<Poll_Serialize, IpcError_Serialize>(__TAURI_INVOKE("polls_mark_result_seen", { id })),
 	journalList: (before: string | null, author: string | null, limit: number) => typedError<Entry_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("journal_list", { before, author, limit })),
 	journalCreate: (input: NewEntry_Deserialize) => typedError<Entry_Serialize, IpcError_Serialize>(__TAURI_INVOKE("journal_create", { input })),
 	journalUpdate: (id: string, input: NewEntry_Deserialize) => typedError<Entry_Serialize, IpcError_Serialize>(__TAURI_INVOKE("journal_update", { id, input })),
@@ -765,6 +766,8 @@ export type NewPoll_Deserialize = {
 	authorId?: string | null,
 	multi: boolean,
 	options: string[],
+	/**  Date de fin facultative, dans le futur. */
+	endsAt?: number | null,
 };
 
 export type NewPoll_Serialize = {
@@ -772,6 +775,8 @@ export type NewPoll_Serialize = {
 	authorId: string | null,
 	multi: boolean,
 	options: string[],
+	/**  Date de fin facultative, dans le futur. */
+	endsAt: number | null,
 };
 
 export type NewcomerPlan = NewcomerPlan_Serialize | NewcomerPlan_Deserialize;
@@ -869,8 +874,15 @@ export type Poll_Deserialize = {
 	/**  Plusieurs choix possibles par membre. */
 	multi: boolean,
 	createdAt: number | null,
-	/**  Vote clos : plus personne ne peut changer son choix. */
+	/**
+	 *  Vote clos : plus personne ne peut changer son choix. Un vote dont la
+	 *  date de fin est passée est clos à cette date.
+	 */
 	closedAt?: number | null,
+	/**  Date de fin prévue (clôture automatique). */
+	endsAt?: number | null,
+	/**  Le résultat a été vu : plus de notification « vote terminé ». */
+	resultSeen: boolean,
 	options: PollOption[],
 };
 
@@ -881,8 +893,15 @@ export type Poll_Serialize = {
 	/**  Plusieurs choix possibles par membre. */
 	multi: boolean,
 	createdAt: number | null,
-	/**  Vote clos : plus personne ne peut changer son choix. */
+	/**
+	 *  Vote clos : plus personne ne peut changer son choix. Un vote dont la
+	 *  date de fin est passée est clos à cette date.
+	 */
 	closedAt: number | null,
+	/**  Date de fin prévue (clôture automatique). */
+	endsAt: number | null,
+	/**  Le résultat a été vu : plus de notification « vote terminé ». */
+	resultSeen: boolean,
 	options: PollOption[],
 };
 

@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button as AriaButton, Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
 import { errorMessage } from "../../i18n/errors";
-import { formatWhen } from "../../i18n/format";
+import { formatDeadline, formatWhen } from "../../i18n/format";
 import type { Member, Poll } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
 import { Avatar } from "../../ui/Avatar";
@@ -9,7 +9,7 @@ import { Button } from "../../ui/Button";
 import { Icon } from "../../ui/Icon";
 import { IconButton } from "../../ui/IconButton";
 import { names } from "../messages/people";
-import { useDeletePoll, useSetPollClosed, useVote } from "./usePolls";
+import { useDeletePoll, useMarkResultSeen, useSetPollClosed, useVote } from "./usePolls";
 
 export function PollCard({
   poll,
@@ -27,6 +27,12 @@ export function PollCard({
   const [confirm, setConfirm] = useState(false);
 
   const closed = poll.closedAt != null;
+  const ended = closed && poll.endsAt != null && poll.closedAt === poll.endsAt;
+  // Le résultat est affiché : la notification « vote terminé » n'a plus lieu d'être.
+  const { mutate: markSeen } = useMarkResultSeen();
+  useEffect(() => {
+    if (closed && !poll.resultSeen) markSeen(poll.id);
+  }, [closed, poll.resultSeen, poll.id, markSeen]);
   const everyone = new Set(poll.options.flatMap((o) => o.voters));
   const top = Math.max(0, ...poll.options.map((o) => o.voters.length));
   // Une option est « choisie » quand toutes les personnes qui votent l'ont prise.
@@ -114,8 +120,15 @@ export function PollCard({
         })}
       </ul>
       <p className="muted poll__foot">
+        {!closed && poll.endsAt != null && (
+          <span className="poll__ends">
+            {m.vote_ends_on({ when: formatDeadline(poll.endsAt) })}{" "}
+          </span>
+        )}
         {closed
-          ? m.vote_closed_on({ when: formatWhen(poll.closedAt ?? 0) })
+          ? ended
+            ? m.vote_ended_on({ when: formatDeadline(poll.closedAt ?? 0) })
+            : m.vote_closed_on({ when: formatWhen(poll.closedAt ?? 0) })
           : voters.length === 0
             ? m.vote_pick_voters_hint()
             : m.vote_voting_as({ names: names(voters, byId) })}

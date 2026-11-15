@@ -9,6 +9,7 @@ import {
   Switch,
 } from "react-aria-components";
 import { errorMessage } from "../../i18n/errors";
+import { formatDeadline } from "../../i18n/format";
 import { m } from "../../paraglide/messages.js";
 import { Button } from "../../ui/Button";
 import { IconButton } from "../../ui/IconButton";
@@ -16,6 +17,19 @@ import { TextField } from "../../ui/TextField";
 import { useCreatePoll } from "./usePolls";
 
 const MAX_OPTIONS = 20;
+
+/**
+ * Échéance choisie : date et heure, ou la date seule (fin de journée), ou
+ * l'heure seule (aujourd'hui, demain si elle est passée). `null` sans rien.
+ */
+export function endOf(date: string, time: string, now = Date.now()): number | null {
+  if (!date && !time) return null;
+  const [h, min] = time ? time.split(":").map(Number) : [23, 59];
+  const d = date ? new Date(`${date}T00:00`) : new Date(now);
+  d.setHours(h ?? 0, min ?? 0, 0, 0);
+  if (!date && d.getTime() <= now) d.setDate(d.getDate() + 1);
+  return Number.isNaN(d.getTime()) ? null : d.getTime();
+}
 
 export function NewPollDialog({ author }: { author: string | null }) {
   return (
@@ -41,8 +55,13 @@ function NewPollForm({ author, onDone }: { author: string | null; onDone: () => 
     { key: 1, text: "" },
   ]);
   const [multi, setMulti] = useState(false);
+  const [hasEnd, setHasEnd] = useState(false);
+  const [endDate, setEndDate] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const endsAt = hasEnd ? endOf(endDate, endTime) : null;
+  const endPast = endsAt != null && endsAt <= Date.now();
   const filled = options.filter((o) => o.text.trim()).length;
-  const ready = question.trim() !== "" && filled >= 2;
+  const ready = question.trim() !== "" && filled >= 2 && (!hasEnd || (endsAt != null && !endPast));
 
   return (
     <Form
@@ -51,7 +70,7 @@ function NewPollForm({ author, onDone }: { author: string | null; onDone: () => 
         e.preventDefault();
         if (!ready || create.isPending) return;
         create.mutate(
-          { question, authorId: author, multi, options: options.map((o) => o.text) },
+          { question, authorId: author, multi, options: options.map((o) => o.text), endsAt },
           { onSuccess: onDone },
         );
       }}
@@ -102,6 +121,40 @@ function NewPollForm({ author, onDone }: { author: string | null; onDone: () => 
       <Switch className="choice" isSelected={multi} onChange={setMulti}>
         {m.vote_multi()}
       </Switch>
+      <Switch className="choice" isSelected={hasEnd} onChange={setHasEnd}>
+        {m.vote_end_toggle()}
+      </Switch>
+      {hasEnd && (
+        <div className="poll-form__end">
+          <div className="poll-form__end-fields">
+            <label className="field">
+              <span className="field__label">{m.vote_end_date()}</span>
+              <input
+                className="input"
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span className="field__label">{m.vote_end_time()}</span>
+              <input
+                className="input"
+                type="time"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+              />
+            </label>
+          </div>
+          <p className={endPast ? "field__error" : "field__hint"}>
+            {endsAt == null
+              ? m.vote_end_hint()
+              : endPast
+                ? m.vote_end_past()
+                : m.vote_ends_on({ when: formatDeadline(endsAt) })}
+          </p>
+        </div>
+      )}
       {create.isError && (
         <p className="alert" role="alert">
           {errorMessage(create.error)}

@@ -40,6 +40,16 @@ export const formatWhen = (ms: number) =>
   startOfDay(ms) === startOfDay(Date.now()) ? time.format(ms) : dateTime.format(ms);
 export const formatDay = (ms: number) => day.format(ms);
 
+/** Échéance : « aujourd'hui à 18:00 », « demain à 9:00 », sinon date et heure. */
+export function formatDeadline(ms: number): string {
+  const d = startOfDay(ms);
+  const today = startOfDay(Date.now());
+  const t = time.format(ms);
+  if (d === today) return m.when_today({ time: t });
+  if (d === startOfDay(today + 36 * 3_600_000)) return m.when_tomorrow({ time: t });
+  return dateTime.format(ms);
+}
+
 /** Minuit local du jour contenant `ms`. */
 export function startOfDay(ms: number): number {
   const d = new Date(ms);
