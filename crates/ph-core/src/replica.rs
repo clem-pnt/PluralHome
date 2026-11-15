@@ -39,6 +39,7 @@ pub const SHARED_KEYS: &[&str] = &[
     "front.favorites",
     "system.name",
     "system.avatar",
+    "system.kind",
     "pluralkit.ignored",
     "friends.identity",
     "friends.privacy",

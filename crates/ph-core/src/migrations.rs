@@ -388,6 +388,18 @@ const MIGRATIONS: &[&str] = &[
             " AND NEW.key IN ('safety.plan', 'newcomer.plan', 'trusted.contact', 'front.favorites', 'system.name', 'system.avatar', 'pluralkit.ignored', 'friends.identity', 'friends.privacy')",
             " AND OLD.key IN ('safety.plan', 'newcomer.plan', 'trusted.contact', 'front.favorites', 'system.name', 'system.avatar', 'pluralkit.ignored', 'friends.identity', 'friends.privacy')"
         ),
+    ),    // Type de profil (système ou singlet) : partagé entre appareils.
+    concat!(
+        "DROP TRIGGER sync_kv_ins;
+        DROP TRIGGER sync_kv_upd;
+        DROP TRIGGER sync_kv_del;\n",
+        track!(
+            "kv",
+            "json_array(NEW.key)",
+            "json_array(OLD.key)",
+            " AND NEW.key IN ('safety.plan', 'newcomer.plan', 'trusted.contact', 'front.favorites', 'system.name', 'system.avatar', 'system.kind', 'pluralkit.ignored', 'friends.identity', 'friends.privacy')",
+            " AND OLD.key IN ('safety.plan', 'newcomer.plan', 'trusted.contact', 'front.favorites', 'system.name', 'system.avatar', 'system.kind', 'pluralkit.ignored', 'friends.identity', 'friends.privacy')"
+        ),
     ),
 ];
 

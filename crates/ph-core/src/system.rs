@@ -11,6 +11,25 @@ use crate::{CoreError, Result, kv};
 
 const K_NAME: &str = "system.name";
 const K_AVATAR: &str = "system.avatar";
+const K_KIND: &str = "system.kind";
+
+/// Une seule personne (singlet) ou un système de plusieurs alters.
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SystemKind {
+    System,
+    Singlet,
+}
+
+impl SystemKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::System => "system",
+            Self::Singlet => "singlet",
+        }
+    }
+}
 
 #[cfg_attr(feature = "specta", derive(specta::Type))]
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -19,6 +38,8 @@ pub struct SystemProfile {
     pub name: Option<String>,
     /// Adresse `data:` prête pour `<img src>`.
     pub avatar: Option<String>,
+    /// Absent tant que rien n'a été choisi (bases d'avant ce réglage : système).
+    pub kind: Option<SystemKind>,
 }
 
 #[cfg_attr(feature = "specta", derive(specta::Type))]
@@ -36,7 +57,17 @@ pub fn get(conn: &Connection) -> Result<SystemProfile> {
         avatar: kv::get(conn, K_AVATAR)?
             .and_then(|b| STANDARD.decode(b).ok())
             .and_then(|b| data_url(&b)),
+        kind: match kv::get(conn, K_KIND)?.as_deref() {
+            Some("singlet") => Some(SystemKind::Singlet),
+            Some("system") => Some(SystemKind::System),
+            _ => None,
+        },
     })
+}
+
+pub fn set_kind(conn: &Connection, kind: SystemKind) -> Result<SystemProfile> {
+    kv::set(conn, K_KIND, kind.as_str())?;
+    get(conn)
 }
 
 fn clean_name(name: Option<&str>) -> Result<Option<String>> {
@@ -110,6 +141,29 @@ pub fn adopt_avatar(conn: &Connection, bytes: &[u8]) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn kind_is_stored() {
+        let mut c = Connection::open_in_memory().unwrap();
+        crate::migrations::run(&mut c).unwrap();
+        assert_eq!(get(&c).unwrap().kind, None);
+        assert_eq!(
+            set_kind(&c, SystemKind::Singlet).unwrap().kind,
+            Some(SystemKind::Singlet)
+        );
+        assert_eq!(
+            set_kind(&c, SystemKind::System).unwrap().kind,
+            Some(SystemKind::System)
+        );
+        let dirty: i64 = c
+            .query_row(
+                "SELECT count(*) FROM sync_state WHERE tbl = 'kv' AND pk = '[\"system.kind\"]'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(dirty, 1);
+    }
 
     #[test]
     fn local_choice_wins_over_pluralkit() {

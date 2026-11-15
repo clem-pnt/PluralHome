@@ -42,6 +42,7 @@ export const commands = {
 	/**  Nom et photo du système (repris de PluralKit tant qu'ils ne sont pas choisis ici). */
 	systemGet: () => typedError<SystemProfile_Serialize, IpcError_Serialize>(__TAURI_INVOKE("system_get")),
 	systemSet: (input: SystemInput_Deserialize) => typedError<SystemProfile_Serialize, IpcError_Serialize>(__TAURI_INVOKE("system_set", { input })),
+	systemSetKind: (kind: SystemKind) => typedError<SystemProfile_Serialize, IpcError_Serialize>(__TAURI_INVOKE("system_set_kind", { kind })),
 	/**  Catalogue de rôles du système. */
 	rolesList: () => typedError<string[], IpcError_Serialize>(__TAURI_INVOKE("roles_list")),
 	rolesAdd: (name: string) => typedError<string[], IpcError_Serialize>(__TAURI_INVOKE("roles_add", { name })),
@@ -1033,18 +1034,25 @@ export type SystemInput_Serialize = {
 	avatar: AvatarEdit,
 };
 
+/**  Une seule personne (singlet) ou un système de plusieurs alters. */
+export type SystemKind = "system" | "singlet";
+
 export type SystemProfile = SystemProfile_Serialize | SystemProfile_Deserialize;
 
 export type SystemProfile_Deserialize = {
 	name?: string | null,
 	/**  Adresse `data:` prête pour `<img src>`. */
 	avatar?: string | null,
+	/**  Absent tant que rien n'a été choisi (bases d'avant ce réglage : système). */
+	kind?: SystemKind | null,
 };
 
 export type SystemProfile_Serialize = {
 	name: string | null,
 	/**  Adresse `data:` prête pour `<img src>`. */
 	avatar: string | null,
+	/**  Absent tant que rien n'a été choisi (bases d'avant ce réglage : système). */
+	kind: SystemKind | null,
 };
 
 export type TrustedContact = TrustedContact_Serialize | TrustedContact_Deserialize;

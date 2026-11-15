@@ -12,6 +12,7 @@ import { VoteView } from "../features/vote/VoteView";
 import { m } from "../paraglide/messages.js";
 import { Logo } from "../ui/Logo";
 import { keys, queryClient } from "./query";
+import { useKind } from "./useKind";
 
 const VIEWS = {
   front: { label: m.nav_front, Component: FrontView },
@@ -62,8 +63,17 @@ function useRemoteSync() {
 }
 type View = keyof typeof VIEWS;
 
+/** Sans alters, ces vues n'ont pas de sens : masquées, pas supprimées. */
+const SYSTEM_ONLY: readonly View[] = ["front", "members", "vote"];
+
 export function Shell() {
-  const [view, setView] = useState<View>("front");
+  const kind = useKind();
+  const views = (Object.keys(VIEWS) as View[]).filter(
+    (v) => kind === "system" || !SYSTEM_ONLY.includes(v),
+  );
+  const [chosen, setView] = useState<View | null>(null);
+  const fallback: View = kind === "system" ? "front" : "journal";
+  const view = chosen && views.includes(chosen) ? chosen : fallback;
   useRemoteSync();
   const { Component } = VIEWS[view];
 
@@ -75,7 +85,7 @@ export function Shell() {
           <span>{m.app_name()}</span>
         </div>
         <nav className="sidebar__nav" aria-label={m.app_name()}>
-          {(Object.keys(VIEWS) as View[]).map((key) => (
+          {views.map((key) => (
             <Button
               key={key}
               className="navlink"

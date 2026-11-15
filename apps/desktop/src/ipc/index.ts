@@ -1,4 +1,4 @@
-import { commands, type IpcError_Serialize } from "./bindings";
+import { commands, type IpcError_Serialize, type SystemKind } from "./bindings";
 
 export type {
   Account_Serialize as Account,
@@ -40,6 +40,7 @@ export type {
   Requests_Serialize as Requests,
   SafetyPlan_Serialize as SafetyPlan,
   Status_Serialize as PkStatus,
+  SystemKind,
   SystemProfile_Serialize as SystemProfile,
   TrustedContact_Serialize as TrustedContact,
   VaultStatus,
@@ -98,6 +99,7 @@ export const api = {
   system: {
     get: () => unwrap(commands.systemGet()),
     set: (input: Parameters<typeof commands.systemSet>[0]) => unwrap(commands.systemSet(input)),
+    setKind: (kind: SystemKind) => unwrap(commands.systemSetKind(kind)),
   },
   roles: {
     list: () => unwrap(commands.rolesList()),

@@ -13,7 +13,7 @@ use ph_core::newcomer::{self, NewcomerPlan, TrustedContact};
 use ph_core::polls::{self, NewPoll, Poll};
 use ph_core::roles;
 use ph_core::safety::{self, SafetyPlan};
-use ph_core::system::{self, SystemInput, SystemProfile};
+use ph_core::system::{self, SystemInput, SystemKind, SystemProfile};
 use ph_core::{CoreError, Vault, VaultStatus};
 use serde::Serialize;
 use tauri::State;
@@ -412,6 +412,15 @@ pub async fn system_set(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn system_set_kind(
+    state: State<'_, AppState>,
+    kind: SystemKind,
+) -> IpcResult<SystemProfile> {
+    blocking(&state, move |v| system::set_kind(v.conn()?, kind)).await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn front_current(state: State<'_, AppState>) -> IpcResult<Vec<FrontSession>> {
     blocking(&state, |v| front::current(v.conn()?)).await
 }
@@ -714,6 +723,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         groups_delete,
         system_get,
         system_set,
+        system_set_kind,
         roles_list,
         roles_add,
         roles_rename,

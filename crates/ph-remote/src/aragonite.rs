@@ -218,7 +218,7 @@ impl Sso {
 
 // ---------- connexion par le navigateur ----------
 
-/// Connexion en cours : le navigateur doit ouvrir `authorize_url`, puis
+/// Connexion en cours : une fenêtre (ou le navigateur) doit ouvrir `authorize_url`, puis
 /// [`Login::finish`] attend son retour sur l'adresse de bouclage.
 pub struct Login {
     listener: TcpListener,
@@ -348,7 +348,7 @@ impl Login {
     }
 }
 
-const PAGE_OK: &str = "Connexion réussie. Vous pouvez fermer cet onglet et revenir à PluralHome.";
+const PAGE_OK: &str = "Connexion réussie. Retour à PluralHome…";
 const PAGE_ERROR: &str = "La connexion n'a pas abouti. Revenez à PluralHome pour réessayer.";
 
 fn respond(stream: &mut TcpStream, status: &str, text: &str) {

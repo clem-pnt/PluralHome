@@ -1,9 +1,9 @@
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Form, Input, Label, TextField } from "react-aria-components";
+import { Form, Input, Label, Radio, RadioGroup, TextField } from "react-aria-components";
 import { keys, queryClient } from "../../app/query";
 import { errorMessage } from "../../i18n/errors";
-import { type AvatarEdit, api } from "../../ipc";
+import { type AvatarEdit, api, type SystemKind } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
 import { Button } from "../../ui/Button";
 import { AvatarInput } from "../members/AvatarInput";
@@ -35,50 +35,80 @@ export function SystemPanel() {
     },
   });
 
+  const setKind = useMutation({
+    mutationFn: api.system.setKind,
+    onSuccess: (profile) => queryClient.setQueryData(keys.system, profile),
+  });
+
   return (
-    <Form
-      className="system-panel"
-      onSubmit={(e) => {
-        e.preventDefault();
-        save.mutate();
-      }}
-    >
-      <AvatarInput
-        name={name || m.messages_everyone()}
-        preview={preview}
-        onChange={(edit, next) => {
-          setAvatar(edit);
-          setPreview(next);
-          setSaved(false);
-        }}
-      />
-      <TextField
+    <>
+      <RadioGroup
         className="field"
-        value={name}
-        onChange={(v) => {
-          setName(v);
-          setSaved(false);
-        }}
-        maxLength={100}
+        value={system.data?.kind ?? "system"}
+        isDisabled={!system.data || setKind.isPending}
+        onChange={(v) => setKind.mutate(v as SystemKind)}
+        orientation="horizontal"
       >
-        <Label>{m.system_name()}</Label>
-        <Input className="input" placeholder={m.messages_everyone()} />
-      </TextField>
-      {save.isError && (
-        <p className="alert" role="alert">
-          {errorMessage(save.error)}
-        </p>
-      )}
-      <div className="dialog__actions">
-        {saved && (
-          <span className="muted" role="status">
-            {m.system_saved()}
-          </span>
+        <Label className="field__label">{m.system_kind()}</Label>
+        <div className="choices">
+          <Radio value="system" className="choice">
+            {m.system_kind_system()}
+          </Radio>
+          <Radio value="singlet" className="choice">
+            {m.system_kind_singlet()}
+          </Radio>
+        </div>
+        <p className="muted">{m.system_kind_hint()}</p>
+        {setKind.isError && (
+          <p className="alert" role="alert">
+            {errorMessage(setKind.error)}
+          </p>
         )}
-        <Button variant="primary" type="submit" isDisabled={save.isPending || system.isPending}>
-          {m.messages_save()}
-        </Button>
-      </div>
-    </Form>
+      </RadioGroup>
+      <Form
+        className="system-panel"
+        onSubmit={(e) => {
+          e.preventDefault();
+          save.mutate();
+        }}
+      >
+        <AvatarInput
+          name={name || m.messages_everyone()}
+          preview={preview}
+          onChange={(edit, next) => {
+            setAvatar(edit);
+            setPreview(next);
+            setSaved(false);
+          }}
+        />
+        <TextField
+          className="field"
+          value={name}
+          onChange={(v) => {
+            setName(v);
+            setSaved(false);
+          }}
+          maxLength={100}
+        >
+          <Label>{m.system_name()}</Label>
+          <Input className="input" placeholder={m.messages_everyone()} />
+        </TextField>
+        {save.isError && (
+          <p className="alert" role="alert">
+            {errorMessage(save.error)}
+          </p>
+        )}
+        <div className="dialog__actions">
+          {saved && (
+            <span className="muted" role="status">
+              {m.system_saved()}
+            </span>
+          )}
+          <Button variant="primary" type="submit" isDisabled={save.isPending || system.isPending}>
+            {m.messages_save()}
+          </Button>
+        </div>
+      </Form>
+    </>
   );
 }

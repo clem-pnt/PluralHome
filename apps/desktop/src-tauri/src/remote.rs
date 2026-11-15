@@ -18,6 +18,7 @@ use ph_remote::friends::{
 use ph_remote::pluralkit::{HttpPk, PkSystem};
 use ph_remote::sync::{self, Status};
 use tauri::{AppHandle, Emitter, State};
+#[cfg(mobile)]
 use tauri_plugin_opener::OpenerExt;
 
 use crate::ipc::{AppState, IpcError};
@@ -248,12 +249,71 @@ pub async fn account_login(
     remote(move || {
         let sso = Sso::new()?;
         let login = Login::begin(&sso)?;
-        app.opener()
-            .open_url(&login.authorize_url, None::<&str>)
-            .map_err(|e| RemoteError::Network(e.to_string()))?;
-        login.finish(&*vault, &sso, LOGIN_TIMEOUT, &cancel)
+        let window = open_login_window(&app, &login.authorize_url, &cancel)?;
+        let result = login.finish(&*vault, &sso, LOGIN_TIMEOUT, &cancel);
+        if let Some(w) = window {
+            let _ = w.destroy();
+        }
+        result
     })
     .await
+}
+
+const LOGIN_WINDOW: &str = "sso-login";
+
+/// Ouvre la page de connexion Aragonite dans une fenêtre de l'application (pas de
+/// navigateur externe). Cette fenêtre charge un site distant : aucune capacité ne
+/// lui est accordée (`capabilities/` ne vise que `main`), elle n'a donc pas accès
+/// aux commandes. Session privée : rien n'est gardé une fois la fenêtre fermée.
+/// La fermer annule la connexion.
+#[cfg(desktop)]
+fn open_login_window(
+    app: &AppHandle,
+    url: &str,
+    cancel: &Arc<AtomicBool>,
+) -> Result<Option<tauri::WebviewWindow>, RemoteError> {
+    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+    if let Some(old) = app.get_webview_window(LOGIN_WINDOW) {
+        let _ = old.destroy();
+    }
+    let url = url
+        .parse()
+        .map_err(|_| RemoteError::Network("adresse de connexion invalide".into()))?;
+    let mut builder = WebviewWindowBuilder::new(app, LOGIN_WINDOW, WebviewUrl::External(url))
+        .title("Connexion — Aragonite")
+        .inner_size(480.0, 720.0)
+        .min_inner_size(360.0, 480.0)
+        .center()
+        .incognito(true)
+        .focused(true);
+    if let Some(main) = app.get_webview_window("main") {
+        builder = builder
+            .parent(&main)
+            .map_err(|e| RemoteError::Network(e.to_string()))?;
+    }
+    let window = builder
+        .build()
+        .map_err(|e| RemoteError::Network(e.to_string()))?;
+    let cancel = Arc::clone(cancel);
+    window.on_window_event(move |e| {
+        if matches!(e, WindowEvent::CloseRequested { .. }) {
+            cancel.store(true, Ordering::Relaxed);
+        }
+    });
+    Ok(Some(window))
+}
+
+/// Sur mobile, une seule fenêtre : on garde le navigateur du système.
+#[cfg(mobile)]
+fn open_login_window(
+    app: &AppHandle,
+    url: &str,
+    _cancel: &Arc<AtomicBool>,
+) -> Result<Option<tauri::WebviewWindow>, RemoteError> {
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|e| RemoteError::Network(e.to_string()))?;
+    Ok(None)
 }
 
 #[tauri::command]

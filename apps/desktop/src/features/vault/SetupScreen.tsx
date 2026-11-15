@@ -1,29 +1,119 @@
 import { useMutation } from "@tanstack/react-query";
+import { useState } from "react";
+import { Button as AriaButton } from "react-aria-components";
 import { keys, queryClient } from "../../app/query";
 import { errorMessage } from "../../i18n/errors";
-import { api } from "../../ipc";
+import { AppError, api, type SystemKind } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
 import { Button } from "../../ui/Button";
 import { AuthLayout } from "./AuthLayout";
 
+/**
+ * Première ouverture, en deux temps : singlet ou système, puis compte Aragonite
+ * ou invité. Le coffre est créé dès le premier choix (la connexion en a besoin) ;
+ * l'application ne s'ouvre qu'après le second.
+ */
 export function SetupScreen() {
-  const create = useMutation({
-    mutationFn: api.vault.create,
-    onSuccess: () => queryClient.setQueryData(keys.vaultStatus, "unlocked"),
+  const [created, setCreated] = useState(false);
+  const [step, setStep] = useState<"kind" | "account">("kind");
+
+  const choose = useMutation({
+    mutationFn: async (kind: SystemKind) => {
+      if (!created) {
+        await api.vault.create();
+        setCreated(true);
+      }
+      return api.system.setKind(kind);
+    },
+    onSuccess: (profile) => {
+      queryClient.setQueryData(keys.system, profile);
+      setStep("account");
+    },
   });
 
+  const enter = () => queryClient.setQueryData(keys.vaultStatus, "unlocked");
+  const login = useMutation({
+    mutationFn: api.account.login,
+    onSuccess: (a) => {
+      queryClient.setQueryData(keys.account, a);
+      enter();
+    },
+  });
+  const loginFailed =
+    login.isError && !(login.error instanceof AppError && login.error.code === "remote_cancelled");
+
+  if (step === "kind") {
+    return (
+      <AuthLayout title={m.setup_title()} lead={m.setup_lead()}>
+        <div className="auth__form">
+          <p className="auth__question">{m.setup_kind_question()}</p>
+          <div className="auth__options">
+            <AriaButton
+              className="auth__option"
+              isDisabled={choose.isPending}
+              onPress={() => choose.mutate("system")}
+            >
+              <strong>{m.setup_kind_system()}</strong>
+              <span>{m.setup_kind_system_hint()}</span>
+            </AriaButton>
+            <AriaButton
+              className="auth__option"
+              isDisabled={choose.isPending}
+              onPress={() => choose.mutate("singlet")}
+            >
+              <strong>{m.setup_kind_singlet()}</strong>
+              <span>{m.setup_kind_singlet_hint()}</span>
+            </AriaButton>
+          </div>
+          {choose.isPending && (
+            <p className="muted" role="status">
+              {m.working()}
+            </p>
+          )}
+          {choose.isError && (
+            <p className="alert" role="alert">
+              {errorMessage(choose.error)}
+            </p>
+          )}
+          <p className="note">{m.setup_note()}</p>
+        </div>
+      </AuthLayout>
+    );
+  }
+
   return (
-    <AuthLayout title={m.setup_title()} lead={m.setup_lead()}>
+    <AuthLayout title={m.setup_account_title()} lead={m.setup_account_lead()}>
       <div className="auth__form">
-        <p className="note">{m.setup_note()}</p>
-        {create.isError && (
+        {login.isPending ? (
+          <>
+            <p className="muted" role="status">
+              {m.account_waiting()}
+            </p>
+            <Button block variant="ghost" onPress={() => void api.account.cancelLogin()}>
+              {m.cancel()}
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button block onPress={() => login.mutate()}>
+              {m.setup_account_login()}
+            </Button>
+            <Button block variant="ghost" onPress={enter}>
+              {m.setup_account_guest()}
+            </Button>
+          </>
+        )}
+        {loginFailed && (
           <p className="alert" role="alert">
-            {errorMessage(create.error)}
+            {errorMessage(login.error)}
           </p>
         )}
-        <Button block isDisabled={create.isPending} onPress={() => create.mutate()}>
-          {create.isPending ? m.working() : m.setup_submit()}
-        </Button>
+        <p className="note">{m.setup_account_note()}</p>
+        {!login.isPending && (
+          <AriaButton className="auth__back" onPress={() => setStep("kind")}>
+            {m.setup_back()}
+          </AriaButton>
+        )}
       </div>
     </AuthLayout>
   );
