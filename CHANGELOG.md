@@ -1,6 +1,6 @@
 # Changelog
 
-## Non publié
+## 0.11.0 — Sous-dossiers, front détaillé, vote et accueil des nouveaux alters
 
 - Dossiers : sous-dossiers (par exemple Âge > Enfants, Ados, Adultes), avec une mention « Ageslider » possible. Le tri automatique range aussi par genre. Barre de recherche dans l'écran Membres.
 - Rôles : liste refaite, boutons Modifier et Supprimer en icônes.
