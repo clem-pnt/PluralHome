@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.11.0 — Rôles et descriptions
+## 0.10.2 — Rôles et descriptions
 
 - Chaque système a son propre catalogue de rôles : bouton « Gérer les rôles » dans l'écran Membres pour en créer, renommer ou supprimer. Renommer ou supprimer un rôle le change chez tous les membres qui le portent.
 - Les rôles créés sont proposés sur la fiche de chaque membre, avec les rôles courants, et suivent la synchro entre appareils. Les rôles déjà utilisés rejoignent le catalogue à la mise à jour.
