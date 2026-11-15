@@ -1,6 +1,6 @@
 # Changelog
 
-## Non publié
+## 0.12.0 — Amis et messages entre systèmes
 
 - Amis : ajout d'autres systèmes par lien ou QR code (caméra ou image), avec demandes à accepter, refuser ou bloquer, et un code à comparer de vive voix. Les invitations peuvent expirer (24 h, 7 jours ou jamais), servir une seule fois et être révoquées. Le compte Aragonite sert d'identité, mais son identifiant n'est jamais affiché. Tout est chiffré de bout en bout.
 - Amis : réglages de confidentialité par défaut, et pour chaque ami. On choisit si l'ami voit la liste des membres, leurs photos, pronoms et descriptions, ou qui est au front, et s'il peut nous écrire. Certains membres peuvent être toujours masqués. Les nouvelles demandes peuvent être fermées.
