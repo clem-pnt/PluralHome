@@ -1,6 +1,6 @@
 # Changelog
 
-## Non publié — Profils et dossiers
+## 0.10.3 — Profils et dossiers
 
 - La liste des membres n'affiche plus que le rôle principal (le premier), sans aperçu de description.
 - Un clic sur un membre ouvre son profil complet : tous ses rôles, ses dossiers et toute sa description. Le bouton « Modifier » ouvre la fiche d'édition.
