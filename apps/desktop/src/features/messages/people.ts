@@ -29,8 +29,8 @@ export function presentIds(sessions: FrontSession[] | undefined): string[] {
 
 /**
  * Qui peut marquer ce message comme lu : les destinataires au front qui ne l'ont
- * pas encore lu (tout le monde au front pour un message à tout le système, sauf
- * les auteurs). Sans personne au front, les destinataires directs.
+ * pas encore lu (tout le monde au front pour un message à tout le système). Sans
+ * personne au front, les destinataires directs. Jamais les auteurs.
  */
 export function readersOf(message: Message, fronters: string[]): string[] {
   const { authorIds, recipientIds, readBy } = message;
@@ -38,10 +38,12 @@ export function readersOf(message: Message, fronters: string[]): string[] {
   const list =
     fronters.length > 0
       ? broadcast
-        ? fronters.filter((id) => !authorIds.includes(id))
+        ? fronters
         : fronters.filter((id) => recipientIds.includes(id))
       : recipientIds;
-  return list.filter((id) => !readBy.includes(id));
+  // Ceux qui ont écrit le message n'ont rien à lire, même s'ils en sont aussi
+  // destinataires (plusieurs alters qui s'écrivent entre eux).
+  return list.filter((id) => !authorIds.includes(id) && !readBy.includes(id));
 }
 
 /** Un message ne s'affiche que s'il concerne quelqu'un de présent, ou tout le système. */

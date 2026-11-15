@@ -235,7 +235,8 @@ pub fn list(
          WHERE (?1 IS NULL OR (m.id < ?1 AND m.pinned = 0))
            AND (?3 = 0 OR m.pinned = 1
                 OR EXISTS (SELECT 1 FROM ({RECIPIENTS}) x
-                           WHERE NOT EXISTS (SELECT 1 FROM message_read r
+                           WHERE x.member_id NOT IN ({AUTHORS})
+                             AND NOT EXISTS (SELECT 1 FROM message_read r
                                              WHERE r.message_id = m.id AND r.member_id = x.member_id))
                 OR (NOT EXISTS ({RECIPIENTS})
                     AND NOT EXISTS (SELECT 1 FROM message_read r WHERE r.message_id = m.id)))
@@ -476,6 +477,29 @@ mod tests {
         )
         .unwrap();
         assert_eq!(list(c, None, 50, true).unwrap().len(), 2);
+
+        // Écrit à deux et adressé à soi-même : aucun des auteurs n'a à le lire.
+        let between = post(
+            c,
+            &NewMessage {
+                author_ids: vec![mila, sacha],
+                recipient_ids: vec![mila, sacha],
+                body: "entre nous".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(list(c, None, 50, true).unwrap().len(), 2);
+        for who in [mila, sacha] {
+            assert!(
+                catch_up(c, who)
+                    .unwrap()
+                    .unread
+                    .iter()
+                    .all(|m| m.id != between.id)
+            );
+        }
+        delete(c, between.id).unwrap();
 
         // Un message à plusieurs reste non lu tant que tous ne l'ont pas lu.
         let read = mark_read_by(c, to_both.id, &[mila]).unwrap();
