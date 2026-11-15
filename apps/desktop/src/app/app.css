@@ -1622,6 +1622,7 @@
   /* Messagerie en conversations, à la manière des messages privés. */
   .view--messages {
     max-inline-size: 1180px;
+    container-type: inline-size;
     gap: var(--space-5);
   }
   .dm {
@@ -1836,6 +1837,7 @@
   }
   .dm__composer-from .field {
     grid-template-columns: auto minmax(0, 320px);
+    justify-content: start;
     align-items: center;
     gap: var(--space-2);
   }
@@ -1862,7 +1864,7 @@
     block-size: 44px;
   }
 
-  @media (max-width: 760px) {
+  @container (max-width: 640px) {
     .dm {
       grid-template-columns: 1fr;
     }

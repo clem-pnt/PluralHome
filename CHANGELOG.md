@@ -1,5 +1,15 @@
 # Changelog
 
+## Non publié
+
+- Au front : bouton « Créer un alter » dans la fenêtre « Qui est au front ? ». « Flou » se coche comme un alter, sans statut. Le choix « Personne » est retiré.
+- Notifications : au-delà de deux, elles sont repliées dans un seul bloc qu'on peut déplier, avec un bouton « Tout marquer comme lu ».
+- Messages : nouvelle interface en conversations, à la manière des messages privés (liste à gauche, fil à droite, envoi avec Entrée). Seuls les messages qui concernent un alter présent (au front, co-front ou co-conscience) et ceux pour tout le système s'affichent. Bouton « Tout marquer comme lu ».
+- Vote : un seul alter vote à la fois, choisir un autre alter remplace le précédent.
+- Recherche : elle porte sur le prénom seul.
+- Appeler à l'aide : le nom et l'utilité passent avant le numéro. La personne de confiance a plusieurs moyens de contact (téléphone, SMS, WhatsApp, Discord, Instagram, Snapchat…).
+- Nouvel alter : catégories libres, à nommer et à ajouter autant que nécessaire.
+
 ## 0.11.0 — Sous-dossiers, front détaillé, vote et accueil des nouveaux alters
 
 - Dossiers : sous-dossiers (par exemple Âge > Enfants, Ados, Adultes), avec une mention « Ageslider » possible. Le tri automatique range aussi par genre. Barre de recherche dans l'écran Membres.
