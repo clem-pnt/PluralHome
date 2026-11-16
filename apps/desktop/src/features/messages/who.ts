@@ -48,9 +48,10 @@ export const systemLabel = (system: SystemProfile | undefined) =>
 /** Signature d'un message : ses auteurs, de chez nous ou de chez l'ami. */
 export function authorLabel(message: Message, who: Who, max = 3): string {
   if (message.friendId && !message.outgoing) {
-    const friend = who.friends.get(message.friendId);
+    // Relayé par l'ami depuis un autre système du groupe : on nomme ce dernier.
+    const friend = message.system ? undefined : who.friends.get(message.friendId);
     const list = remoteNames(message.remoteAuthors, friend, max);
-    const sys = friendLabel(friend);
+    const sys = message.system?.name ?? friendLabel(friend);
     return list ? m.messages_friend_people({ names: list, system: sys }) : sys;
   }
   if (message.bySystem) return systemLabel(who.system);
@@ -60,9 +61,14 @@ export function authorLabel(message: Message, who: Who, max = 3): string {
 /** Visage de l'auteur principal. */
 export function authorFace(message: Message, who: Who): Face | null {
   if (message.friendId && !message.outgoing) {
-    const friend = who.friends.get(message.friendId);
+    const friend = message.system ? undefined : who.friends.get(message.friendId);
     const first = remoteFaces(message.remoteAuthors.slice(0, 1), friend)[0];
-    return first ?? { name: friendLabel(friend), avatar: friend?.avatar ?? null };
+    return (
+      first ?? {
+        name: message.system?.name ?? friendLabel(friend),
+        avatar: friend?.avatar ?? null,
+      }
+    );
   }
   if (message.bySystem)
     return { name: systemLabel(who.system), avatar: who.system?.avatar ?? null };
@@ -74,6 +80,7 @@ export function authorFace(message: Message, who: Who): Face | null {
 export const authorKey = (message: Message) =>
   [
     message.outgoing ? "o" : "i",
+    message.system?.key ?? "",
     message.bySystem ? "s" : "",
     ...message.authorIds,
     ...message.remoteAuthors.map((r) => r.ref),

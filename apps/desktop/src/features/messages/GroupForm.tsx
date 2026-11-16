@@ -7,7 +7,7 @@ import { Button } from "../../ui/Button";
 import { TextField } from "../../ui/TextField";
 import { AvatarInput } from "../members/AvatarInput";
 import { useFriendSystems, useSelfSystem } from "./NewConversation";
-import { type SystemPick, SystemRow } from "./SystemsPicker";
+import { SystemRow } from "./SystemsPicker";
 import { useDeleteGroup, useSaveGroup } from "./useGroups";
 
 const MAX_NAME = 100;
@@ -57,19 +57,27 @@ export function GroupForm({
   const [avatarEdit, setAvatarEdit] = useState<AvatarEdit>({ kind: "keep" });
   const [confirm, setConfirm] = useState(false);
   const allFriends = useFriendSystems();
-  // Le système ami d'un groupe est fixé à sa création ; celui d'une
-  // discussion reprise, par ses messages.
+  // Le premier système ami d'un groupe est fixé à sa création (celui d'une
+  // discussion reprise, par ses messages) ; d'autres peuvent s'y ajouter.
+  // Un groupe resté entre nous ne se partage plus.
   const fixedFriend = group ? group.friendId : seed ? (seed.friendId ?? null) : undefined;
-  const friends =
-    fixedFriend === undefined ? allFriends : allFriends.filter((f) => f.id === fixedFriend);
-  const [share, setShare] = useState<SystemPick | null>(
-    group?.friendId
-      ? { system: group.friendId, ids: group.remoteMembers.map((r) => r.ref) }
-      : seed?.friendId
-        ? { system: seed.friendId, ids: seed.remoteRefs }
-        : null,
-  );
-  const shared = share !== null;
+  const friends = fixedFriend === null ? [] : allFriends;
+  // Systèmes amis choisis, dans l'ordre : membres retenus (vide : tout le système).
+  const [picks, setPicks] = useState<[string, string[]][]>(() => {
+    if (group?.friendId)
+      return [
+        [group.friendId, group.remoteMembers.map((r) => r.ref)],
+        ...group.peers.flatMap((p): [string, string[]][] =>
+          p.friendId ? [[p.friendId, p.members.map((r) => r.ref)]] : [],
+        ),
+      ];
+    return seed?.friendId ? [[seed.friendId, seed.remoteRefs]] : [];
+  });
+  const primary = fixedFriend ?? picks[0]?.[0] ?? null;
+  const pickOf = (id: string) => picks.find(([f]) => f === id)?.[1] ?? null;
+  // Systèmes connus seulement par un autre membre du groupe.
+  const far = (group?.peers ?? []).filter((p) => !p.friendId && p.name);
+  const shared = picks.length > 0;
   const valid = name.trim().length > 0 && ids !== null && (ids.length > 0 || members.length > 0);
   // Tout notre système : un groupe partagé le note sans liste (les nouveaux
   // membres en feront partie), un groupe local liste chacun.
@@ -116,8 +124,11 @@ export function GroupForm({
               name: name.trim(),
               memberIds,
               avatar: avatarEdit,
-              friendId: share?.system ?? null,
-              remoteMemberRefs: share?.ids ?? [],
+              friendId: primary,
+              remoteMemberRefs: primary ? (pickOf(primary) ?? []) : [],
+              peers: picks
+                .filter(([f]) => f !== primary)
+                .map(([friendId, memberRefs]) => ({ friendId, memberRefs })),
             },
             messageIds: seed?.messageIds,
           },
@@ -159,16 +170,27 @@ export function GroupForm({
           <SystemRow
             key={f.id}
             system={f}
-            pick={share?.system === f.id ? share.ids : null}
+            pick={pickOf(f.id)}
             onChange={(next) => {
-              // Une fois partagé, le groupe le reste : on ne peut que changer
-              // les membres de l'ami.
-              if (next === null) setShare(fixedFriend ? { system: fixedFriend, ids: [] } : null);
-              else setShare({ system: f.id, ids: next });
+              // Le premier ami d'un groupe partagé y reste : on ne peut que
+              // changer ses membres.
+              const value = next === null && f.id === fixedFriend ? [] : next;
+              setPicks((cur) => {
+                const i = cur.findIndex(([id]) => id === f.id);
+                if (value === null) return cur.filter(([id]) => id !== f.id);
+                if (i < 0) return [...cur, [f.id, value]];
+                return cur.map((p, j): [string, string[]] => (j === i ? [f.id, value] : p));
+              });
             }}
           />
         ))}
+        {far.length > 0 && (
+          <p className="field__hint">
+            {m.group_far_systems({ names: far.map((p) => p.name).join(", ") })}
+          </p>
+        )}
       </fieldset>
+      {picks.length > 1 && <p className="field__hint">{m.group_many_systems_hint()}</p>}
       {save.isError && (
         <p className="alert" role="alert">
           {errorMessage(save.error)}

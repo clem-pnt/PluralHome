@@ -144,6 +144,16 @@ const TABLES: &[Spec] = &[
         only_key: None,
     },
     Spec {
+        name: "group_peer",
+        pk: &[("group_id", Blob), ("key", Text)],
+        only_key: None,
+    },
+    Spec {
+        name: "message_system",
+        pk: &[("message_id", Blob)],
+        only_key: None,
+    },
+    Spec {
         name: "message_recipient",
         pk: &[("message_id", Blob), ("member_id", Blob)],
         only_key: None,
@@ -544,6 +554,8 @@ fn sweep_orphans(conn: &Connection) -> Result<()> {
          DELETE FROM message WHERE group_id IS NOT NULL AND group_id NOT IN (SELECT id FROM chat_group);
          UPDATE message SET reply_to = NULL WHERE reply_to IS NOT NULL AND reply_to NOT IN (SELECT id FROM message);
          DELETE FROM chat_group_member WHERE member_id NOT IN (SELECT id FROM member) OR group_id NOT IN (SELECT id FROM chat_group);
+         DELETE FROM group_peer WHERE group_id NOT IN (SELECT id FROM chat_group);
+         DELETE FROM message_system WHERE message_id NOT IN (SELECT id FROM message);
          UPDATE poll SET author_id = NULL WHERE author_id IS NOT NULL AND author_id NOT IN (SELECT id FROM member);
          DELETE FROM poll_option WHERE poll_id NOT IN (SELECT id FROM poll);
          DELETE FROM poll_vote WHERE member_id NOT IN (SELECT id FROM member) OR option_id NOT IN (SELECT id FROM poll_option);",

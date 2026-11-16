@@ -277,6 +277,72 @@ pub struct RemoteRef {
     pub color: String,
 }
 
+/// Système d'origine d'un message relayé dans un groupe : un système du groupe
+/// qui n'est pas forcément notre ami. `key` le désigne dans ce groupe seulement.
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemTag {
+    pub key: String,
+    pub name: String,
+}
+
+/// Un autre système du groupe, tel que l'expéditeur le connaît.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PeerInfo {
+    pub key: String,
+    pub name: String,
+    #[serde(default)]
+    pub members: Vec<RemoteRef>,
+}
+
+/// Désigne un système dans un groupe : empreinte du groupe et de sa clé
+/// publique, pour qu'on ne puisse pas recouper ses groupes entre eux.
+pub(crate) fn peer_key(group: Uuid, public: &[u8; 32]) -> String {
+    let mut h = Sha256::new();
+    h.update(group.as_bytes());
+    h.update(public);
+    let mut out = hex::encode(h.finalize());
+    out.truncate(16);
+    out
+}
+
+pub(crate) fn is_peer_key(key: &str) -> bool {
+    key.len() == 16
+        && key
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
+/// Notre propre clé dans un groupe.
+pub(crate) fn my_peer_key(conn: &Connection, group: Uuid) -> Result<String> {
+    Ok(peer_key(group, &identity(conn)?.public()))
+}
+
+/// Clé d'un ami dans un groupe.
+pub(crate) fn friend_peer_key(
+    conn: &Connection,
+    group: Uuid,
+    friend: &str,
+) -> Result<Option<String>> {
+    Ok(friend_pub(conn, friend)?.map(|p| peer_key(group, &p)))
+}
+
+/// Nom que l'ami se donne (celui de sa fiche, jamais notre surnom pour lui).
+pub(crate) fn card_name(conn: &Connection, friend: &str) -> Result<String> {
+    Ok(cached_card(conn, friend)?
+        .and_then(|c| c.name)
+        .map(|n| n.trim().chars().take(members::MAX_NAME).collect::<String>())
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| "?".into()))
+}
+
+pub(crate) fn clean_name(name: &str) -> String {
+    let n: String = name.trim().chars().take(members::MAX_NAME).collect();
+    if n.is_empty() { "?".into() } else { n }
+}
+
 /// Ce qui circule entre deux systèmes amis, une fois déchiffré.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "t", rename_all = "camelCase")]
@@ -295,6 +361,9 @@ pub enum Envelope {
         group: Option<Uuid>,
         #[serde(default)]
         reply: Option<Uuid>,
+        /// Message relayé : système d'origine. `None` : l'expéditeur lui-même.
+        #[serde(default)]
+        from: Option<SystemTag>,
     },
     #[serde(rename_all = "camelCase")]
     Edit {
@@ -316,6 +385,9 @@ pub enum Envelope {
         mine: Vec<RemoteRef>,
         /// Nos membres ; vide : tout notre système.
         yours: Vec<Uuid>,
+        /// Les autres systèmes du groupe.
+        #[serde(default)]
+        others: Vec<PeerInfo>,
     },
 }
 
@@ -743,7 +815,7 @@ pub fn reconcile(conn: &mut Connection, remote: &[RemoteFriend]) -> Result<()> {
     Ok(())
 }
 
-fn friend_pub(conn: &Connection, id: &str) -> Result<Option<[u8; 32]>> {
+pub(crate) fn friend_pub(conn: &Connection, id: &str) -> Result<Option<[u8; 32]>> {
     Ok(conn
         .query_row("SELECT pub FROM friend WHERE id = ?1", [id], |r| {
             r.get::<_, [u8; 32]>(0)
@@ -751,7 +823,7 @@ fn friend_pub(conn: &Connection, id: &str) -> Result<Option<[u8; 32]>> {
         .optional()?)
 }
 
-fn cached_card(conn: &Connection, id: &str) -> Result<Option<Card>> {
+pub(crate) fn cached_card(conn: &Connection, id: &str) -> Result<Option<Card>> {
     let json: Option<Option<String>> = conn
         .query_row("SELECT card FROM friend WHERE id = ?1", [id], |r| r.get(0))
         .optional()?;
@@ -920,7 +992,7 @@ pub fn receive(conn: &mut Connection, friend: &str, sealed: &str) -> Result<bool
     Ok(applied)
 }
 
-fn clean_refs(list: Vec<RemoteRef>) -> Vec<RemoteRef> {
+pub(crate) fn clean_refs(list: Vec<RemoteRef>) -> Vec<RemoteRef> {
     let mut out: Vec<RemoteRef> = Vec::new();
     for mut r in list {
         if check_ref(&r.reference).is_err() || out.iter().any(|o| o.reference == r.reference) {
@@ -1005,6 +1077,18 @@ fn incoming_from(conn: &Connection, id: Uuid, friend: &str) -> Result<Option<boo
         .map(|v| v.unwrap_or(false)))
 }
 
+fn message_group(conn: &Connection, id: Uuid) -> Result<Option<Uuid>> {
+    Ok(conn
+        .query_row(
+            "SELECT group_id FROM message WHERE id = ?1",
+            [id.as_bytes()],
+            |r| r.get::<_, Option<[u8; 16]>>(0),
+        )
+        .optional()?
+        .flatten()
+        .map(Uuid::from_bytes))
+}
+
 #[allow(clippy::too_many_lines)] // un bras par type d'enveloppe
 fn apply(conn: &Connection, friend: &str, env: Envelope) -> Result<bool> {
     match env {
@@ -1017,6 +1101,7 @@ fn apply(conn: &Connection, friend: &str, env: Envelope) -> Result<bool> {
             at,
             group,
             reply,
+            from,
         } => {
             let body = body.trim().to_owned();
             if body.is_empty() || body.chars().count() > crate::messages::MAX_BODY_CHARS {
@@ -1025,28 +1110,32 @@ fn apply(conn: &Connection, friend: &str, env: Envelope) -> Result<bool> {
             if incoming_from(conn, id, friend)?.is_some() {
                 return Ok(false);
             }
-            // Le groupe et la réponse ne tiennent que s'ils relèvent de cet ami.
+            // Le groupe ne tient que si cet ami en fait partie chez nous ; la
+            // réponse, que si elle vise le même groupe (ou, hors groupe, le même ami).
             let group = match group {
-                Some(g) => conn
-                    .query_row(
-                        "SELECT 1 FROM chat_group WHERE id = ?1 AND friend_id = ?2",
-                        params![g.as_bytes(), friend],
-                        |_| Ok(()),
-                    )
-                    .optional()?
-                    .map(|()| g),
-                None => None,
+                Some(g) if crate::groups::is_neighbor(conn, g, friend)? => Some(g),
+                _ => None,
             };
             let reply = match reply {
                 Some(r) => conn
                     .query_row(
-                        "SELECT 1 FROM message WHERE id = ?1 AND friend_id = ?2",
-                        params![r.as_bytes(), friend],
+                        "SELECT 1 FROM message WHERE id = ?1
+                         AND (CASE WHEN ?3 IS NULL THEN friend_id = ?2 AND group_id IS NULL
+                                   ELSE group_id = ?3 END)",
+                        params![r.as_bytes(), friend, group.map(|u| *u.as_bytes())],
                         |_| Ok(()),
                     )
                     .optional()?
                     .map(|()| r),
                 None => None,
+            };
+            // Un système d'origine ne se cite que dans un groupe.
+            let from = match (group, from) {
+                (Some(_), Some(t)) if is_peer_key(&t.key) => Some(SystemTag {
+                    key: t.key,
+                    name: clean_name(&t.name),
+                }),
+                _ => None,
             };
             let to = own_members(conn, &to)?;
             let now = crate::time::now_ms()?;
@@ -1069,8 +1158,41 @@ fn apply(conn: &Connection, friend: &str, env: Envelope) -> Result<bool> {
                     by_system,
                 ],
             )?;
-            write_remote(conn, id, 0, &clean_refs(authors))?;
+            let authors = clean_refs(authors);
+            write_remote(conn, id, 0, &authors)?;
             write_recipients(conn, id, &to)?;
+            if let Some(t) = &from {
+                conn.execute(
+                    "INSERT OR REPLACE INTO message_system (message_id, key, name) VALUES (?1, ?2, ?3)",
+                    params![id.as_bytes(), t.key, t.name],
+                )?;
+            }
+            // Relais vers les autres systèmes du groupe.
+            if let Some(g) = group {
+                let from = match from {
+                    Some(t) => Some(t),
+                    None => friend_peer_key(conn, g, friend)?.map(|key| SystemTag {
+                        key,
+                        name: card_name(conn, friend).unwrap_or_else(|_| "?".into()),
+                    }),
+                };
+                crate::groups::forward(
+                    conn,
+                    g,
+                    friend,
+                    &Envelope::Msg {
+                        id,
+                        authors,
+                        by_system,
+                        to: Vec::new(),
+                        body,
+                        at,
+                        group: Some(g),
+                        reply,
+                        from,
+                    },
+                )?;
+            }
             Ok(true)
         }
         Envelope::Edit {
@@ -1098,15 +1220,35 @@ fn apply(conn: &Connection, friend: &str, env: Envelope) -> Result<bool> {
                     by_system
                 ],
             )?;
-            write_remote(conn, id, 0, &clean_refs(authors))?;
+            let authors = clean_refs(authors);
+            write_remote(conn, id, 0, &authors)?;
             write_recipients(conn, id, &to)?;
+            if let Some(g) = message_group(conn, id)? {
+                crate::groups::forward(
+                    conn,
+                    g,
+                    friend,
+                    &Envelope::Edit {
+                        id,
+                        authors,
+                        by_system,
+                        to: Vec::new(),
+                        body,
+                        at,
+                    },
+                )?;
+            }
             Ok(true)
         }
         Envelope::Del { id } => {
             if incoming_from(conn, id, friend)? != Some(true) {
                 return Ok(false);
             }
+            let group = message_group(conn, id)?;
             conn.execute("DELETE FROM message WHERE id = ?1", [id.as_bytes()])?;
+            if let Some(g) = group {
+                crate::groups::forward(conn, g, friend, &Envelope::Del { id })?;
+            }
             Ok(true)
         }
         Envelope::Group {
@@ -1114,6 +1256,7 @@ fn apply(conn: &Connection, friend: &str, env: Envelope) -> Result<bool> {
             name,
             mine,
             yours,
+            others,
         } => {
             let name: String = name.trim().chars().take(members::MAX_NAME).collect();
             if name.is_empty() {
@@ -1126,12 +1269,12 @@ fn apply(conn: &Connection, friend: &str, env: Envelope) -> Result<bool> {
                     |r| r.get(0),
                 )
                 .optional()?;
-            match owner {
-                Some(Some(f)) if f == friend => {
-                    conn.execute(
-                        "UPDATE chat_group SET name = ?2 WHERE id = ?1",
-                        params![id.as_bytes(), name],
-                    )?;
+            // Celui qui nous a fait entrer dans le groupe, ou un autre système
+            // du groupe avec qui on le partage directement.
+            let (primary, before) = match owner {
+                Some(Some(f)) if f == friend => (true, Some(crate::groups::get(conn, id)?)),
+                Some(_) if crate::groups::is_direct_peer(conn, id, friend)? => {
+                    (false, Some(crate::groups::get(conn, id)?))
                 }
                 Some(_) => return Ok(false),
                 None => {
@@ -1140,11 +1283,26 @@ fn apply(conn: &Connection, friend: &str, env: Envelope) -> Result<bool> {
                          VALUES (?1, ?2, NULL, ?3, ?4)",
                         params![id.as_bytes(), name, crate::time::now_ms()?, friend],
                     )?;
+                    (true, None)
                 }
-            }
+            };
+            conn.execute(
+                "UPDATE chat_group SET name = ?2 WHERE id = ?1 AND name <> ?2",
+                params![id.as_bytes(), name],
+            )?;
             let yours = own_members(conn, &yours)?;
             crate::groups::write_members(conn, id, &yours)?;
-            crate::groups::write_remote(conn, id, &clean_refs(mine))?;
+            let mine = clean_refs(mine);
+            if primary {
+                crate::groups::write_remote(conn, id, &mine)?;
+            } else {
+                crate::groups::set_peer_members(conn, id, friend, &mine)?;
+            }
+            crate::groups::write_others(conn, id, friend, others)?;
+            // Ce qui a changé repart vers les autres systèmes du groupe.
+            if before.as_ref() != Some(&crate::groups::get(conn, id)?) {
+                crate::groups::share_all(conn, id, Some(friend), &[])?;
+            }
             Ok(true)
         }
     }
@@ -1273,6 +1431,196 @@ mod tests {
             outbox::done(from, o.outbox_id).unwrap();
         }
         n
+    }
+
+    fn friend(id: &str, of: &Connection, to: &Connection) -> RemoteFriend {
+        RemoteFriend {
+            id: id.into(),
+            public: identity(of).unwrap().public(),
+            card: Some(sealed_card_for(of, &identity(to).unwrap().public()).unwrap()),
+            card_at: Some(1),
+            created_at: 1,
+        }
+    }
+
+    /// A ami avec B (`ab`) et avec C (`ac`) ; B et C ne se connaissent pas.
+    fn trio() -> (Connection, Connection, Connection) {
+        let (mut a, mut b, mut c) = (db(), db(), db());
+        crate::system::adopt_name(&a, "Aube").unwrap();
+        crate::system::adopt_name(&b, "Brume").unwrap();
+        crate::system::adopt_name(&c, "Cèdre").unwrap();
+        let ab = friend("ab", &b, &a);
+        let ac = friend("ac", &c, &a);
+        reconcile(&mut a, &[ab, ac]).unwrap();
+        let ba = friend("ab", &a, &b);
+        reconcile(&mut b, &[ba]).unwrap();
+        let ca = friend("ac", &a, &c);
+        reconcile(&mut c, &[ca]).unwrap();
+        (a, b, c)
+    }
+
+    /// Remet à `to` ce que `from` envoie par la relation `id`.
+    fn route(from: &Connection, to: &mut Connection, id: &str) -> usize {
+        let mut n = 0;
+        for o in outgoing(from, 50).unwrap() {
+            if o.friend != id {
+                continue;
+            }
+            if receive(to, &o.friend, &o.item).unwrap() {
+                n += 1;
+            }
+            outbox::done(from, o.outbox_id).unwrap();
+        }
+        n
+    }
+
+    fn post(c: &mut Connection, g: Uuid, author: Uuid, body: &str, reply: Option<Uuid>) -> Uuid {
+        crate::messages::post(
+            c,
+            &crate::messages::NewMessage {
+                author_ids: vec![author],
+                body: body.into(),
+                group_id: Some(g),
+                reply_to: reply,
+                ..Default::default()
+            },
+        )
+        .unwrap()
+        .id
+    }
+
+    fn find(c: &Connection, id: Uuid) -> Option<crate::messages::Message> {
+        crate::messages::list(c, None, 200, false)
+            .unwrap()
+            .into_iter()
+            .find(|m| m.id == id)
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines, clippy::many_single_char_names)]
+    fn groups_relay_between_systems_that_are_not_friends() {
+        use crate::groups::{GroupInput, PeerInput};
+        let (mut a, mut b, mut c) = trio();
+        let ana = member(&a, "Ana");
+        let bo = member(&b, "Bo");
+        let cy = member(&c, "Cy");
+        let g = crate::groups::create(
+            &mut a,
+            &GroupInput {
+                name: "Rando".into(),
+                member_ids: vec![ana],
+                peers: vec![
+                    PeerInput {
+                        friend_id: "ab".into(),
+                        member_refs: vec![],
+                    },
+                    PeerInput {
+                        friend_id: "ac".into(),
+                        member_refs: vec![],
+                    },
+                ],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(g.friend_id.as_deref(), Some("ab"));
+        assert_eq!(g.peers.len(), 1);
+        assert_eq!(g.peers[0].friend_id.as_deref(), Some("ac"));
+        assert_eq!(route(&a, &mut b, "ab"), 1);
+        assert_eq!(route(&a, &mut c, "ac"), 1);
+
+        // Chacun voit l'autre, connu seulement par A.
+        let gb = crate::groups::get(&b, g.id).unwrap();
+        assert_eq!(gb.friend_id.as_deref(), Some("ab"));
+        assert_eq!(gb.peers.len(), 1);
+        assert_eq!(gb.peers[0].name.as_deref(), Some("Cèdre"));
+        assert!(gb.peers[0].friend_id.is_none());
+        let gc = crate::groups::get(&c, g.id).unwrap();
+        assert_eq!(gc.peers[0].name.as_deref(), Some("Brume"));
+        assert_ne!(gb.peers[0].key, gc.peers[0].key);
+
+        // B écrit : A le reçoit et le relaie à C, en signalant son origine.
+        let m = post(&mut b, g.id, bo, "salut", None);
+        assert_eq!(route(&b, &mut a, "ab"), 1);
+        assert_eq!(route(&a, &mut b, "ab"), 0);
+        assert_eq!(route(&a, &mut c, "ac"), 1);
+        let at_a = find(&a, m).unwrap();
+        assert!(at_a.system.is_none() && at_a.friend_id.as_deref() == Some("ab"));
+        let at_c = find(&c, m).unwrap();
+        assert_eq!(at_c.group_id, Some(g.id));
+        assert_eq!(at_c.friend_id.as_deref(), Some("ac"));
+        let tag = at_c.system.clone().unwrap();
+        assert_eq!(
+            (tag.name.as_str(), tag.key.as_str()),
+            ("Brume", gc.peers[0].key.as_str())
+        );
+        assert_eq!(at_c.remote_authors[0].name, "Bo");
+
+        // C répond au message de B : la réponse revient jusqu'à B.
+        let r = post(&mut c, g.id, cy, "coucou", Some(m));
+        assert_eq!(route(&c, &mut a, "ac"), 1);
+        assert_eq!(route(&a, &mut b, "ab"), 1);
+        let at_b = find(&b, r).unwrap();
+        assert_eq!(at_b.reply_to, Some(m));
+        assert_eq!(at_b.system.unwrap().name, "Cèdre");
+
+        // Un message reçu une seconde fois (autre chemin) n'est pas réappliqué ni relayé.
+        assert_eq!(route(&a, &mut c, "ac"), 0);
+
+        // B modifie puis supprime : suivi chez C.
+        crate::messages::update(
+            &mut b,
+            m,
+            &crate::messages::NewMessage {
+                author_ids: vec![bo],
+                body: "salut à tous".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(route(&b, &mut a, "ab"), 1);
+        assert_eq!(route(&a, &mut c, "ac"), 1);
+        assert_eq!(find(&c, m).unwrap().body, "salut à tous");
+        crate::messages::delete(&b, m).unwrap();
+        assert_eq!(route(&b, &mut a, "ab"), 1);
+        assert_eq!(route(&a, &mut c, "ac"), 1);
+        assert!(find(&c, m).is_none() && find(&a, m).is_none());
+
+        // C retire sa réponse : relayé jusqu'à B.
+        crate::messages::delete(&c, r).unwrap();
+        assert_eq!(route(&c, &mut a, "ac"), 1);
+        assert_eq!(route(&a, &mut b, "ab"), 1);
+        assert!(find(&b, r).is_none());
+
+        // Destinataires choisis : impossibles quand le groupe compte plusieurs systèmes.
+        assert!(
+            crate::messages::post(
+                &mut b,
+                &crate::messages::NewMessage {
+                    author_ids: vec![bo],
+                    body: "x".into(),
+                    group_id: Some(g.id),
+                    remote_recipient_refs: vec![ana.to_string()],
+                    ..Default::default()
+                },
+            )
+            .is_err()
+        );
+
+        // A retire C : B l'apprend et ne le voit plus.
+        crate::groups::update(
+            &mut a,
+            g.id,
+            &GroupInput {
+                name: "Rando".into(),
+                member_ids: vec![ana],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(crate::groups::get(&a, g.id).unwrap().peers.is_empty());
+        assert_eq!(route(&a, &mut b, "ab"), 1);
+        assert!(crate::groups::get(&b, g.id).unwrap().peers.is_empty());
     }
 
     #[test]
@@ -1422,6 +1770,7 @@ mod tests {
             at: 5,
             group: None,
             reply: None,
+            from: None,
         };
         queue(&a, "f-1", env.clone()).unwrap();
         queue(&a, "f-1", env).unwrap();
@@ -1454,6 +1803,7 @@ mod tests {
                 at: 6,
                 group: None,
                 reply: None,
+                from: None,
             },
         )
         .unwrap();
@@ -1481,6 +1831,7 @@ mod tests {
                 name: "Thé".into(),
                 mine: vec![],
                 yours: vec![bob],
+                others: vec![],
             },
         )
         .unwrap();

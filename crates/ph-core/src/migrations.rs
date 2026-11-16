@@ -420,6 +420,34 @@ const MIGRATIONS: &[&str] = &[
             " AND NEW.key IN ('safety.plan', 'newcomer.plan', 'trusted.contact', 'front.favorites', 'system.name', 'system.avatar', 'system.kind', 'pluralkit.ignored', 'friends.identity', 'friends.privacy', 'friends.audience')",
             " AND OLD.key IN ('safety.plan', 'newcomer.plan', 'trusted.contact', 'front.favorites', 'system.name', 'system.avatar', 'system.kind', 'pluralkit.ignored', 'friends.identity', 'friends.privacy', 'friends.audience')"
         ),
+    ),    // Groupes à plusieurs systèmes amis : les autres systèmes du groupe (amis
+    // directs ou connus par un relais) et le système d'origine des messages
+    // relayés.
+    concat!(
+        "CREATE TABLE group_peer (
+            group_id BLOB NOT NULL REFERENCES chat_group (id) ON DELETE CASCADE,
+            key TEXT NOT NULL CHECK (length(key) = 16),
+            friend_id TEXT,
+            via TEXT,
+            name TEXT,
+            members TEXT NOT NULL DEFAULT '[]',
+            PRIMARY KEY (group_id, key)
+        ) STRICT, WITHOUT ROWID;
+        CREATE TABLE message_system (
+            message_id BLOB PRIMARY KEY NOT NULL REFERENCES message (id) ON DELETE CASCADE,
+            key TEXT NOT NULL,
+            name TEXT NOT NULL
+        ) STRICT, WITHOUT ROWID;\n",
+        track!(
+            "group_peer",
+            "json_array(hex(NEW.group_id), NEW.key)",
+            "json_array(hex(OLD.group_id), OLD.key)"
+        ),
+        track!(
+            "message_system",
+            "json_array(hex(NEW.message_id))",
+            "json_array(hex(OLD.message_id))"
+        ),
     ),
 ];
 

@@ -12,7 +12,7 @@ use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::friends::{self, Envelope, RemoteRef};
+use crate::friends::{self, Envelope, RemoteRef, SystemTag};
 use crate::front::{self, FrontSession};
 use crate::{CoreError, Result, members};
 
@@ -50,6 +50,9 @@ pub struct Message {
     pub remote_authors: Vec<RemoteRef>,
     /// Destinataires chez l'ami (message envoyé) ; vide : tout son système.
     pub remote_recipients: Vec<RemoteRef>,
+    /// Groupe à plusieurs systèmes : système d'origine, s'il n'est pas l'ami
+    /// qui nous l'a transmis.
+    pub system: Option<SystemTag>,
 }
 
 #[cfg_attr(feature = "specta", derive(specta::Type))]
@@ -109,7 +112,9 @@ fn columns() -> String {
          (SELECT json_group_array(json_object('ref', ref, 'name', name, 'color', color))
             FROM message_remote WHERE message_id = m.id AND role = 0),
          (SELECT json_group_array(json_object('ref', ref, 'name', name, 'color', color))
-            FROM message_remote WHERE message_id = m.id AND role = 1)"
+            FROM message_remote WHERE message_id = m.id AND role = 1),
+         (SELECT key FROM message_system WHERE message_id = m.id),
+         (SELECT name FROM message_system WHERE message_id = m.id)"
     )
 }
 
@@ -149,6 +154,13 @@ fn from_row(r: &Row<'_>) -> rusqlite::Result<Message> {
         by_system: r.get(12)?,
         remote_authors: refs(r.get(13)?),
         remote_recipients: refs(r.get(14)?),
+        system: match (
+            r.get::<_, Option<String>>(15)?,
+            r.get::<_, Option<String>>(16)?,
+        ) {
+            (Some(key), Some(name)) => Some(SystemTag { key, name }),
+            _ => None,
+        },
     })
 }
 
@@ -214,14 +226,30 @@ fn friend_of(conn: &Connection, input: &NewMessage) -> Result<Option<String>> {
     }
 }
 
-fn friend_and_dir(conn: &Connection, id: Uuid) -> Result<(Option<String>, bool)> {
+fn friend_and_dir(conn: &Connection, id: Uuid) -> Result<(Option<String>, bool, Option<Uuid>)> {
     conn.query_row(
-        "SELECT friend_id, outgoing FROM message WHERE id = ?1",
+        "SELECT friend_id, outgoing, group_id FROM message WHERE id = ?1",
         [id.as_bytes()],
-        |r| Ok((r.get(0)?, r.get(1)?)),
+        |r| {
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                r.get::<_, Option<[u8; 16]>>(2)?.map(Uuid::from_bytes),
+            ))
+        },
     )
     .optional()?
     .ok_or(CoreError::NotFound)
+}
+
+/// Groupe partagé avec plusieurs systèmes : les destinataires y sont tout le monde.
+fn multi_system(conn: &Connection, group: Option<Uuid>) -> Result<bool> {
+    Ok(match group {
+        Some(g) => conn
+            .prepare_cached("SELECT 1 FROM group_peer WHERE group_id = ?1")?
+            .exists([g.as_bytes()])?,
+        None => false,
+    })
 }
 
 /// Destinataires chez l'ami : validés d'après sa fiche, enregistrés, et
@@ -257,10 +285,19 @@ pub fn post(conn: &mut Connection, input: &NewMessage) -> Result<Message> {
     let tx = conn.transaction()?;
     let body = check(&tx, input)?;
     let friend = friend_of(&tx, input)?;
-    if let Some(parent) = input.reply_to
-        && get(&tx, parent)?.friend_id != friend
-    {
-        return Err(CoreError::Invalid("reply_to"));
+    if let Some(parent) = input.reply_to {
+        let p = get(&tx, parent)?;
+        // Dans un groupe, le message cité a pu passer par un autre ami.
+        let ok = match input.group_id {
+            Some(_) => p.group_id == input.group_id,
+            None => p.group_id.is_none() && p.friend_id == friend,
+        };
+        if !ok {
+            return Err(CoreError::Invalid("reply_to"));
+        }
+    }
+    if multi_system(&tx, input.group_id)? && !input.remote_recipient_refs.is_empty() {
+        return Err(CoreError::Invalid("recipients"));
     }
     let id = Uuid::now_v7();
     let now = crate::time::now_ms()?;
@@ -286,20 +323,21 @@ pub fn post(conn: &mut Connection, input: &NewMessage) -> Result<Message> {
     if let Some(f) = friend.as_deref() {
         let to = remote_to(&tx, id, f, &input.remote_recipient_refs)?;
         let authors = friends::own_refs(&tx, &dedup(&input.author_ids))?;
-        friends::queue(
-            &tx,
-            f,
-            Envelope::Msg {
-                id,
-                authors,
-                by_system: input.by_system,
-                to,
-                body: body.clone(),
-                at: now,
-                group: input.group_id,
-                reply: input.reply_to,
-            },
-        )?;
+        let env = Envelope::Msg {
+            id,
+            authors,
+            by_system: input.by_system,
+            to,
+            body: body.clone(),
+            at: now,
+            group: input.group_id,
+            reply: input.reply_to,
+            from: None,
+        };
+        friends::queue(&tx, f, env.clone())?;
+        if let Some(g) = input.group_id {
+            crate::groups::forward(&tx, g, f, &env)?;
+        }
     }
     let m = get(&tx, id)?;
     tx.commit()?;
@@ -310,12 +348,13 @@ pub fn post(conn: &mut Connection, input: &NewMessage) -> Result<Message> {
 pub fn update(conn: &mut Connection, id: Uuid, input: &NewMessage) -> Result<Message> {
     let tx = conn.transaction()?;
     let body = check(&tx, input)?;
-    let (friend, outgoing) = friend_and_dir(&tx, id)?;
+    let (friend, outgoing, group) = friend_and_dir(&tx, id)?;
     if friend.is_some() && !outgoing {
         return Err(CoreError::Invalid("incoming"));
     }
     if friend.is_some() && !input.recipient_ids.is_empty()
         || friend.is_none() && (!input.remote_recipient_refs.is_empty() || input.by_system)
+        || multi_system(&tx, group)? && !input.remote_recipient_refs.is_empty()
     {
         return Err(CoreError::Invalid("recipients"));
     }
@@ -336,18 +375,18 @@ pub fn update(conn: &mut Connection, id: Uuid, input: &NewMessage) -> Result<Mes
     if let Some(f) = friend.as_deref() {
         let to = remote_to(&tx, id, f, &input.remote_recipient_refs)?;
         let authors = friends::own_refs(&tx, &dedup(&input.author_ids))?;
-        friends::queue(
-            &tx,
-            f,
-            Envelope::Edit {
-                id,
-                authors,
-                by_system: input.by_system,
-                to,
-                body: body.clone(),
-                at: now,
-            },
-        )?;
+        let env = Envelope::Edit {
+            id,
+            authors,
+            by_system: input.by_system,
+            to,
+            body: body.clone(),
+            at: now,
+        };
+        friends::queue(&tx, f, env.clone())?;
+        if let Some(g) = group {
+            crate::groups::forward(&tx, g, f, &env)?;
+        }
     }
     let m = get(&tx, id)?;
     tx.commit()?;
@@ -405,11 +444,14 @@ pub fn set_pinned(conn: &Connection, id: Uuid, pinned: bool) -> Result<()> {
 /// Supprime un message. Envoyé à un ami encore présent, il est aussi retiré
 /// chez lui ; reçu d'un ami, il ne disparaît que chez soi.
 pub fn delete(conn: &Connection, id: Uuid) -> Result<()> {
-    let (friend, outgoing) = friend_and_dir(conn, id)?;
-    if let Some(f) = friend.as_deref().filter(|_| outgoing)
-        && friends::get(conn, f).is_ok()
-    {
-        friends::queue(conn, f, Envelope::Del { id })?;
+    let (friend, outgoing, group) = friend_and_dir(conn, id)?;
+    if let Some(f) = friend.as_deref().filter(|_| outgoing) {
+        if friends::get(conn, f).is_ok() {
+            friends::queue(conn, f, Envelope::Del { id })?;
+        }
+        if let Some(g) = group {
+            crate::groups::forward(conn, g, f, &Envelope::Del { id })?;
+        }
     }
     conn.execute("DELETE FROM message WHERE id = ?1", [id.as_bytes()])?;
     Ok(())

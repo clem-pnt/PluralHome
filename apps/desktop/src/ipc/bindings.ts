@@ -286,6 +286,8 @@ export type ChatGroup_Deserialize = {
 	friendId?: string | null,
 	/**  Membres de l'ami ; vide (groupe partagé) : tout son système. */
 	remoteMembers: RemoteRef[],
+	/**  Les autres systèmes du groupe. */
+	peers: GroupPeer_Deserialize[],
 };
 
 export type ChatGroup_Serialize = {
@@ -299,6 +301,8 @@ export type ChatGroup_Serialize = {
 	friendId: string | null,
 	/**  Membres de l'ami ; vide (groupe partagé) : tout son système. */
 	remoteMembers: RemoteRef[],
+	/**  Les autres systèmes du groupe. */
+	peers: GroupPeer_Serialize[],
 };
 
 export type CloudStatus = CloudStatus_Serialize | CloudStatus_Deserialize;
@@ -513,6 +517,11 @@ export type GroupInput_Deserialize = {
 	friendId?: string | null,
 	/**  Membres de l'ami (identifiants de sa fiche) ; vide : tout son système. */
 	remoteMemberRefs?: string[],
+	/**
+	 *  Autres amis du groupe (remplacent les précédents à la modification).
+	 *  Sans `friend_id`, le premier devient l'ami principal.
+	 */
+	peers?: PeerInput_Deserialize[],
 };
 
 export type GroupInput_Serialize = {
@@ -523,6 +532,41 @@ export type GroupInput_Serialize = {
 	friendId: string | null,
 	/**  Membres de l'ami (identifiants de sa fiche) ; vide : tout son système. */
 	remoteMemberRefs: string[],
+	/**
+	 *  Autres amis du groupe (remplacent les précédents à la modification).
+	 *  Sans `friend_id`, le premier devient l'ami principal.
+	 */
+	peers: PeerInput_Serialize[],
+};
+
+/**
+ *  Autre système d'un groupe : ami direct (`friend_id`) ou connu par un relais
+ *  (`name`).
+ */
+export type GroupPeer = GroupPeer_Serialize | GroupPeer_Deserialize;
+
+/**
+ *  Autre système d'un groupe : ami direct (`friend_id`) ou connu par un relais
+ *  (`name`).
+ */
+export type GroupPeer_Deserialize = {
+	key: string,
+	friendId?: string | null,
+	name?: string | null,
+	/**  Vide : tout son système. */
+	members: RemoteRef[],
+};
+
+/**
+ *  Autre système d'un groupe : ami direct (`friend_id`) ou connu par un relais
+ *  (`name`).
+ */
+export type GroupPeer_Serialize = {
+	key: string,
+	friendId: string | null,
+	name: string | null,
+	/**  Vide : tout son système. */
+	members: RemoteRef[],
 };
 
 export type IncomingRequest = IncomingRequest_Serialize | IncomingRequest_Deserialize;
@@ -670,6 +714,11 @@ export type Message_Deserialize = {
 	remoteAuthors: RemoteRef[],
 	/**  Destinataires chez l'ami (message envoyé) ; vide : tout son système. */
 	remoteRecipients: RemoteRef[],
+	/**
+	 *  Groupe à plusieurs systèmes : système d'origine, s'il n'est pas l'ami
+	 *  qui nous l'a transmis.
+	 */
+	system?: SystemTag | null,
 };
 
 export type Message_Serialize = {
@@ -698,6 +747,11 @@ export type Message_Serialize = {
 	remoteAuthors: RemoteRef[],
 	/**  Destinataires chez l'ami (message envoyé) ; vide : tout son système. */
 	remoteRecipients: RemoteRef[],
+	/**
+	 *  Groupe à plusieurs systèmes : système d'origine, s'il n'est pas l'ami
+	 *  qui nous l'a transmis.
+	 */
+	system: SystemTag | null,
 };
 
 export type NewEntry = NewEntry_Serialize | NewEntry_Deserialize;
@@ -825,6 +879,23 @@ export type PairPoll =
 "joined" | 
 /**  Expirée ou refusée. */
 "gone";
+
+/**  Ami ajouté au groupe en plus du premier. */
+export type PeerInput = PeerInput_Serialize | PeerInput_Deserialize;
+
+/**  Ami ajouté au groupe en plus du premier. */
+export type PeerInput_Deserialize = {
+	friendId: string,
+	/**  Identifiants de sa fiche ; vide : tout son système. */
+	memberRefs?: string[],
+};
+
+/**  Ami ajouté au groupe en plus du premier. */
+export type PeerInput_Serialize = {
+	friendId: string,
+	/**  Identifiants de sa fiche ; vide : tout son système. */
+	memberRefs: string[],
+};
 
 export type PendingDevice = {
 	id: string,
@@ -1101,6 +1172,15 @@ export type SystemProfile_Serialize = {
 	avatar: string | null,
 	/**  Absent tant que rien n'a été choisi (bases d'avant ce réglage : système). */
 	kind: SystemKind | null,
+};
+
+/**
+ *  Système d'origine d'un message relayé dans un groupe : un système du groupe
+ *  qui n'est pas forcément notre ami. `key` le désigne dans ce groupe seulement.
+ */
+export type SystemTag = {
+	key: string,
+	name: string,
 };
 
 export type TrustedContact = TrustedContact_Serialize | TrustedContact_Deserialize;

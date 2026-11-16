@@ -222,11 +222,19 @@ export function MessagesView() {
   const sharedSides = (group: ChatGroup) => {
     const friend = who.friends.get(group.friendId ?? "");
     const theirs = remoteNames(group.remoteMembers, friend);
+    // Les autres systèmes du groupe : nos amis d'abord, puis ceux connus par un relais.
+    const more = group.peers.map((p) => {
+      const f = p.friendId ? who.friends.get(p.friendId) : undefined;
+      const sys = p.friendId ? friendLabel(f) : (p.name ?? m.messages_friend_gone());
+      const list = remoteNames(p.members, f);
+      return list ? m.messages_friend_people({ names: list, system: sys }) : sys;
+    });
     return [
       names(group.memberIds, members.byId, 3) || systemLabel(system.data),
       theirs
         ? m.messages_friend_people({ names: theirs, system: friendLabel(friend) })
         : friendLabel(friend),
+      ...more,
     ].join(" · ");
   };
   const face = (conv: Conversation, size: number) => (
