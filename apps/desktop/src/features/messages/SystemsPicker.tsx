@@ -42,61 +42,81 @@ export function SystemsPicker({
   return (
     <fieldset className="systems">
       <legend className="field__label">{label}</legend>
-      {systems.map((s) => {
-        const on = value?.system === s.id;
-        const ids = on ? value.ids : [];
-        const whole = on && ids.length === 0;
-        return (
-          <Disclosure
-            key={s.id}
-            className="systems__item"
-            data-selected={on || undefined}
-            defaultExpanded={(on && ids.length > 0) || systems.length === 1}
-          >
-            <div className="systems__head">
-              <Avatar name={s.name} src={s.avatar} size={32} />
-              <span className="systems__name">
-                <strong>{s.name}</strong>
-                <span className="muted">
-                  {whole
-                    ? wholeLabel(s)
-                    : ids.length > 0
-                      ? m.picker_selected({ count: ids.length })
-                      : m.group_member_count({ count: s.members.length })}
-                </span>
-              </span>
-              <Checkbox
-                className="choice"
-                isSelected={whole}
-                onChange={(v) => onChange(v ? { system: s.id, ids: [] } : null)}
-              >
-                {wholeLabel(s)}
-              </Checkbox>
-              <AriaButton
-                slot="trigger"
-                className="systems__toggle"
-                aria-label={m.systems_members_of({ name: s.name })}
-              >
-                <Icon name="chevron-down" />
-              </AriaButton>
-            </div>
-            <DisclosurePanel className="systems__panel">
-              {s.members.length === 0 ? (
-                <p className="muted">{m.systems_no_members()}</p>
-              ) : (
-                <MemberPicker
-                  label={m.systems_members_of({ name: s.name })}
-                  members={s.members}
-                  value={ids}
-                  onChange={(next) =>
-                    onChange(next.length > 0 ? { system: s.id, ids: next } : null)
-                  }
-                />
-              )}
-            </DisclosurePanel>
-          </Disclosure>
-        );
-      })}
+      {systems.map((s) => (
+        <SystemRow
+          key={s.id}
+          system={s}
+          pick={value?.system === s.id ? value.ids : null}
+          onChange={(ids) => onChange(ids === null ? null : { system: s.id, ids })}
+          wholeLabel={wholeLabel(s)}
+          expanded={systems.length === 1}
+        />
+      ))}
     </fieldset>
+  );
+}
+
+/**
+ * Un système de la liste. `pick` : `null` s'il n'est pas choisi, sinon ses
+ * membres choisis (aucun : le système entier).
+ */
+export function SystemRow({
+  system: s,
+  pick,
+  onChange,
+  wholeLabel = m.systems_whole(),
+  expanded = false,
+}: {
+  system: PickSystem;
+  pick: string[] | null;
+  onChange: (pick: string[] | null) => void;
+  wholeLabel?: string;
+  expanded?: boolean;
+}) {
+  const on = pick !== null;
+  const ids = pick ?? [];
+  const whole = on && ids.length === 0;
+  return (
+    <Disclosure
+      className="systems__item"
+      data-selected={on || undefined}
+      defaultExpanded={(on && ids.length > 0) || expanded}
+    >
+      <div className="systems__head">
+        <Avatar name={s.name} src={s.avatar} size={32} />
+        <span className="systems__name">
+          <strong>{s.name}</strong>
+          <span className="muted">
+            {whole
+              ? wholeLabel
+              : ids.length > 0
+                ? m.picker_selected({ count: ids.length })
+                : m.group_member_count({ count: s.members.length })}
+          </span>
+        </span>
+        <Checkbox className="choice" isSelected={whole} onChange={(v) => onChange(v ? [] : null)}>
+          {wholeLabel}
+        </Checkbox>
+        <AriaButton
+          slot="trigger"
+          className="systems__toggle"
+          aria-label={m.systems_members_of({ name: s.name })}
+        >
+          <Icon name="chevron-down" />
+        </AriaButton>
+      </div>
+      <DisclosurePanel className="systems__panel">
+        {s.members.length === 0 ? (
+          <p className="muted">{m.systems_no_members()}</p>
+        ) : (
+          <MemberPicker
+            label={m.systems_members_of({ name: s.name })}
+            members={s.members}
+            value={ids}
+            onChange={(next) => onChange(next.length > 0 ? next : null)}
+          />
+        )}
+      </DisclosurePanel>
+    </Disclosure>
   );
 }

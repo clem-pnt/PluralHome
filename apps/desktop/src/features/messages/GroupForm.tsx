@@ -6,9 +6,8 @@ import { m } from "../../paraglide/messages.js";
 import { Button } from "../../ui/Button";
 import { TextField } from "../../ui/TextField";
 import { AvatarInput } from "../members/AvatarInput";
-import { MemberPicker } from "../members/MemberPicker";
-import { useFriendSystems } from "./NewConversation";
-import { type SystemPick, SystemsPicker } from "./SystemsPicker";
+import { useFriendSystems, useSelfSystem } from "./NewConversation";
+import { type SystemPick, SystemRow } from "./SystemsPicker";
 import { useDeleteGroup, useSaveGroup } from "./useGroups";
 
 const MAX_NAME = 100;
@@ -45,7 +44,15 @@ export function GroupForm({
   const save = useSaveGroup();
   const remove = useDeleteGroup();
   const [name, setName] = useState(group?.name ?? seed?.name ?? "");
-  const [ids, setIds] = useState<string[]>(group?.memberIds ?? seed?.memberIds ?? []);
+  const self = useSelfSystem(members);
+  // Notre côté : `null` personne, `[]` tout le système, sinon certains membres.
+  const [ids, setIds] = useState<string[] | null>(() => {
+    const start = group?.memberIds ?? seed?.memberIds;
+    if (!start) return null;
+    if (start.length === 0) return [];
+    const all = new Set(members.map((x) => x.id));
+    return start.length === all.size && start.every((id) => all.has(id)) ? [] : start;
+  });
   const [avatar, setAvatar] = useState<string | null>(group?.avatar ?? null);
   const [avatarEdit, setAvatarEdit] = useState<AvatarEdit>({ kind: "keep" });
   const [confirm, setConfirm] = useState(false);
@@ -63,7 +70,10 @@ export function GroupForm({
         : null,
   );
   const shared = share !== null;
-  const valid = name.trim().length > 0 && (ids.length > 0 || shared);
+  const valid = name.trim().length > 0 && ids !== null && (ids.length > 0 || members.length > 0);
+  // Tout notre système : un groupe partagé le note sans liste (les nouveaux
+  // membres en feront partie), un groupe local liste chacun.
+  const memberIds = ids === null ? [] : ids.length > 0 || shared ? ids : members.map((x) => x.id);
 
   if (confirm && group) {
     return (
@@ -104,7 +114,7 @@ export function GroupForm({
             id: group?.id ?? null,
             input: {
               name: name.trim(),
-              memberIds: ids,
+              memberIds,
               avatar: avatarEdit,
               friendId: share?.system ?? null,
               remoteMemberRefs: share?.ids ?? [],
@@ -139,21 +149,26 @@ export function GroupForm({
         onChange={setName}
         maxLength={MAX_NAME}
       />
-      <MemberPicker label={m.group_members()} members={members} value={ids} onChange={setIds} />
-      {shared && ids.length === 0 && <p className="field__hint">{m.group_shared_all_hint()}</p>}
-      {friends.length > 0 && (
-        <SystemsPicker
-          label={group || seed ? m.group_shared_with() : m.group_share_with()}
-          systems={friends}
-          value={share}
-          onChange={(v) => {
-            // Une fois partagé, le groupe le reste : on ne peut que changer
-            // les membres de l'ami.
-            if (fixedFriend && v === null) setShare({ system: fixedFriend, ids: [] });
-            else setShare(v);
-          }}
-        />
-      )}
+      <fieldset className="systems">
+        <legend className="field__label">{m.group_members()}</legend>
+        {friends.length > 0 && !fixedFriend && (
+          <p className="field__hint">{m.group_members_hint()}</p>
+        )}
+        <SystemRow system={self} pick={ids} onChange={setIds} expanded={friends.length === 0} />
+        {friends.map((f) => (
+          <SystemRow
+            key={f.id}
+            system={f}
+            pick={share?.system === f.id ? share.ids : null}
+            onChange={(next) => {
+              // Une fois partagé, le groupe le reste : on ne peut que changer
+              // les membres de l'ami.
+              if (next === null) setShare(fixedFriend ? { system: fixedFriend, ids: [] } : null);
+              else setShare({ system: f.id, ids: next });
+            }}
+          />
+        ))}
+      </fieldset>
       {save.isError && (
         <p className="alert" role="alert">
           {errorMessage(save.error)}

@@ -46,6 +46,7 @@ import {
   friendLabel,
   remoteFaces,
   remoteNames,
+  systemLabel,
   useWho,
   type Who,
 } from "./who";
@@ -204,13 +205,39 @@ export function MessagesView() {
     const rest = conv.ids.filter((id) => !present.includes(id));
     return rest.length >= 2 ? rest : conv.ids;
   };
+  // Groupe partagé : un visage de chaque système, comme une discussion à deux.
+  const sharedFaces = (conv: Conversation): Person[] => {
+    const friend = who.friends.get(conv.friendId ?? "");
+    const ours = peopleOf(faceIds(conv), members.byId)[0] ?? {
+      name: systemLabel(system.data),
+      avatar: system.data?.avatar ?? null,
+    };
+    const theirs = remoteFaces(conv.remote ?? [], friend)[0] ?? {
+      name: friendLabel(friend),
+      avatar: friend?.avatar ?? null,
+    };
+    return [ours, theirs];
+  };
+  /** Les deux côtés d'un groupe partagé, pour son sous-titre. */
+  const sharedSides = (group: ChatGroup) => {
+    const friend = who.friends.get(group.friendId ?? "");
+    const theirs = remoteNames(group.remoteMembers, friend);
+    return [
+      names(group.memberIds, members.byId, 3) || systemLabel(system.data),
+      theirs
+        ? m.messages_friend_people({ names: theirs, system: friendLabel(friend) })
+        : friendLabel(friend),
+    ].join(" · ");
+  };
   const face = (conv: Conversation, size: number) => (
     <ConvFace
       conv={conv}
       people={
         conv.friendId && !conv.group
           ? remoteFaces(conv.remote ?? [], who.friends.get(conv.friendId))
-          : peopleOf(faceIds(conv), members.byId)
+          : conv.friendId
+            ? sharedFaces(conv)
+            : peopleOf(faceIds(conv), members.byId)
       }
       friend={conv.friendId ? who.friends.get(conv.friendId) : undefined}
       system={system.data}
@@ -319,7 +346,7 @@ export function MessagesView() {
                             ? lastMsg.body
                             : group
                               ? group.friendId
-                                ? friendLabel(who.friends.get(group.friendId))
+                                ? sharedSides(group)
                                 : m.group_member_count({ count: group.memberIds.length })
                               : m.messages_conv_empty()}
                         </span>
@@ -380,12 +407,7 @@ export function MessagesView() {
                     <span className="dm__pane-name">{current.group.name}</span>
                     <span className="muted dm__pane-sub">
                       {current.group.friendId
-                        ? [
-                            names(current.group.memberIds, members.byId, 3),
-                            friendLabel(who.friends.get(current.group.friendId)),
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")
+                        ? sharedSides(current.group)
                         : names(current.group.memberIds, members.byId, 4)}
                     </span>
                   </AriaButton>

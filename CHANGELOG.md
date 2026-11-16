@@ -16,6 +16,7 @@
 - Votes : notification sur la page Front pour les votes en cours auxquels un membre présent n'a pas encore répondu, et pour les votes terminés dont le résultat n'a pas encore été vu. Une pastille sur « Vote » en donne le nombre. Les votes déjà clos avant la mise à jour comptent comme vus.
 - Messages : on peut modifier toutes les discussions, y compris les discussions privées et celles créées avant la mise à jour (nom, photo, membres). La discussion devient un groupe et garde ses messages. Pour une discussion avec un ami, seuls vos messages passent dans le groupe ; les siens restent dans l'ancienne discussion de son côté.
 - Confidentialité : elle se règle dans Paramètres, rangée par catégories (Profil, Activité, Messages, Membres masqués) comme sur Discord, avec à côté une page « Demandes et blocages ». Chaque information a son niveau d'accès : tout le monde, amis uniquement, liste d'amis choisie ou personne. Les anciens réglages propres à un ami sont repris automatiquement dans ces listes. Sur la fiche d'un ami ne reste que son surnom.
+- Groupes : le choix des membres s'affiche comme pour une discussion. Votre système et un système ami apparaissent dans la même liste, chacun en entier ou avec certains alters. Un groupe avec un ami montre un visage de chaque côté.
 
 ## 0.12.1 — Correctif écran vide
 
