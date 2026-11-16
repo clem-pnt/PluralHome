@@ -2,6 +2,8 @@
 
 ## Non publié
 
+## 0.13.0 — Groupes à plusieurs systèmes, mode singlet, votes datés
+
 - Installation : on choisit d'abord si l'on est un système ou une seule personne (singlet), puis si l'on se connecte à un compte Aragonite ou si l'on continue en invité.
 - Mode singlet : le front, les membres et les votes sont masqués, sans rien supprimer. Le profil se change dans Paramètres > Système.
 - Connexion Aragonite : elle s'ouvre dans une fenêtre de l'application (session privée) au lieu du navigateur. Fermer la fenêtre annule la connexion.
