@@ -142,11 +142,11 @@ export const commands = {
 	cloudSyncNow: () => typedError<CloudStatus_Serialize, IpcError_Serialize>(__TAURI_INVOKE("cloud_sync_now")),
 	/**  Amis connus de cet appareil (fiches déchiffrées). */
 	friendsList: () => typedError<Friend_Serialize[], IpcError_Serialize>(__TAURI_INVOKE("friends_list")),
-	/**  Réglages par défaut : ce que voient les amis sans réglage propre. */
+	/**  Réglages de confidentialité : qui voit quoi, qui peut nous écrire. */
 	friendsPrivacyGet: () => typedError<Privacy_Serialize, IpcError_Serialize>(__TAURI_INVOKE("friends_privacy_get")),
 	friendsPrivacySet: (privacy: Privacy_Deserialize) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("friends_privacy_set", { privacy })),
-	/**  Surnom et réglages propres à un ami (`None` : réglages par défaut). */
-	friendsSetPref: (id: string, nickname: string | null, privacy: Privacy_Deserialize | null) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("friends_set_pref", { id, nickname, privacy })),
+	/**  Surnom donné à un ami. */
+	friendsSetPref: (id: string, nickname: string | null) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("friends_set_pref", { id, nickname })),
 	friendsSettings: () => typedError<Settings, IpcError_Serialize>(__TAURI_INVOKE("friends_settings")),
 	/**  Accepter ou non les nouvelles demandes. */
 	friendsSetOpen: (open: boolean) => typedError<null, IpcError_Serialize>(__TAURI_INVOKE("friends_set_open", { open })),
@@ -195,6 +195,13 @@ export type Account_Serialize = {
 	/**  Photo du compte Aragonite, recadrée ici et gardée dans le coffre (URL `data:`). */
 	avatar: string | null,
 };
+
+/**  Qui a accès à un réglage. */
+export type Audience = 
+/**  Y compris les systèmes qui ne sont pas (encore) amis : invitation, demande. */
+"everyone" | "friends" | 
+/**  Seulement les amis de la liste. */
+"chosen" | "nobody";
 
 export type AvatarEdit = 
 /**  Ne pas toucher à l'image actuelle. */
@@ -419,8 +426,6 @@ export type Friend_Deserialize = {
 	acceptsMessages: boolean,
 	/**  Code de vérification à comparer de vive voix. */
 	code: string,
-	/**  Réglages propres à cet ami ; `None` : réglages par défaut. */
-	privacy?: Privacy_Deserialize | null,
 	cardAt?: number | null,
 	createdAt: number | null,
 };
@@ -439,8 +444,6 @@ export type Friend_Serialize = {
 	acceptsMessages: boolean,
 	/**  Code de vérification à comparer de vive voix. */
 	code: string,
-	/**  Réglages propres à cet ami ; `None` : réglages par défaut. */
-	privacy: Privacy_Serialize | null,
 	cardAt: number | null,
 	createdAt: number | null,
 };
@@ -907,35 +910,35 @@ export type Poll_Serialize = {
 	options: PollOption[],
 };
 
-/**  Ce qu'un ami peut voir de nous et faire avec nous. */
+/**  Réglages de confidentialité : qui voit quoi et qui peut nous écrire. */
 export type Privacy = Privacy_Serialize | Privacy_Deserialize;
 
-/**  Ce qu'un ami peut voir de nous et faire avec nous. */
+/**  Réglages de confidentialité : qui voit quoi et qui peut nous écrire. */
 export type Privacy_Deserialize = {
 	/**  Liste des membres (sinon : seulement le nom et la photo du système). */
-	members?: boolean,
-	avatars?: boolean,
-	pronouns?: boolean,
-	descriptions?: boolean,
+	members: Rule_Deserialize,
+	avatars: Rule_Deserialize,
+	pronouns: Rule_Deserialize,
+	descriptions: Rule_Deserialize,
 	/**  Qui est au front en ce moment. */
-	front?: boolean,
-	/**  Peut nous écrire. */
-	messages?: boolean,
+	front: Rule_Deserialize,
+	/**  Peut nous écrire (« tout le monde » revient à « amis » : il faut être ami pour écrire). */
+	messages: Rule_Deserialize,
 	/**  Membres jamais montrés, même si la liste l'est. */
 	hidden?: string[],
 };
 
-/**  Ce qu'un ami peut voir de nous et faire avec nous. */
+/**  Réglages de confidentialité : qui voit quoi et qui peut nous écrire. */
 export type Privacy_Serialize = {
 	/**  Liste des membres (sinon : seulement le nom et la photo du système). */
-	members: boolean,
-	avatars: boolean,
-	pronouns: boolean,
-	descriptions: boolean,
+	members: Rule_Serialize,
+	avatars: Rule_Serialize,
+	pronouns: Rule_Serialize,
+	descriptions: Rule_Serialize,
 	/**  Qui est au front en ce moment. */
-	front: boolean,
-	/**  Peut nous écrire. */
-	messages: boolean,
+	front: Rule_Serialize,
+	/**  Peut nous écrire (« tout le monde » revient à « amis » : il faut être ami pour écrire). */
+	messages: Rule_Serialize,
 	/**  Membres jamais montrés, même si la liste l'est. */
 	hidden: string[],
 };
@@ -993,6 +996,21 @@ export type Requests_Deserialize = {
 export type Requests_Serialize = {
 	incoming: IncomingRequest_Serialize[],
 	outgoing: OutgoingRequest_Serialize[],
+};
+
+/**  Un réglage : qui y a accès, et pour [`Audience::Chosen`], quels amis. */
+export type Rule = Rule_Serialize | Rule_Deserialize;
+
+/**  Un réglage : qui y a accès, et pour [`Audience::Chosen`], quels amis. */
+export type Rule_Deserialize = {
+	who: Audience,
+	friends?: string[],
+};
+
+/**  Un réglage : qui y a accès, et pour [`Audience::Chosen`], quels amis. */
+export type Rule_Serialize = {
+	who: Audience,
+	friends: string[],
 };
 
 export type SafetyPlan = SafetyPlan_Serialize | SafetyPlan_Deserialize;

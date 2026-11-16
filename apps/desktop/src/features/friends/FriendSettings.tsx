@@ -11,12 +11,11 @@ import { FriendError } from "./FriendError";
 import { PrivacyForm } from "./PrivacyForm";
 import { refreshFriends } from "./useFriends";
 
-/** Réglages de confidentialité : par défaut pour tous les amis, demandes, blocages. */
-export function PrivacyPanel() {
+/** Paramètres, Amis : demandes acceptées ou non, et systèmes bloqués. */
+export function RequestsSettings() {
   return (
     <>
       <OpenPanel />
-      <DefaultPrivacyPanel />
       <BlocksPanel />
     </>
   );
@@ -50,7 +49,8 @@ function OpenPanel() {
   );
 }
 
-function DefaultPrivacyPanel() {
+/** Paramètres, Confidentialité : ce que voient les autres systèmes, réglage par réglage. */
+export function PrivacySettings() {
   const members = useMembers();
   const current = useQuery({ queryKey: keys.friendsPrivacy, queryFn: api.friends.privacy });
   const [draft, setDraft] = useState<Privacy | null>(null);

@@ -16,7 +16,10 @@ use crate::cloudkey::{FriendIdentity, InviteSecret, friend_code};
 use crate::{CoreError, Result, front, kv, members, outbox, system};
 
 const K_IDENTITY: &str = "friends.identity";
+/// Ancien format (interrupteurs), tenu à jour pour les appareils pas encore mis à jour.
 const K_PRIVACY: &str = "friends.privacy";
+/// Réglages par niveau d'accès.
+const K_AUDIENCE: &str = "friends.audience";
 /// Empreinte de la dernière fiche publiée pour un ami (locale à l'appareil).
 const K_CARD_HASH: &str = "friends.cardhash.";
 pub const OUTBOX_TOPIC: &str = "friend";
@@ -27,12 +30,13 @@ pub const MAX_NICKNAME: usize = 64;
 const CARD_BUDGET: usize = 2_000_000;
 const MAX_REF: usize = 64;
 
-/// Ce qu'un ami peut voir de nous et faire avec nous.
+/// Ce qu'une fiche montre : réglages « à plat » pour un destinataire donné.
+/// C'est aussi le format historique de `friends.privacy` et `friend_pref.privacy`,
+/// gardé pour les appareils pas encore mis à jour.
 #[allow(clippy::struct_excessive_bools)] // réglages indépendants, un interrupteur chacun
-#[cfg_attr(feature = "specta", derive(specta::Type))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
-pub struct Privacy {
+pub struct Shown {
     /// Liste des membres (sinon : seulement le nom et la photo du système).
     pub members: bool,
     pub avatars: bool,
@@ -46,7 +50,7 @@ pub struct Privacy {
     pub hidden: Vec<Uuid>,
 }
 
-impl Default for Privacy {
+impl Default for Shown {
     fn default() -> Self {
         Self {
             members: true,
@@ -56,6 +60,128 @@ impl Default for Privacy {
             front: false,
             messages: true,
             hidden: Vec::new(),
+        }
+    }
+}
+
+/// Qui a accès à un réglage.
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Audience {
+    /// Y compris les systèmes qui ne sont pas (encore) amis : invitation, demande.
+    Everyone,
+    Friends,
+    /// Seulement les amis de la liste.
+    Chosen,
+    Nobody,
+}
+
+/// Un réglage : qui y a accès, et pour [`Audience::Chosen`], quels amis.
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Rule {
+    pub who: Audience,
+    #[serde(default)]
+    pub friends: Vec<String>,
+}
+
+impl Rule {
+    const fn to(who: Audience) -> Self {
+        Self {
+            who,
+            friends: Vec::new(),
+        }
+    }
+
+    fn allows(&self, viewer: Viewer<'_>) -> bool {
+        match (self.who, viewer) {
+            (Audience::Everyone, _) | (Audience::Friends, Viewer::Friend(_)) => true,
+            (Audience::Chosen, Viewer::Friend(id)) => self.friends.iter().any(|f| f == id),
+            _ => false,
+        }
+    }
+}
+
+/// Qui regarde notre fiche.
+#[derive(Debug, Clone, Copy)]
+pub enum Viewer<'a> {
+    /// Système pas encore ami (invitation, demande en attente).
+    Stranger,
+    Friend(&'a str),
+}
+
+/// Réglages de confidentialité : qui voit quoi et qui peut nous écrire.
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Privacy {
+    /// Liste des membres (sinon : seulement le nom et la photo du système).
+    pub members: Rule,
+    pub avatars: Rule,
+    pub pronouns: Rule,
+    pub descriptions: Rule,
+    /// Qui est au front en ce moment.
+    pub front: Rule,
+    /// Peut nous écrire (« tout le monde » revient à « amis » : il faut être ami pour écrire).
+    pub messages: Rule,
+    /// Membres jamais montrés, même si la liste l'est.
+    #[serde(default)]
+    pub hidden: Vec<Uuid>,
+}
+
+impl Default for Privacy {
+    fn default() -> Self {
+        Self {
+            members: Rule::to(Audience::Everyone),
+            avatars: Rule::to(Audience::Everyone),
+            pronouns: Rule::to(Audience::Everyone),
+            descriptions: Rule::to(Audience::Nobody),
+            front: Rule::to(Audience::Nobody),
+            messages: Rule::to(Audience::Friends),
+            hidden: Vec::new(),
+        }
+    }
+}
+
+impl Privacy {
+    /// Ce que voit ce destinataire.
+    #[must_use]
+    pub fn shown_to(&self, viewer: Viewer<'_>) -> Shown {
+        Shown {
+            members: self.members.allows(viewer),
+            avatars: self.avatars.allows(viewer),
+            pronouns: self.pronouns.allows(viewer),
+            descriptions: self.descriptions.allows(viewer),
+            front: self.front.allows(viewer),
+            messages: self.messages.allows(viewer),
+            hidden: self.hidden.clone(),
+        }
+    }
+
+    fn rules_mut(&mut self) -> [&mut Rule; 6] {
+        [
+            &mut self.members,
+            &mut self.avatars,
+            &mut self.pronouns,
+            &mut self.descriptions,
+            &mut self.front,
+            &mut self.messages,
+        ]
+    }
+
+    /// Projection à plat pour les appareils restés à l'ancien format.
+    fn legacy(&self) -> Shown {
+        let on = |r: &Rule| matches!(r.who, Audience::Everyone | Audience::Friends);
+        Shown {
+            members: on(&self.members),
+            avatars: on(&self.avatars),
+            pronouns: on(&self.pronouns),
+            descriptions: on(&self.descriptions),
+            front: on(&self.front),
+            messages: on(&self.messages),
+            hidden: self.hidden.clone(),
         }
     }
 }
@@ -122,8 +248,6 @@ pub struct Friend {
     pub accepts_messages: bool,
     /// Code de vérification à comparer de vive voix.
     pub code: String,
-    /// Réglages propres à cet ami ; `None` : réglages par défaut.
-    pub privacy: Option<Privacy>,
     #[cfg_attr(feature = "specta", specta(type = Option<f64>))]
     pub card_at: Option<i64>,
     #[cfg_attr(feature = "specta", specta(type = f64))]
@@ -252,65 +376,168 @@ pub fn reset_identity(conn: &Connection) -> Result<FriendIdentity> {
 }
 
 pub fn privacy(conn: &Connection) -> Result<Privacy> {
-    Ok(kv::get(conn, K_PRIVACY)?
-        .and_then(|j| serde_json::from_str(&j).ok())
-        .unwrap_or_default())
+    if let Some(p) = kv::get(conn, K_AUDIENCE)?.and_then(|j| serde_json::from_str(&j).ok()) {
+        return Ok(p);
+    }
+    legacy_privacy(conn)
 }
 
+/// Réglages d'avant les niveaux d'accès : un interrupteur par défaut, plus des
+/// réglages propres à certains amis. Traduits sans rien écrire.
+fn legacy_privacy(conn: &Connection) -> Result<Privacy> {
+    let Some(base) =
+        kv::get(conn, K_PRIVACY)?.map(|j| serde_json::from_str::<Shown>(&j).unwrap_or_default())
+    else {
+        let overrides: i64 = conn.query_row(
+            "SELECT count(*) FROM friend_pref WHERE privacy IS NOT NULL",
+            [],
+            |r| r.get(0),
+        )?;
+        if overrides == 0 {
+            return Ok(Privacy::default());
+        }
+        return derive(conn, &Shown::default());
+    };
+    derive(conn, &base)
+}
+
+fn derive(conn: &Connection, base: &Shown) -> Result<Privacy> {
+    let ids: Vec<String> = conn
+        .prepare("SELECT id FROM friend ORDER BY id")?
+        .query_map([], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    let mut per: Vec<(String, Shown)> = Vec::with_capacity(ids.len());
+    let mut hidden = base.hidden.clone();
+    for id in ids {
+        let own: Option<Shown> = conn
+            .query_row(
+                "SELECT privacy FROM friend_pref WHERE id = ?1",
+                [&id],
+                |r| r.get::<_, Option<String>>(0),
+            )
+            .optional()?
+            .flatten()
+            .and_then(|j| serde_json::from_str(&j).ok());
+        let s = own.unwrap_or_else(|| base.clone());
+        for h in &s.hidden {
+            if !hidden.contains(h) {
+                hidden.push(*h);
+            }
+        }
+        per.push((id, s));
+    }
+    let rule = |get: fn(&Shown) -> bool| -> Rule {
+        if per.iter().all(|(_, s)| get(s) == get(base)) {
+            return Rule::to(if get(base) {
+                Audience::Everyone
+            } else {
+                Audience::Nobody
+            });
+        }
+        let on: Vec<String> = per
+            .iter()
+            .filter(|(_, s)| get(s))
+            .map(|(id, _)| id.clone())
+            .collect();
+        if on.is_empty() {
+            Rule::to(Audience::Nobody)
+        } else if on.len() == per.len() {
+            Rule::to(Audience::Friends)
+        } else {
+            Rule {
+                who: Audience::Chosen,
+                friends: on,
+            }
+        }
+    };
+    let mut p = Privacy {
+        members: rule(|s| s.members),
+        avatars: rule(|s| s.avatars),
+        pronouns: rule(|s| s.pronouns),
+        descriptions: rule(|s| s.descriptions),
+        front: rule(|s| s.front),
+        messages: rule(|s| s.messages),
+        hidden,
+    };
+    // Écrire n'a jamais été ouvert aux inconnus.
+    if p.messages.who == Audience::Everyone {
+        p.messages.who = Audience::Friends;
+    }
+    Ok(p)
+}
+
+/// Enregistre les réglages. Remplace les anciens réglages propres à chaque ami
+/// et garde une projection à l'ancien format pour les autres appareils.
 pub fn set_privacy(conn: &Connection, p: &Privacy) -> Result<()> {
-    let json = serde_json::to_string(p).map_err(|_| CoreError::Invalid("privacy"))?;
-    kv::set(conn, K_PRIVACY, &json)
+    let mut p = p.clone();
+    for r in p.rules_mut() {
+        if r.who == Audience::Chosen {
+            for f in &r.friends {
+                check_ref(f)?;
+            }
+            r.friends.sort();
+            r.friends.dedup();
+        } else {
+            r.friends.clear();
+        }
+    }
+    if p.messages.who == Audience::Everyone {
+        p.messages.who = Audience::Friends;
+    }
+    p.hidden.sort();
+    p.hidden.dedup();
+    let json = serde_json::to_string(&p).map_err(|_| CoreError::Invalid("privacy"))?;
+    let legacy = serde_json::to_string(&p.legacy()).map_err(|_| CoreError::Invalid("privacy"))?;
+    kv::set(conn, K_AUDIENCE, &json)?;
+    kv::set(conn, K_PRIVACY, &legacy)?;
+    conn.execute(
+        "UPDATE friend_pref SET privacy = NULL WHERE privacy IS NOT NULL",
+        [],
+    )?;
+    conn.execute("DELETE FROM friend_pref WHERE nickname IS NULL", [])?;
+    Ok(())
 }
 
-type Pref = (Option<String>, Option<Privacy>);
-
-fn pref(conn: &Connection, id: &str) -> Result<Pref> {
-    let row: Option<(Option<String>, Option<String>)> = conn
+fn nickname(conn: &Connection, id: &str) -> Result<Option<String>> {
+    Ok(conn
         .query_row(
-            "SELECT nickname, privacy FROM friend_pref WHERE id = ?1",
+            "SELECT nickname FROM friend_pref WHERE id = ?1",
             [id],
-            |r| Ok((r.get(0)?, r.get(1)?)),
+            |r| r.get::<_, Option<String>>(0),
         )
-        .optional()?;
-    Ok(row.map_or((None, None), |(n, p)| {
-        (n, p.and_then(|p| serde_json::from_str(&p).ok()))
-    }))
+        .optional()?
+        .flatten())
 }
 
-/// Surnom et réglages propres à un ami (`privacy` `None` : réglages par défaut).
-pub fn set_pref(
-    conn: &Connection,
-    id: &str,
-    nickname: Option<&str>,
-    privacy: Option<&Privacy>,
-) -> Result<()> {
+/// Surnom donné à un ami.
+pub fn set_pref(conn: &Connection, id: &str, nickname: Option<&str>) -> Result<()> {
     check_ref(id)?;
     let nickname = nickname.map(str::trim).filter(|n| !n.is_empty());
     if nickname.is_some_and(|n| n.chars().count() > MAX_NICKNAME) {
         return Err(CoreError::Invalid("nickname"));
     }
-    let privacy = privacy
-        .map(serde_json::to_string)
-        .transpose()
-        .map_err(|_| CoreError::Invalid("privacy"))?;
-    if nickname.is_none() && privacy.is_none() {
-        conn.execute("DELETE FROM friend_pref WHERE id = ?1", [id])?;
-    } else {
-        conn.execute(
-            "INSERT INTO friend_pref (id, nickname, privacy) VALUES (?1, ?2, ?3)
-             ON CONFLICT (id) DO UPDATE SET nickname = excluded.nickname, privacy = excluded.privacy",
-            params![id, nickname, privacy],
-        )?;
+    match nickname {
+        None => {
+            conn.execute("UPDATE friend_pref SET nickname = NULL WHERE id = ?1", [id])?;
+            conn.execute(
+                "DELETE FROM friend_pref WHERE id = ?1 AND privacy IS NULL",
+                [id],
+            )?;
+        }
+        Some(n) => {
+            conn.execute(
+                "INSERT INTO friend_pref (id, nickname) VALUES (?1, ?2)
+                 ON CONFLICT (id) DO UPDATE SET nickname = excluded.nickname",
+                params![id, n],
+            )?;
+        }
     }
     Ok(())
 }
 
-/// Réglages qui s'appliquent à cet ami.
-pub fn privacy_for(conn: &Connection, id: &str) -> Result<Privacy> {
-    match pref(conn, id)?.1 {
-        Some(p) => Ok(p),
-        None => privacy(conn),
-    }
+/// Ce que voit cet ami.
+pub fn privacy_for(conn: &Connection, id: &str) -> Result<Shown> {
+    Ok(privacy(conn)?.shown_to(Viewer::Friend(id)))
 }
 
 // ---------------------------------------------------------------------------
@@ -318,7 +545,7 @@ pub fn privacy_for(conn: &Connection, id: &str) -> Result<Privacy> {
 // ---------------------------------------------------------------------------
 
 /// Fiche telle qu'un ami ayant ces réglages la verra.
-pub fn build_card(conn: &Connection, p: &Privacy) -> Result<Card> {
+pub fn build_card(conn: &Connection, p: &Shown) -> Result<Card> {
     let sys = system::get(conn)?;
     let mut members_out = Vec::new();
     if p.members {
@@ -382,7 +609,12 @@ fn card_json(card: &Card) -> Result<String> {
 
 /// Fiche par défaut scellée pour un système pas encore ami (demande ou acceptation).
 pub fn sealed_card_for(conn: &Connection, their: &[u8; 32]) -> Result<String> {
-    let json = card_json(&build_card(conn, &privacy(conn)?)?)?;
+    let p = privacy(conn)?;
+    let mut shown = p.shown_to(Viewer::Stranger);
+    // Cette fiche reste celle de l'ami tant que la sienne n'est pas republiée :
+    // elle annonce déjà s'il pourra nous écrire.
+    shown.messages = p.messages.who == Audience::Friends;
+    let json = card_json(&build_card(conn, &shown)?)?;
     Ok(b64(&identity(conn)?.seal_for(
         their,
         CARD,
@@ -427,7 +659,7 @@ fn is_color(c: &str) -> bool {
 /// Invitation : notre clé publique, notre nom et notre photo, scellés avec le secret
 /// du lien (le serveur garde le blob mais ne peut pas le lire).
 pub fn invite_card(conn: &Connection, secret: &InviteSecret) -> Result<String> {
-    let p = privacy(conn)?;
+    let p = privacy(conn)?.shown_to(Viewer::Stranger);
     let sys = system::get(conn)?;
     let card = InviteCard {
         public: hex::encode(identity(conn)?.public()),
@@ -541,7 +773,7 @@ pub fn list(conn: &Connection) -> Result<Vec<Friend>> {
     let mut out = Vec::with_capacity(rows.len());
     for (id, public, card, card_at, created_at) in rows {
         let card = card.and_then(|j| serde_json::from_str::<Card>(&j).ok());
-        let (nickname, privacy) = pref(conn, &id)?;
+        let nickname = nickname(conn, &id)?;
         let card = card.unwrap_or(Card {
             v: 1,
             name: None,
@@ -559,7 +791,6 @@ pub fn list(conn: &Connection) -> Result<Vec<Friend>> {
             members: card.members,
             front: card.front,
             accepts_messages: card.messages,
-            privacy,
             card_at,
             created_at,
         });
@@ -1049,7 +1280,7 @@ mod tests {
         let c = db();
         let mila = member(&c, "Mila");
         let sacha = member(&c, "Sacha");
-        let mut p = Privacy::default();
+        let mut p = Shown::default();
         p.hidden.push(sacha);
         let card = build_card(&c, &p).unwrap();
         assert_eq!(card.members.len(), 1);
@@ -1061,6 +1292,87 @@ mod tests {
         p.members = true;
         p.pronouns = false;
         assert!(build_card(&c, &p).unwrap().members[0].pronouns.is_none());
+    }
+
+    #[test]
+    fn audience_depends_on_the_viewer() {
+        let mut p = Privacy {
+            front: Rule {
+                who: Audience::Chosen,
+                friends: vec!["f-1".into()],
+            },
+            ..Privacy::default()
+        };
+        assert!(p.shown_to(Viewer::Stranger).members);
+        assert!(!p.shown_to(Viewer::Stranger).messages);
+        assert!(p.shown_to(Viewer::Friend("f-2")).messages);
+        assert!(p.shown_to(Viewer::Friend("f-1")).front);
+        assert!(!p.shown_to(Viewer::Friend("f-2")).front);
+        assert!(!p.shown_to(Viewer::Stranger).front);
+        p.members = Rule::to(Audience::Friends);
+        assert!(!p.shown_to(Viewer::Stranger).members);
+        assert!(p.shown_to(Viewer::Friend("f-2")).members);
+    }
+
+    #[test]
+    fn old_settings_are_translated_then_replaced() {
+        let c = db();
+        for id in ["f-1", "f-2", "f-3"] {
+            c.execute(
+                "INSERT INTO friend (id, pub, created_at) VALUES (?1, ?2, 0)",
+                params![id, [0u8; 32]],
+            )
+            .unwrap();
+        }
+        assert_eq!(privacy(&c).unwrap(), Privacy::default());
+        let hidden = Uuid::now_v7();
+        let base = Shown {
+            front: false,
+            ..Shown::default()
+        };
+        kv::set(&c, K_PRIVACY, &serde_json::to_string(&base).unwrap()).unwrap();
+        let own = Shown {
+            front: true,
+            pronouns: false,
+            hidden: vec![hidden],
+            ..Shown::default()
+        };
+        let own = serde_json::to_string(&own).unwrap();
+        for id in ["f-1", "f-2"] {
+            c.execute(
+                "INSERT INTO friend_pref (id, nickname, privacy) VALUES (?1, NULL, ?2)",
+                params![id, own],
+            )
+            .unwrap();
+        }
+        set_pref(&c, "f-1", Some("Lune")).unwrap();
+        let p = privacy(&c).unwrap();
+        assert_eq!(p.members.who, Audience::Everyone);
+        assert_eq!(p.descriptions.who, Audience::Nobody);
+        assert_eq!(p.messages.who, Audience::Friends);
+        assert_eq!(p.front.who, Audience::Chosen);
+        assert_eq!(p.front.friends, ["f-1", "f-2"]);
+        assert_eq!(p.pronouns.who, Audience::Chosen);
+        assert_eq!(p.pronouns.friends, ["f-3"]);
+        assert_eq!(p.hidden, [hidden]);
+        assert!(privacy_for(&c, "f-2").unwrap().front);
+        assert!(!privacy_for(&c, "f-3").unwrap().front);
+
+        set_privacy(&c, &p).unwrap();
+        assert_eq!(privacy(&c).unwrap(), p);
+        let left: i64 = c
+            .query_row(
+                "SELECT count(*) FROM friend_pref WHERE privacy IS NOT NULL",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(left, 0);
+        assert_eq!(nickname(&c, "f-1").unwrap().as_deref(), Some("Lune"));
+        assert_eq!(nickname(&c, "f-2").unwrap(), None);
+        let legacy: Shown =
+            serde_json::from_str(&kv::get(&c, K_PRIVACY).unwrap().unwrap()).unwrap();
+        assert!(!legacy.front && legacy.members);
     }
 
     #[test]
@@ -1126,7 +1438,7 @@ mod tests {
 
         // Fermé aux messages : ignoré.
         let p = Privacy {
-            messages: false,
+            messages: Rule::to(Audience::Nobody),
             ..Privacy::default()
         };
         set_privacy(&b, &p).unwrap();

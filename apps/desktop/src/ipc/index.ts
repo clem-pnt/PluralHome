@@ -2,6 +2,7 @@ import { commands, type IpcError_Serialize, type SystemKind } from "./bindings";
 
 export type {
   Account_Serialize as Account,
+  Audience,
   AvatarEdit,
   Blocked_Serialize as Blocked,
   CardMember_Serialize as CardMember,
@@ -38,6 +39,7 @@ export type {
   Privacy_Serialize as Privacy,
   RemoteRef,
   Requests_Serialize as Requests,
+  Rule_Serialize as Rule,
   SafetyPlan_Serialize as SafetyPlan,
   Status_Serialize as PkStatus,
   SystemKind,
@@ -210,11 +212,7 @@ export const api = {
     privacy: () => unwrap(commands.friendsPrivacyGet()),
     setPrivacy: (p: Parameters<typeof commands.friendsPrivacySet>[0]) =>
       unwrap(commands.friendsPrivacySet(p)),
-    setPref: (
-      id: string,
-      nickname: string | null,
-      privacy: Parameters<typeof commands.friendsPrivacySet>[0] | null,
-    ) => unwrap(commands.friendsSetPref(id, nickname, privacy)),
+    setPref: (id: string, nickname: string | null) => unwrap(commands.friendsSetPref(id, nickname)),
     settings: () => unwrap(commands.friendsSettings()),
     setOpen: (open: boolean) => unwrap(commands.friendsSetOpen(open)),
     createInvite: (ttl: number | null, once: boolean) =>

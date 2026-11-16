@@ -43,6 +43,7 @@ pub const SHARED_KEYS: &[&str] = &[
     "pluralkit.ignored",
     "friends.identity",
     "friends.privacy",
+    "friends.audience",
 ];
 
 /// Ordre parents → enfants : les insertions le suivent, les suppressions l'inversent.

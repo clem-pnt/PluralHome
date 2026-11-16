@@ -407,6 +407,20 @@ const MIGRATIONS: &[&str] = &[
     "ALTER TABLE poll ADD COLUMN ends_at INTEGER;
     ALTER TABLE poll ADD COLUMN result_seen_at INTEGER;
     UPDATE poll SET result_seen_at = closed_at WHERE closed_at IS NOT NULL;",
+    // Confidentialité par niveau d'accès (tout le monde, amis, liste, personne) :
+    // nouvelle clé partagée entre les appareils du système.
+    concat!(
+        "DROP TRIGGER sync_kv_ins;
+        DROP TRIGGER sync_kv_upd;
+        DROP TRIGGER sync_kv_del;\n",
+        track!(
+            "kv",
+            "json_array(NEW.key)",
+            "json_array(OLD.key)",
+            " AND NEW.key IN ('safety.plan', 'newcomer.plan', 'trusted.contact', 'front.favorites', 'system.name', 'system.avatar', 'system.kind', 'pluralkit.ignored', 'friends.identity', 'friends.privacy', 'friends.audience')",
+            " AND OLD.key IN ('safety.plan', 'newcomer.plan', 'trusted.contact', 'front.favorites', 'system.name', 'system.avatar', 'system.kind', 'pluralkit.ignored', 'friends.identity', 'friends.privacy', 'friends.audience')"
+        ),
+    ),
 ];
 
 pub fn run(conn: &mut Connection) -> Result<()> {

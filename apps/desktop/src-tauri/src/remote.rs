@@ -639,7 +639,7 @@ pub async fn friends_list(state: State<'_, AppState>) -> IpcResult<Vec<ph_core::
     .await
 }
 
-/// Réglages par défaut : ce que voient les amis sans réglage propre.
+/// Réglages de confidentialité : qui voit quoi, qui peut nous écrire.
 #[tauri::command]
 #[specta::specta]
 pub async fn friends_privacy_get(
@@ -660,7 +660,7 @@ pub async fn friends_privacy_set(
     Ok(())
 }
 
-/// Surnom et réglages propres à un ami (`None` : réglages par défaut).
+/// Surnom donné à un ami.
 #[tauri::command]
 #[specta::specta]
 pub async fn friends_set_pref(
@@ -668,10 +668,9 @@ pub async fn friends_set_pref(
     rem: State<'_, Remote>,
     id: String,
     nickname: Option<String>,
-    privacy: Option<ph_core::friends::Privacy>,
 ) -> IpcResult<()> {
     friends_local(&state, move |c| {
-        ph_core::friends::set_pref(c, &id, nickname.as_deref(), privacy.as_ref())
+        ph_core::friends::set_pref(c, &id, nickname.as_deref())
     })
     .await?;
     rem.wake(Wake::Friends);

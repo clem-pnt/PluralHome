@@ -8,7 +8,6 @@ import { AddFriendPanel } from "./AddFriend";
 import { FriendCard } from "./FriendCard";
 import { FriendError } from "./FriendError";
 import { InvitePanel } from "./InvitePanel";
-import { PrivacyPanel } from "./PrivacyPanel";
 import { RequestsPanel, useRequests } from "./RequestsPanel";
 import { refreshFriends, useFriends } from "./useFriends";
 
@@ -61,9 +60,6 @@ function FriendsTabs() {
             ? m.friends_tab_requests_count({ count: incoming })
             : m.friends_tab_requests()}
         </Tab>
-        <Tab id="privacy" className="tab">
-          {m.friends_tab_privacy()}
-        </Tab>
       </TabList>
       <TabPanel id="list" className="friends__panel">
         <FriendsList />
@@ -74,9 +70,6 @@ function FriendsTabs() {
       </TabPanel>
       <TabPanel id="requests" className="friends__panel">
         <RequestsPanel />
-      </TabPanel>
-      <TabPanel id="privacy" className="friends__panel">
-        <PrivacyPanel />
       </TabPanel>
     </Tabs>
   );

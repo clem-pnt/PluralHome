@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   Button as AriaButton,
@@ -10,19 +10,15 @@ import {
   Heading,
   Modal,
   ModalOverlay,
-  Switch,
 } from "react-aria-components";
-import { keys } from "../../app/query";
 import { formatWhen } from "../../i18n/format";
-import { api, type Friend, type Privacy } from "../../ipc";
+import { api, type Friend } from "../../ipc";
 import { m } from "../../paraglide/messages.js";
 import { Avatar } from "../../ui/Avatar";
 import { Button } from "../../ui/Button";
 import { Icon } from "../../ui/Icon";
 import { TextField } from "../../ui/TextField";
-import { useMembers } from "../members/useMembers";
 import { ConfirmButton, FriendError } from "./FriendError";
-import { PrivacyForm } from "./PrivacyForm";
 import { friendName, refreshFriends } from "./useFriends";
 
 /** Un système ami : ce qu'il partage avec nous, et nos réglages pour lui. */
@@ -48,7 +44,6 @@ export function FriendCard({ friend: f }: { friend: Friend }) {
         </div>
         <div className="friend__tags">
           {!f.acceptsMessages && <span className="tag">{m.friends_no_messages()}</span>}
-          {f.privacy && <span className="tag tag--accent">{m.friends_custom_privacy()}</span>}
         </div>
       </div>
 
@@ -147,15 +142,10 @@ function FriendSettings({ friend: f }: { friend: Friend }) {
 }
 
 function FriendSettingsForm({ friend: f, close }: { friend: Friend; close: () => void }) {
-  const members = useMembers();
-  const defaults = useQuery({ queryKey: keys.friendsPrivacy, queryFn: api.friends.privacy });
   const [nickname, setNickname] = useState(f.nickname ?? "");
-  const [custom, setCustom] = useState(f.privacy !== null);
-  const [privacy, setPrivacy] = useState<Privacy | null>(f.privacy);
-  const shown = privacy ?? defaults.data ?? null;
 
   const save = useMutation({
-    mutationFn: () => api.friends.setPref(f.id, nickname.trim() || null, custom ? shown : null),
+    mutationFn: () => api.friends.setPref(f.id, nickname.trim() || null),
     onSuccess: () => {
       refreshFriends();
       close();
@@ -178,21 +168,13 @@ function FriendSettingsForm({ friend: f, close }: { friend: Friend; close: () =>
         value={nickname}
         onChange={setNickname}
       />
-      <div className="field">
-        <Switch className="choice" isSelected={custom} onChange={setCustom}>
-          {m.friends_privacy_custom()}
-        </Switch>
-        <span className="field__hint">{m.friends_privacy_custom_hint()}</span>
-      </div>
-      {custom && shown && (
-        <PrivacyForm value={shown} onChange={setPrivacy} members={members.list} />
-      )}
+      <p className="muted">{m.friends_privacy_moved()}</p>
       <FriendError error={save.error} />
       <div className="dialog__actions">
         <Button variant="ghost" onPress={close}>
           {m.cancel()}
         </Button>
-        <Button type="submit" isDisabled={save.isPending || (custom && !shown)}>
+        <Button type="submit" isDisabled={save.isPending}>
           {save.isPending ? m.working() : m.friends_save()}
         </Button>
       </div>
